@@ -1,4 +1,4 @@
-# GitGo
+# <img width="64" height="64" alt="appicon" src="https://github.com/user-attachments/assets/2fc1f1d4-a0f8-43e0-80d5-0e7c0944d188" /> GitGo
 
 A cross-platform desktop application for managing local Git repository history — without memorising CLI commands.
 
