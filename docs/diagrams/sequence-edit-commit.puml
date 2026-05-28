@@ -1,0 +1,41 @@
+@startuml sequence-edit-commit
+title Editing a Commit
+
+actor User as U
+participant "CommitList" as CL
+participant "EditPanel" as EP
+participant "ConfirmDialog" as CD
+participant "Wails Bridge" as W
+participant "App Controller" as AC
+participant "GitService" as GS
+
+U -> CL : Click unpushed commit
+CL -> W : GetCommitDetail(hash)
+W -> AC : GetCommitDetail(hash)
+AC -> GS : GetCommit(hash)
+GS --> AC : CommitDetail
+AC --> W : CommitDetail
+W --> CL : CommitDetail
+CL -> EP : Populate form fields
+
+U -> EP : Edit message / date / author
+U -> EP : Click "Apply Changes"
+EP -> CD : Show diff preview (old vs new)
+U -> CD : Confirm
+
+CD -> W : UpdateCommit(hash, EditRequest)
+W -> AC : UpdateCommit(hash, req)
+AC -> AC : Validate (commit is unpushed)
+
+alt last commit
+    AC -> GS : AmendCommit(req)
+else older commit
+    AC -> GS : RebaseRewrite(hash, req)
+end
+
+GS --> AC : OperationResult
+AC --> W : OperationResult
+W --> EP : OperationResult
+EP -> CL : Trigger log refresh
+
+@enduml

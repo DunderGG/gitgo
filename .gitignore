@@ -1,0 +1,18 @@
+# Build outputs (binaries only; build/windows/ and build/appicon.png are source files)
+build/bin/
+
+# Frontend dependencies and compiled output
+frontend/node_modules/
+frontend/dist/
+
+# Wails auto-generated files
+frontend/wailsjs/
+frontend/package.json.md5
+
+# Generated test repositories (created by setup-testdata.ps1 / setup-testdata.sh)
+testdata/
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
