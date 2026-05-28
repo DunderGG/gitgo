@@ -4,20 +4,36 @@ A cross-platform desktop application for managing local Git repository history �
 
 GitGo gives you a clean GUI for the history-editing tasks that are tedious on the command line: fixing a typo in a commit message, correcting a timestamp, or updating author details on commits you haven't pushed yet.
 
-> **Scope:** GitGo only operates on **unpushed commits**. Pushed history is shown read-only and cannot be modified, keeping shared repository history safe.
-
 ---
 
 ## Features
+
+> **Scope:** GitGo only operates on **unpushed commits**. Pushed history is shown read-only and cannot be modified, keeping shared repository history safe.
 
 **Phase 1 (complete)**
 - Open any local Git repository
 - Browse commit history with a clear pushed / unpushed distinction
 
-**Phase 2 (planned)**
+**Phase 2 (planned) — Core Editing**
 - Edit commit message, date, and author metadata
 - Preview every change before it is applied
 - Automatic stash/unstash of uncommitted work around history rewrites
+
+**Phase 3 (planned) — UX Polish**
+- Recent repositories list
+- Undo last rewrite operation
+- Branch selector
+- Keyboard shortcuts
+
+**Phase 4 (planned) — Advanced Operations**
+- Squash, reorder, and drop unpushed commits
+- Split commit *(stretch goal)*
+
+**Phase 5 (planned) — Distribution**
+- GitHub Actions CI pipeline
+- Signed, installable binaries for Windows, macOS, and Linux
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the full detail on each phase.
 
 ---
 
