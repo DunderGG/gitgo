@@ -7,6 +7,7 @@ import (
 
 	gitpkg "gitgo/git"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -14,8 +15,16 @@ import (
 // exposes methods to the frontend via IPC. All bound methods must return either
 // a single value or (T, error) to satisfy the Wails binding contract.
 type App struct {
-	ctx       context.Context
-	mu        sync.Mutex
+	ctx context.Context
+
+	// mutex guards repoState. Bound methods are called from the WebView's IPC
+	// goroutine, which is separate from the Go main goroutine, so concurrent
+	// access to repoState is possible even with a single user (e.g. the UI may
+	// auto-call GetCommitLog before OpenRepository has finished writing the
+	// pointer). The mutex keeps the Go race detector clean and satisfies the Go
+	// memory model without any real performance cost — contention never occurs
+	// in practice.
+	mutex     sync.Mutex
 	repoState *gitpkg.RepoState
 }
 
@@ -51,9 +60,9 @@ func (application *App) OpenRepository(path string) (RepoInfo, error) {
 		return RepoInfo{}, err
 	}
 
-	application.mu.Lock()
+	application.mutex.Lock()
 	application.repoState = state
-	application.mu.Unlock()
+	application.mutex.Unlock()
 
 	return RepoInfo{
 		Path:        state.Path,
@@ -66,9 +75,9 @@ func (application *App) OpenRepository(path string) (RepoInfo, error) {
 // GetCommitLog returns the commit history for the currently open repository.
 // OpenRepository must be called before this method.
 func (application *App) GetCommitLog() ([]CommitSummary, error) {
-	application.mu.Lock()
+	application.mutex.Lock()
 	state := application.repoState
-	application.mu.Unlock()
+	application.mutex.Unlock()
 
 	if state == nil {
 		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
@@ -79,6 +88,68 @@ func (application *App) GetCommitLog() ([]CommitSummary, error) {
 		return nil, err
 	}
 
+	return commitSummariesFromEntries(entries), nil
+}
+
+// GetCommitDetail returns full metadata for a single commit identified by its
+// 40-character hex hash. This is used to populate the edit panel.
+func (application *App) GetCommitDetail(hash string) (CommitDetail, error) {
+	application.mutex.Lock()
+	state := application.repoState
+	application.mutex.Unlock()
+
+	if state == nil {
+		return CommitDetail{}, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	commitHash := plumbing.NewHash(hash)
+	commit, err := state.Repo.CommitObject(commitHash)
+	if err != nil {
+		return CommitDetail{}, fmt.Errorf("commit not found: %w", err)
+	}
+
+	return CommitDetail{
+		Hash:        commit.Hash.String(),
+		Message:     commit.Message,
+		AuthorName:  commit.Author.Name,
+		AuthorEmail: commit.Author.Email,
+		Date:        commit.Author.When.Format("2006-01-02T15:04:05Z07:00"),
+		IsUnpushed:  state.UnpushedHashes[commitHash],
+	}, nil
+}
+
+// RefreshLog re-opens the current repository to pick up any changes (e.g.
+// after a commit rewrite) and returns an updated commit list.
+// OpenRepository must be called before this method.
+func (application *App) RefreshLog() ([]CommitSummary, error) {
+	application.mutex.Lock()
+	state := application.repoState
+	application.mutex.Unlock()
+
+	if state == nil {
+		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	newState, err := gitpkg.Open(state.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	application.mutex.Lock()
+	application.repoState = newState
+	application.mutex.Unlock()
+
+	entries, err := gitpkg.Log(newState, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return commitSummariesFromEntries(entries), nil
+}
+
+// commitSummariesFromEntries maps a slice of git.CommitEntry to the
+// JSON-serialisable CommitSummary DTOs used by the frontend.
+func commitSummariesFromEntries(entries []gitpkg.CommitEntry) []CommitSummary {
 	summaries := make([]CommitSummary, len(entries))
 	for index, entry := range entries {
 		summaries[index] = CommitSummary{
@@ -90,6 +161,5 @@ func (application *App) GetCommitLog() ([]CommitSummary, error) {
 			IsUnpushed: entry.IsUnpushed,
 		}
 	}
-
-	return summaries, nil
+	return summaries
 }

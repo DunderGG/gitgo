@@ -53,8 +53,9 @@
 
 > Goal: users can edit commit message and date for any unpushed commit.
 
-- [ ] Implement `app/app.go` — `GetCommitDetail(hash)` binding
-- [ ] Implement `app/app.go` — `RefreshLog()` binding (re-open current repo and return updated log)
+- [x] Implement `app/app.go` — `GetCommitDetail(hash)` binding
+- [x] Implement `app/app.go` — `RefreshLog()` binding (re-open current repo and return updated log)
+  - [x] Extract `commitSummariesFromEntries` helper shared by `GetCommitLog` and `RefreshLog`
 - [ ] Implement `git/rewrite.go`
   - [ ] `AmendCommit` — modify the most recent commit (message, date, author)
   - [ ] `RebaseRewrite` — modify any unpushed commit further back in history
