@@ -39,11 +39,12 @@
 - [x] Frontend: `CommitList` component (read-only, indigo dot = unpushed / grey dot = pushed, legend, column headers)
 - [x] Frontend: `StatusBar` component (branch name, no-remote / no-upstream notices, status/error display)
 - [x] Frontend: Zustand store wired to backend bindings (`setRepo`, `setStatus`, `setError`, `clearRepo`)
-- [x] Write unit tests for `git/` package (11 tests, all passing)
+- [x] Write unit tests for `git/` package (14 tests, all passing)
   - [x] Use real temporary on-disk repositories (`t.TempDir()`)
-  - [x] `TestOpen_ValidRepo`, `TestOpen_NonRepo`, `TestOpen_DetachedHead`, `TestOpen_MergeInProgress`
+  - [x] `TestOpen_ValidRepo`, `TestOpen_NonRepo`, `TestOpen_DetachedHead`, `TestOpen_MergeInProgress`, `TestOpen_RebaseInProgress`
   - [x] `TestOpen_NoRemote`, `TestOpen_WithUpstream` (exact unpushed count)
   - [x] `TestLog_ReturnsEntries`, `TestLog_RespectsDepthLimit`, `TestLog_ShortHashLength`, `TestLog_IsUnpushedFlag`, `TestLog_DatePopulated`
+  - [x] `TestLog_MessageIsFirstLine`, `TestLog_CommitOrder`
 - [x] Tighten `.gitignore`: scope `build/` to `build/bin/` only; ignore `frontend/package.json.md5`; add OS noise files
 
 ---

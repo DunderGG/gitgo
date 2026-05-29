@@ -239,6 +239,7 @@ Tests are grouped into two areas:
 - `TestOpen_NonRepo` — empty directory returns an error.
 - `TestOpen_DetachedHead` — checks out a commit hash directly; verifies `ErrDetachedHead`.
 - `TestOpen_MergeInProgress` — writes a fake `MERGE_HEAD`; verifies `ErrOperationInProgress`.
+- `TestOpen_RebaseInProgress` — creates a fake `rebase-merge/` directory; verifies `ErrOperationInProgress`.
 - `TestOpen_NoRemote` — no remote configured; all commits should be in `UnpushedHashes`.
 - `TestOpen_WithUpstream` — pushes one commit to a bare remote, adds two more locally; verifies exactly 2 unpushed.
 
@@ -248,6 +249,8 @@ Tests are grouped into two areas:
 - `TestLog_ShortHashLength` — verifies `ShortHash` is exactly 7 characters.
 - `TestLog_IsUnpushedFlag` — 1 pushed + 1 unpushed; verifies `IsUnpushed` is correct on each.
 - `TestLog_DatePopulated` — verifies `Date` is non-zero and matches the fixed `GIT_AUTHOR_DATE` env var used in the test harness.
+- `TestLog_MessageIsFirstLine` — multi-line commit message; verifies only the subject line is returned.
+- `TestLog_CommitOrder` — 3 commits; verifies entries are returned newest-first.
 
 ---
 
