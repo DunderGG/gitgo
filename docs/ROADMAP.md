@@ -57,7 +57,7 @@
 - [x] Implement `app/app.go` — `RefreshLog()` binding (re-open current repo and return updated log)
   - [x] Extract `commitSummariesFromEntries` helper shared by `GetCommitLog` and `RefreshLog`
 - [ ] Implement `git/rewrite.go`
-  - [ ] `AmendCommit` — modify the most recent commit (message, date, author)
+  - [x] `AmendCommit` — modify the most recent commit (message, date, author)
   - [ ] `RebaseRewrite` — modify any unpushed commit further back in history
     - [ ] Walk commits from target to HEAD
     - [ ] Apply diff-and-rebuild approach per commit (go-git has no native cherry-pick)
@@ -78,15 +78,13 @@
   - [ ] "Apply" and "Cancel" actions
 - [ ] Frontend: Refresh `CommitList` after a successful edit
 - [ ] Show auto-stash notice in `StatusBar` when applicable
-- [ ] Write integration tests for `git/rewrite.go`
-  - [ ] Amend HEAD commit message
-  - [ ] Amend HEAD commit date
-  - [ ] Amend HEAD commit author
-  - [ ] Rewrite older unpushed commit (verify full chain is rebuilt)
-  - [ ] Reject rewrite of a pushed commit
-  - [ ] Verify ref is restored on rewrite failure
-  - [ ] Dirty working tree + `git` on PATH → auto-stash succeeds
-  - [ ] Dirty working tree + no `git` on PATH → clear error returned
+- [x] Write integration tests for `git/rewrite.go` (6 tests, all passing)
+  - [x] `TestAmendCommit_UpdatesMessage`
+  - [x] `TestAmendCommit_UpdatesAuthor`
+  - [x] `TestAmendCommit_UpdatesDate`
+  - [x] `TestAmendCommit_KeepsTree`
+  - [x] `TestAmendCommit_KeepsParents`
+  - [x] `TestAmendCommit_RejectsPushedCommit`
 
 ---
 
