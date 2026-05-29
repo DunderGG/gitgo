@@ -1,6 +1,7 @@
 package git_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,279 +12,368 @@ import (
 	"gitgo/git"
 )
 
+const (
+	// noLogLimit is passed to Log to use the package-default depth (100).
+	noLogLimit = 0
+
+	// shortHashLen is the expected length of CommitEntry.ShortHash.
+	shortHashLen = 7
+
+	// testCommitDateStr is the fixed author date injected into all test commits
+	// via GIT_AUTHOR_DATE / GIT_COMMITTER_DATE in initRepo.
+	testCommitDateStr = "2024-01-01T12:00:00+00:00"
+)
+
+// testCommitDate is the time.Time equivalent of testCommitDateStr.
+// TestLog_DatePopulated compares commit dates against this value.
+var testCommitDate = time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
 // initRepo creates a bare git repository in dir, sets user config, and returns
 // a helper that runs git commands inside it.
-func initRepo(t *testing.T, dir string) func(args ...string) {
-	t.Helper()
+func initRepo(test *testing.T, dir string) func(args ...string) {
+	test.Helper()
+
 	run := func(args ...string) {
-		t.Helper()
+		test.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
+
 		cmd.Env = append(os.Environ(),
 			"GIT_AUTHOR_NAME=Test Author",
 			"GIT_AUTHOR_EMAIL=test@example.com",
 			"GIT_COMMITTER_NAME=Test Author",
 			"GIT_COMMITTER_EMAIL=test@example.com",
-			"GIT_AUTHOR_DATE=2024-01-01T12:00:00+00:00",
-			"GIT_COMMITTER_DATE=2024-01-01T12:00:00+00:00",
+			"GIT_AUTHOR_DATE="+testCommitDateStr,
+			"GIT_COMMITTER_DATE="+testCommitDateStr,
 		)
+
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+			test.Fatalf("git %v failed: %v\n%s", args, err, out)
 		}
 	}
 
 	run("init", "-b", "main")
 	run("config", "user.email", "test@example.com")
 	run("config", "user.name", "Test Author")
+
 	return run
 }
 
 // addCommit writes a file and creates a commit with the given message.
-func addCommit(t *testing.T, dir, message string, git func(...string)) {
-	t.Helper()
+func addCommit(test *testing.T, dir, message string, git func(...string)) {
+	test.Helper()
+
 	filePath := filepath.Join(dir, message+".txt")
 	if err := os.WriteFile(filePath, []byte(message), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
+		test.Fatalf("WriteFile: %v", err)
 	}
+
 	git("add", ".")
 	git("commit", "-m", message)
 }
 
-// TestOpen_ValidRepo verifies that a normal repository opens without error.
-func TestOpen_ValidRepo(t *testing.T) {
-	dir := t.TempDir()
-	gitCmd := initRepo(t, dir)
-	addCommit(t, dir, "initial commit", gitCmd)
-
-	state, err := git.Open(dir)
+// mustOpen opens the repository at dir and fails the test on error.
+func mustOpen(test *testing.T, dir string) *git.RepoState {
+	test.Helper()
+	repoState, err := git.Open(dir)
 	if err != nil {
-		t.Fatalf("Open returned error: %v", err)
+		test.Fatalf("git.Open(%q): %v", dir, err)
 	}
-	if state.Branch != "main" {
-		t.Errorf("Branch = %q, want %q", state.Branch, "main")
+	return repoState
+}
+
+// mustLog calls Log on repoState and fails the test on error.
+func mustLog(test *testing.T, repoState *git.RepoState, limit int) []git.CommitEntry {
+	test.Helper()
+	entries, err := git.Log(repoState, limit)
+	if err != nil {
+		test.Fatalf("git.Log: %v", err)
 	}
-	if state.Path != filepath.ToSlash(dir) && state.Path != dir {
-		// Accept either slash style on Windows.
-		if filepath.Clean(state.Path) != filepath.Clean(dir) {
-			t.Errorf("Path = %q, want %q", state.Path, dir)
-		}
+	return entries
+}
+
+// makeRemote creates a bare git repository in a temp directory and returns its path.
+func makeRemote(test *testing.T) string {
+	test.Helper()
+	dir := test.TempDir()
+	cmd := exec.Command("git", "init", "--bare", "-b", "main", dir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		test.Fatalf("git init --bare: %v\n%s", err, out)
+	}
+	return dir
+}
+
+// TestOpen_ValidRepo verifies that a normal repository opens without error.
+func TestOpen_ValidRepo(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+
+	addCommit(test, dir, "initial commit", gitCmd)
+
+	repoState := mustOpen(test, dir)
+
+	if repoState.Branch != "main" {
+		test.Errorf("Branch = %q, want %q", repoState.Branch, "main")
+	}
+	if filepath.Clean(repoState.Path) != filepath.Clean(dir) {
+		test.Errorf("Path = %q, want %q", repoState.Path, dir)
 	}
 }
 
 // TestOpen_NonRepo verifies that opening a non-repository returns an error.
-func TestOpen_NonRepo(t *testing.T) {
-	dir := t.TempDir()
+func TestOpen_NonRepo(test *testing.T) {
+	dir := test.TempDir()
 	_, err := git.Open(dir)
 	if err == nil {
-		t.Fatal("expected error for non-repo directory, got nil")
+		test.Fatal("expected error for non-repo directory, got nil")
 	}
 }
 
 // TestOpen_DetachedHead verifies that a detached HEAD is detected and reported.
-func TestOpen_DetachedHead(t *testing.T) {
-	dir := t.TempDir()
-	gitCmd := initRepo(t, dir)
-	addCommit(t, dir, "first", gitCmd)
-	addCommit(t, dir, "second", gitCmd)
+func TestOpen_DetachedHead(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
 
 	// Detach HEAD by checking out a specific commit hash.
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD~1").Output()
 	if err != nil {
-		t.Fatalf("rev-parse: %v", err)
+		test.Fatalf("rev-parse: %v", err)
 	}
+
 	hash := string(out[:len(out)-1]) // trim newline
 	gitCmd("checkout", "--detach", hash)
 
 	_, openErr := git.Open(dir)
-	if openErr == nil {
-		t.Fatal("expected ErrDetachedHead, got nil")
+	if !errors.Is(openErr, git.ErrDetachedHead) {
+		test.Fatalf("expected ErrDetachedHead, got %v", openErr)
 	}
 }
 
 // TestOpen_MergeInProgress verifies that an in-progress merge is detected.
-func TestOpen_MergeInProgress(t *testing.T) {
-	dir := t.TempDir()
-	gitCmd := initRepo(t, dir)
-	addCommit(t, dir, "base", gitCmd)
+func TestOpen_MergeInProgress(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "base", gitCmd)
 
 	// Simulate a merge in progress by writing MERGE_HEAD.
 	mergeHeadPath := filepath.Join(dir, ".git", "MERGE_HEAD")
 	if err := os.WriteFile(mergeHeadPath, []byte("deadbeef\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile MERGE_HEAD: %v", err)
+		test.Fatalf("WriteFile MERGE_HEAD: %v", err)
 	}
 
 	_, err := git.Open(dir)
-	if err == nil {
-		t.Fatal("expected ErrOperationInProgress, got nil")
+	if !errors.Is(err, git.ErrOperationInProgress) {
+		test.Fatalf("expected ErrOperationInProgress, got %v", err)
 	}
 }
 
 // TestOpen_NoRemote verifies repos without a remote are handled gracefully.
-func TestOpen_NoRemote(t *testing.T) {
-	dir := t.TempDir()
-	gitCmd := initRepo(t, dir)
-	addCommit(t, dir, "commit", gitCmd)
+func TestOpen_NoRemote(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
 
-	state, err := git.Open(dir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
+	addCommit(test, dir, "commit", gitCmd)
+
+	repoState := mustOpen(test, dir)
+
+	if repoState.HasRemote {
+		test.Error("HasRemote should be false for a repo with no remotes")
 	}
-	if state.HasRemote {
-		t.Error("HasRemote should be false for a repo with no remotes")
+
+	if repoState.HasUpstream {
+		test.Error("HasUpstream should be false for a repo with no remotes")
 	}
-	if state.HasUpstream {
-		t.Error("HasUpstream should be false for a repo with no remotes")
-	}
-	if len(state.UnpushedHashes) == 0 {
-		t.Error("all commits should be unpushed when there is no upstream")
+
+	if len(repoState.UnpushedHashes) == 0 {
+		test.Error("all commits should be unpushed when there is no upstream")
 	}
 }
 
 // TestOpen_WithUpstream verifies that unpushed commits are correctly identified
 // when a remote tracking branch exists.
-func TestOpen_WithUpstream(t *testing.T) {
-	// Create a "remote" bare repo.
-	remoteDir := t.TempDir()
-	exec.Command("git", "init", "--bare", "-b", "main", remoteDir).Run()
+func TestOpen_WithUpstream(test *testing.T) {
+	const wantUnpushed = 2
+
+	remoteDir := makeRemote(test)
 
 	// Create a local repo, push one commit, then add two more locally.
-	localDir := t.TempDir()
-	gitCmd := initRepo(t, localDir)
-	addCommit(t, localDir, "pushed", gitCmd)
+	localDir := test.TempDir()
+	gitCmd := initRepo(test, localDir)
+	addCommit(test, localDir, "pushed", gitCmd)
 	gitCmd("remote", "add", "origin", remoteDir)
 	gitCmd("push", "-u", "origin", "main")
-	addCommit(t, localDir, "unpushed-1", gitCmd)
-	addCommit(t, localDir, "unpushed-2", gitCmd)
+	addCommit(test, localDir, "unpushed-1", gitCmd)
+	addCommit(test, localDir, "unpushed-2", gitCmd)
 
-	state, err := git.Open(localDir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
+	repoState := mustOpen(test, localDir)
+
+	if !repoState.HasRemote {
+		test.Error("HasRemote should be true")
 	}
-	if !state.HasRemote {
-		t.Error("HasRemote should be true")
+	if !repoState.HasUpstream {
+		test.Error("HasUpstream should be true")
 	}
-	if !state.HasUpstream {
-		t.Error("HasUpstream should be true")
-	}
-	if len(state.UnpushedHashes) != 2 {
-		t.Errorf("UnpushedHashes len = %d, want 2", len(state.UnpushedHashes))
+	if len(repoState.UnpushedHashes) != wantUnpushed {
+		test.Errorf("UnpushedHashes len = %d, want %d", len(repoState.UnpushedHashes), wantUnpushed)
 	}
 }
 
 // TestLog_ReturnsEntries verifies that Log returns the correct number of entries.
-func TestLog_ReturnsEntries(t *testing.T) {
-	dir := t.TempDir()
-	gitCmd := initRepo(t, dir)
-	addCommit(t, dir, "commit-one", gitCmd)
-	addCommit(t, dir, "commit-two", gitCmd)
-	addCommit(t, dir, "commit-three", gitCmd)
+func TestLog_ReturnsEntries(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "commit-one", gitCmd)
+	addCommit(test, dir, "commit-two", gitCmd)
+	addCommit(test, dir, "commit-three", gitCmd)
 
-	state, err := git.Open(dir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	entries := mustLog(test, mustOpen(test, dir), noLogLimit)
 
-	entries, err := git.Log(state, 0)
-	if err != nil {
-		t.Fatalf("Log: %v", err)
-	}
 	if len(entries) != 3 {
-		t.Errorf("len(entries) = %d, want 3", len(entries))
+		test.Errorf("len(entries) = %d, want 3", len(entries))
 	}
 }
 
 // TestLog_RespectsDepthLimit verifies that the limit parameter is honoured.
-func TestLog_RespectsDepthLimit(t *testing.T) {
-	dir := t.TempDir()
-	gitCmd := initRepo(t, dir)
-	for i := 0; i < 5; i++ {
-		addCommit(t, dir, fmt.Sprintf("commit-%d", i), gitCmd)
+func TestLog_RespectsDepthLimit(test *testing.T) {
+	const (
+		totalCommits = 5
+		depthLimit   = 3
+	)
+
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	for i := 0; i < totalCommits; i++ {
+		addCommit(test, dir, fmt.Sprintf("commit-%d", i), gitCmd)
 	}
 
-	state, err := git.Open(dir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	entries := mustLog(test, mustOpen(test, dir), depthLimit)
 
-	entries, err := git.Log(state, 3)
-	if err != nil {
-		t.Fatalf("Log: %v", err)
-	}
-	if len(entries) != 3 {
-		t.Errorf("len(entries) = %d, want 3 (depth limit)", len(entries))
+	if len(entries) != depthLimit {
+		test.Errorf("len(entries) = %d, want %d (depth limit)", len(entries), depthLimit)
 	}
 }
 
 // TestLog_ShortHashLength verifies that ShortHash is 7 characters.
-func TestLog_ShortHashLength(t *testing.T) {
-	dir := t.TempDir()
-	gitCmd := initRepo(t, dir)
-	addCommit(t, dir, "a commit", gitCmd)
+func TestLog_ShortHashLength(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "a commit", gitCmd)
 
-	state, err := git.Open(dir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	entries, err := git.Log(state, 0)
-	if err != nil {
-		t.Fatalf("Log: %v", err)
-	}
-	if len(entries[0].ShortHash) != 7 {
-		t.Errorf("ShortHash len = %d, want 7", len(entries[0].ShortHash))
+	entries := mustLog(test, mustOpen(test, dir), noLogLimit)
+
+	if len(entries[0].ShortHash) != shortHashLen {
+		test.Errorf("ShortHash len = %d, want %d", len(entries[0].ShortHash), shortHashLen)
 	}
 }
 
 // TestLog_IsUnpushedFlag verifies pushed/unpushed flags on entries.
-func TestLog_IsUnpushedFlag(t *testing.T) {
-	remoteDir := t.TempDir()
-	exec.Command("git", "init", "--bare", "-b", "main", remoteDir).Run()
+func TestLog_IsUnpushedFlag(test *testing.T) {
+	const wantEntries = 2
 
-	localDir := t.TempDir()
-	gitCmd := initRepo(t, localDir)
-	addCommit(t, localDir, "pushed", gitCmd)
+	remoteDir := makeRemote(test)
+
+	localDir := test.TempDir()
+	gitCmd := initRepo(test, localDir)
+	addCommit(test, localDir, "pushed", gitCmd)
 	gitCmd("remote", "add", "origin", remoteDir)
 	gitCmd("push", "-u", "origin", "main")
-	addCommit(t, localDir, "unpushed", gitCmd)
+	addCommit(test, localDir, "unpushed", gitCmd)
 
-	state, err := git.Open(localDir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
+	entries := mustLog(test, mustOpen(test, localDir), 0)
+
+	if len(entries) != wantEntries {
+		test.Fatalf("len(entries) = %d, want %d", len(entries), wantEntries)
 	}
-	entries, err := git.Log(state, 0)
-	if err != nil {
-		t.Fatalf("Log: %v", err)
-	}
-	if len(entries) != 2 {
-		t.Fatalf("len(entries) = %d, want 2", len(entries))
-	}
+
 	if !entries[0].IsUnpushed {
-		t.Error("entries[0] (unpushed) should have IsUnpushed=true")
+		test.Error("entries[0] (unpushed) should have IsUnpushed=true")
 	}
+
 	if entries[1].IsUnpushed {
-		t.Error("entries[1] (pushed) should have IsUnpushed=false")
+		test.Error("entries[1] (pushed) should have IsUnpushed=false")
 	}
 }
 
 // TestLog_DatePopulated verifies that commit dates are non-zero.
-func TestLog_DatePopulated(t *testing.T) {
-	dir := t.TempDir()
-	gitCmd := initRepo(t, dir)
-	addCommit(t, dir, "dated commit", gitCmd)
+func TestLog_DatePopulated(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "dated commit", gitCmd)
 
-	state, err := git.Open(dir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	entries, err := git.Log(state, 0)
-	if err != nil {
-		t.Fatalf("Log: %v", err)
-	}
+	entries := mustLog(test, mustOpen(test, dir), noLogLimit)
+
 	if entries[0].Date.IsZero() {
-		t.Error("Date should not be zero")
+		test.Error("Date should not be zero")
 	}
-	expected := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	if !entries[0].Date.Equal(expected) {
-		t.Errorf("Date = %v, want %v", entries[0].Date, expected)
+
+	if !entries[0].Date.Equal(testCommitDate) {
+		test.Errorf("Date = %v, want %v", entries[0].Date, testCommitDate)
+	}
+}
+
+// TestOpen_RebaseInProgress verifies that an in-progress rebase is detected.
+func TestOpen_RebaseInProgress(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "base", gitCmd)
+
+	// Simulate a rebase in progress by creating the rebase-merge directory.
+	rebaseMergePath := filepath.Join(dir, ".git", "rebase-merge")
+	if err := os.MkdirAll(rebaseMergePath, 0o755); err != nil {
+		test.Fatalf("MkdirAll rebase-merge: %v", err)
+	}
+
+	_, err := git.Open(dir)
+	if !errors.Is(err, git.ErrOperationInProgress) {
+		test.Fatalf("expected ErrOperationInProgress, got %v", err)
+	}
+}
+
+// TestLog_MessageIsFirstLine verifies that only the subject line of a multi-line
+// commit message is returned.
+func TestLog_MessageIsFirstLine(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+
+	filePath := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(filePath, []byte("content"), 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+
+	gitCmd("add", ".")
+	gitCmd("commit", "-m", "subject line\n\nThis is the body paragraph.")
+
+	entries := mustLog(test, mustOpen(test, dir), noLogLimit)
+
+	if entries[0].Message != "subject line" {
+		test.Errorf("Message = %q, want %q", entries[0].Message, "subject line")
+	}
+}
+
+// TestLog_CommitOrder verifies that the log is returned newest-first.
+func TestLog_CommitOrder(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "first-commit", gitCmd)
+	addCommit(test, dir, "second-commit", gitCmd)
+	addCommit(test, dir, "third-commit", gitCmd)
+
+	entries := mustLog(test, mustOpen(test, dir), noLogLimit)
+
+	if len(entries) != 3 {
+		test.Fatalf("len(entries) = %d, want 3", len(entries))
+	}
+
+	if entries[0].Message != "third-commit" {
+		test.Errorf("entries[0].Message = %q, want %q", entries[0].Message, "third-commit")
+	}
+
+	if entries[2].Message != "first-commit" {
+		test.Errorf("entries[2].Message = %q, want %q", entries[2].Message, "first-commit")
 	}
 }
