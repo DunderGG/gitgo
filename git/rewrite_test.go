@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"gitgo/git"
+
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
 // mustAmend calls AmendCommit and fails the test on error.
@@ -138,6 +140,14 @@ func TestAmendCommit_KeepsParents(test *testing.T) {
 	}
 }
 
+// mustRebaseRewrite calls RebaseRewrite and fails the test on error.
+func mustRebaseRewrite(test *testing.T, repoState *git.RepoState, targetHash plumbing.Hash, opts git.AmendOptions) {
+	test.Helper()
+	if err := git.RebaseRewrite(repoState, targetHash, opts); err != nil {
+		test.Fatalf("git.RebaseRewrite: %v", err)
+	}
+}
+
 // TestAmendCommit_RejectsPushedCommit verifies that amending a pushed commit
 // returns ErrCommitNotUnpushed.
 func TestAmendCommit_RejectsPushedCommit(test *testing.T) {
@@ -155,6 +165,119 @@ func TestAmendCommit_RejectsPushedCommit(test *testing.T) {
 	opts.Message = "should not work\n"
 	err := git.AmendCommit(repoState, opts)
 
+	if !errors.Is(err, git.ErrCommitNotUnpushed) {
+		test.Fatalf("expected ErrCommitNotUnpushed, got %v", err)
+	}
+}
+
+// TestRebaseRewrite_UpdatesTargetMessage verifies that the target commit's
+// message is replaced while the commit above it retains its original message.
+func TestRebaseRewrite_UpdatesTargetMessage(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+	addCommit(test, dir, "third", gitCmd)
+
+	targetHashStr := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~1")
+	targetHash := plumbing.NewHash(targetHashStr)
+
+	opts := baseAmendOpts()
+	opts.Message = "amended second\n"
+	mustRebaseRewrite(test, mustOpen(test, dir), targetHash, opts)
+
+	entries := mustLog(test, mustOpen(test, dir), noLogLimit)
+	if len(entries) != 3 {
+		test.Fatalf("len(entries) = %d, want 3", len(entries))
+	}
+	if entries[0].Message != "third" {
+		test.Errorf("entries[0].Message = %q, want %q", entries[0].Message, "third")
+	}
+	if entries[1].Message != "amended second" {
+		test.Errorf("entries[1].Message = %q, want %q", entries[1].Message, "amended second")
+	}
+}
+
+// TestRebaseRewrite_KeepsNewerCommitContent verifies that the commit above the
+// target retains its original file tree after the chain is rebuilt.
+func TestRebaseRewrite_KeepsNewerCommitContent(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+	addCommit(test, dir, "third", gitCmd)
+
+	beforeTree := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD^{tree}")
+
+	targetHashStr := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~1")
+	targetHash := plumbing.NewHash(targetHashStr)
+
+	mustRebaseRewrite(test, mustOpen(test, dir), targetHash, baseAmendOpts())
+
+	afterTree := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD^{tree}")
+	if beforeTree != afterTree {
+		test.Errorf("top commit tree changed after rebase: %s -> %s", beforeTree, afterTree)
+	}
+}
+
+// TestRebaseRewrite_PreservesUnchangedParent verifies that the commit below the
+// target (which is not part of the rewritten chain) keeps its original hash.
+func TestRebaseRewrite_PreservesUnchangedParent(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+	addCommit(test, dir, "third", gitCmd)
+
+	origFirstHash := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~2")
+
+	targetHashStr := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~1")
+	targetHash := plumbing.NewHash(targetHashStr)
+
+	mustRebaseRewrite(test, mustOpen(test, dir), targetHash, baseAmendOpts())
+
+	aftFirstHash := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~2")
+	if origFirstHash != aftFirstHash {
+		test.Errorf("parent below target changed: %s -> %s", origFirstHash, aftFirstHash)
+	}
+}
+
+// TestRebaseRewrite_TargetIsHead verifies that targeting HEAD directly works
+// equivalently to AmendCommit.
+func TestRebaseRewrite_TargetIsHead(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original", gitCmd)
+
+	headHashStr := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD")
+	headHash := plumbing.NewHash(headHashStr)
+
+	opts := baseAmendOpts()
+	opts.Message = "rewritten\n"
+	mustRebaseRewrite(test, mustOpen(test, dir), headHash, opts)
+
+	entries := mustLog(test, mustOpen(test, dir), noLogLimit)
+	if entries[0].Message != "rewritten" {
+		test.Errorf("Message = %q, want %q", entries[0].Message, "rewritten")
+	}
+}
+
+// TestRebaseRewrite_RejectsPushedCommit verifies that targeting a pushed commit
+// returns ErrCommitNotUnpushed.
+func TestRebaseRewrite_RejectsPushedCommit(test *testing.T) {
+	remoteDir := makeRemote(test)
+
+	localDir := test.TempDir()
+	gitCmd := initRepo(test, localDir)
+	addCommit(test, localDir, "pushed", gitCmd)
+	gitCmd("remote", "add", "origin", remoteDir)
+	gitCmd("push", "-u", "origin", "main")
+	addCommit(test, localDir, "unpushed", gitCmd)
+
+	pushedHashStr := gitOutputFromDir(test, localDir, "git", "rev-parse", "HEAD~1")
+	pushedHash := plumbing.NewHash(pushedHashStr)
+
+	err := git.RebaseRewrite(mustOpen(test, localDir), pushedHash, baseAmendOpts())
 	if !errors.Is(err, git.ErrCommitNotUnpushed) {
 		test.Fatalf("expected ErrCommitNotUnpushed, got %v", err)
 	}
