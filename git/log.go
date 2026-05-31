@@ -41,10 +41,12 @@ func Log(state *RepoState, limit int) ([]CommitEntry, error) {
 	}
 	defer logIter.Close()
 
+	// Pre-allocate with the expected capacity to avoid repeated slice growth.
 	entries := make([]CommitEntry, 0, limit)
 	for len(entries) < limit {
 		commit, iterErr := logIter.Next()
 		if iterErr == io.EOF {
+			// No more commits in the repo — this is the normal exit path.
 			break
 		}
 		if iterErr != nil {
@@ -53,11 +55,12 @@ func Log(state *RepoState, limit int) ([]CommitEntry, error) {
 
 		hash := commit.Hash
 		entries = append(entries, CommitEntry{
-			Hash:       hash,
-			ShortHash:  hash.String()[:7],
-			Message:    firstLine(commit.Message),
+			Hash:      hash,
+			ShortHash: hash.String()[:7], // first 7 hex chars, same as git's default short hash
+			Message:   firstLine(commit.Message), // only the subject line; body is available via GetCommitDetail
 			AuthorName: commit.Author.Name,
 			Date:       commit.Author.When,
+			// Look up in the precomputed set built by Open() — O(1) per entry.
 			IsUnpushed: state.UnpushedHashes[hash],
 		})
 	}

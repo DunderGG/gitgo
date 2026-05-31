@@ -176,6 +176,8 @@ func resolveUpstream(repo *gogit.Repository, branchName string) (hasRemote bool,
 func computeUnpushed(repo *gogit.Repository, headHash plumbing.Hash, upstreamHash plumbing.Hash) (map[plumbing.Hash]bool, error) {
 	unpushed := make(map[plumbing.Hash]bool)
 
+	// Walk the log from HEAD. We stop as soon as we encounter the upstream tip
+	// because every commit reachable from there is already on the remote.
 	logIter, err := repo.Log(&gogit.LogOptions{From: headHash})
 	if err != nil {
 		return nil, fmt.Errorf("opening log: %w", err)
@@ -185,11 +187,15 @@ func computeUnpushed(repo *gogit.Repository, headHash plumbing.Hash, upstreamHas
 	for {
 		commit, iterErr := logIter.Next()
 		if iterErr != nil {
-			break // io.EOF or any other terminal error
+			break // io.EOF is the normal exit; any other error also terminates
 		}
 		if !upstreamHash.IsZero() && commit.Hash == upstreamHash {
-			break // reached the upstream tip — everything below is pushed
+			// This commit is the upstream tip — it and everything below it
+			// have already been pushed, so we stop here.
+			break
 		}
+		// upstreamHash.IsZero() means there is no remote tracking branch, so
+		// every commit is treated as unpushed (safe to edit).
 		unpushed[commit.Hash] = true
 	}
 
