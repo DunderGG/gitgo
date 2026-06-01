@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	gitpkg "gitgo/git"
 
@@ -162,4 +163,107 @@ func commitSummariesFromEntries(entries []gitpkg.CommitEntry) []CommitSummary {
 		}
 	}
 	return summaries
+}
+
+// UpdateCommit applies the metadata changes in req to the identified unpushed
+// commit. If the working tree is dirty, changes are automatically stashed
+// before the rewrite and restored afterwards.
+//
+// Under the hood, HEAD rewrites use AmendCommit (faster, no graph walk) and
+// older commits use RebaseRewrite (first-parent chain rebuild).
+func (application *App) UpdateCommit(req EditRequest) (OperationResult, error) {
+	application.mutex.Lock()
+	state := application.repoState
+	application.mutex.Unlock()
+
+	if state == nil {
+		return OperationResult{}, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	// Server-side safety check: refuse to rewrite a pushed commit. This mirrors
+	// the check inside AmendCommit / RebaseRewrite but is done here first so we
+	// never stash the worktree for an operation that is going to be rejected.
+	commitHash := plumbing.NewHash(req.Hash)
+	if !state.UnpushedHashes[commitHash] {
+		return OperationResult{}, gitpkg.ErrCommitNotUnpushed
+	}
+
+	// Parse the date string supplied by the frontend (RFC 3339 / ISO 8601).
+	date, err := time.Parse(time.RFC3339, req.Date)
+	if err != nil {
+		return OperationResult{}, fmt.Errorf("invalid date %q: %w", req.Date, err)
+	}
+
+	opts := gitpkg.AmendOptions{
+		Message:     req.Message,
+		AuthorName:  req.AuthorName,
+		AuthorEmail: req.AuthorEmail,
+		Date:        date,
+	}
+
+	// Check for dirty working tree. If dirty we must stash before rewriting so
+	// that uncommitted changes are not lost or corrupted by the graph rebuild.
+	isDirty, err := gitpkg.IsDirty(state)
+	if err != nil {
+		return OperationResult{}, fmt.Errorf("checking working tree: %w", err)
+	}
+
+	var gitBin string
+	var stashed bool
+	if isDirty {
+		// FindGitBinary returns ErrNativeGitNotFound when git is not on PATH.
+		// go-git has no stash API, so we cannot proceed without the native binary.
+		gitBin, err = gitpkg.FindGitBinary()
+		if err != nil {
+			return OperationResult{}, err
+		}
+		if err = gitpkg.AutoStash(state, gitBin); err != nil {
+			return OperationResult{}, fmt.Errorf("stashing changes: %w", err)
+		}
+		stashed = true
+	}
+
+	// HEAD rewrites use AmendCommit (no graph walk needed).
+	// Older commits use RebaseRewrite (rebuilds the full chain above the target).
+	head, err := state.Repo.Head()
+	if err != nil {
+		return OperationResult{}, fmt.Errorf("reading HEAD: %w", err)
+	}
+
+	var rewriteErr error
+	if head.Hash() == commitHash {
+		rewriteErr = gitpkg.AmendCommit(state, opts)
+	} else {
+		rewriteErr = gitpkg.RebaseRewrite(state, commitHash, opts)
+	}
+
+	// Always restore the stash — whether or not the rewrite succeeded — so the
+	// user's in-progress work is never left trapped in the stash.
+	if stashed {
+		if popErr := gitpkg.AutoStashPop(state, gitBin); popErr != nil {
+			if rewriteErr != nil {
+				// Both failed: report the rewrite error; the stash is still there.
+				return OperationResult{}, fmt.Errorf("rewrite failed: %w; also failed to restore stash: %v", rewriteErr, popErr)
+			}
+			// Rewrite succeeded but pop failed: tell the user explicitly.
+			return OperationResult{Success: false, Message: "commit updated but stash pop failed: " + popErr.Error()}, nil
+		}
+	}
+
+	if rewriteErr != nil {
+		return OperationResult{}, rewriteErr
+	}
+
+	// Refresh the stored RepoState so subsequent calls (GetCommitLog,
+	// GetCommitDetail, etc.) see the new HEAD. Not fatal if it fails.
+	if newState, refreshErr := gitpkg.Open(state.Path); refreshErr == nil {
+		application.mutex.Lock()
+		application.repoState = newState
+		application.mutex.Unlock()
+	}
+
+	if stashed {
+		return OperationResult{Success: true, Message: "commit updated; stashed changes restored"}, nil
+	}
+	return OperationResult{Success: true, Message: "commit updated"}, nil
 }

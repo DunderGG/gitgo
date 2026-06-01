@@ -2,7 +2,9 @@ package git_test
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -280,5 +282,136 @@ func TestRebaseRewrite_RejectsPushedCommit(test *testing.T) {
 	err := git.RebaseRewrite(mustOpen(test, localDir), pushedHash, baseAmendOpts())
 	if !errors.Is(err, git.ErrCommitNotUnpushed) {
 		test.Fatalf("expected ErrCommitNotUnpushed, got %v", err)
+	}
+}
+
+// TestIsDirty_CleanWorktree verifies that a freshly committed repo is not dirty.
+func TestIsDirty_CleanWorktree(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "initial", gitCmd)
+
+	repoState := mustOpen(test, dir)
+
+	dirty, err := git.IsDirty(repoState)
+	if err != nil {
+		test.Fatalf("IsDirty: %v", err)
+	}
+	if dirty {
+		test.Error("expected clean worktree, IsDirty returned true")
+	}
+}
+
+// TestIsDirty_DirtyWorktree verifies that a modified tracked file is detected.
+func TestIsDirty_DirtyWorktree(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "initial", gitCmd)
+
+	// Modify the tracked file without staging or committing.
+	if err := os.WriteFile(filepath.Join(dir, "initial.txt"), []byte("dirty"), 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+
+	repoState := mustOpen(test, dir)
+
+	dirty, err := git.IsDirty(repoState)
+	if err != nil {
+		test.Fatalf("IsDirty: %v", err)
+	}
+	if !dirty {
+		test.Error("expected dirty worktree, IsDirty returned false")
+	}
+}
+
+// TestAutoStash_StashesDirtyWorktree verifies that after AutoStash the working
+// tree reports clean.
+func TestAutoStash_StashesDirtyWorktree(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "initial", gitCmd)
+
+	// Make the worktree dirty.
+	if err := os.WriteFile(filepath.Join(dir, "initial.txt"), []byte("dirty"), 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+
+	gitBin, err := git.FindGitBinary()
+	if err != nil {
+		test.Fatalf("FindGitBinary: %v", err)
+	}
+
+	repoState := mustOpen(test, dir)
+
+	if err := git.AutoStash(repoState, gitBin); err != nil {
+		test.Fatalf("AutoStash: %v", err)
+	}
+
+	// The worktree should now be clean.
+	dirty, err := git.IsDirty(repoState)
+	if err != nil {
+		test.Fatalf("IsDirty after stash: %v", err)
+	}
+	if dirty {
+		test.Error("expected clean worktree after AutoStash, IsDirty returned true")
+	}
+}
+
+// TestAutoStashPop_RestoresChanges verifies that after AutoStashPop the
+// modified file content is visible again.
+func TestAutoStashPop_RestoresChanges(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "initial", gitCmd)
+
+	// Make the worktree dirty with a known value.
+	dirtyContent := []byte("dirty content")
+	filePath := filepath.Join(dir, "initial.txt")
+	if err := os.WriteFile(filePath, dirtyContent, 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+
+	gitBin, err := git.FindGitBinary()
+	if err != nil {
+		test.Fatalf("FindGitBinary: %v", err)
+	}
+
+	repoState := mustOpen(test, dir)
+
+	if err := git.AutoStash(repoState, gitBin); err != nil {
+		test.Fatalf("AutoStash: %v", err)
+	}
+	if err := git.AutoStashPop(repoState, gitBin); err != nil {
+		test.Fatalf("AutoStashPop: %v", err)
+	}
+
+	// The dirty content should be restored.
+	got, err := os.ReadFile(filePath)
+	if err != nil {
+		test.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != string(dirtyContent) {
+		test.Errorf("file content = %q, want %q", got, dirtyContent)
+	}
+}
+
+// TestAutoStash_FailsWithBadBinary verifies that AutoStash returns an error
+// when the supplied git binary path does not exist, covering the case where
+// the native git binary cannot be found on PATH.
+func TestAutoStash_FailsWithBadBinary(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "initial", gitCmd)
+
+	// Make the worktree dirty so the stash attempt is meaningful.
+	if err := os.WriteFile(filepath.Join(dir, "initial.txt"), []byte("dirty"), 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+
+	repoState := mustOpen(test, dir)
+
+	err := git.AutoStash(repoState, "/nonexistent/git")
+	if err == nil {
+		test.Fatal("expected error when git binary does not exist, got nil")
 	}
 }

@@ -3,8 +3,10 @@ package git
 import (
 	"errors"
 	"fmt"
+	"os/exec"
 	"time"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -12,6 +14,11 @@ import (
 // ErrCommitNotUnpushed is returned when the caller tries to rewrite a commit
 // that has already been pushed to a remote.
 var ErrCommitNotUnpushed = errors.New("commit has already been pushed and cannot be rewritten")
+
+// ErrNativeGitNotFound is returned when the working tree is dirty and the
+// native git binary cannot be found on PATH. go-git has no stash API, so
+// auto-stash requires shelling out to the system git.
+var ErrNativeGitNotFound = errors.New("git binary not found on PATH; commit or clean up working tree changes before editing commits")
 
 // AmendOptions holds the new metadata values for a commit being amended.
 // All fields are required; partial updates are not supported.
@@ -223,4 +230,67 @@ func collectChain(state *RepoState, headHash, targetHash plumbing.Hash) ([]*obje
 		}
 		current = commit.ParentHashes[0]
 	}
+}
+
+// IsDirty reports whether the working tree has any uncommitted changes to
+// tracked files (staged or unstaged). Untracked-only new files are excluded
+// because they are not touched by rewrite operations and cannot be stashed
+// without the -u flag.
+func IsDirty(state *RepoState) (bool, error) {
+	workingTree, err := state.Repo.Worktree()
+	if err != nil {
+		return false, fmt.Errorf("accessing worktree: %w", err)
+	}
+
+	// Status() walks the index and working tree to produce a file-by-file
+	// status map, similar to `git status --porcelain`.
+	status, err := workingTree.Status()
+	if err != nil {
+		return false, fmt.Errorf("reading worktree status: %w", err)
+	}
+
+	for _, fileStatus := range status {
+		// Staging == Untracked && Worktree == Untracked means the file is
+		// brand-new and not tracked by git at all — safe to ignore.
+		if fileStatus.Staging == gogit.Untracked && fileStatus.Worktree == gogit.Untracked {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// FindGitBinary returns the absolute path to the native git binary on PATH.
+// Returns ErrNativeGitNotFound when git is not available.
+func FindGitBinary() (string, error) {
+	path, err := exec.LookPath("git")
+	if err != nil {
+		return "", ErrNativeGitNotFound
+	}
+	return path, nil
+}
+
+// AutoStash runs `git stash` in the repository's working tree, saving any
+// uncommitted tracked-file changes so that the rewrite can proceed on a clean
+// tree. gitBin must be the absolute path returned by FindGitBinary.
+func AutoStash(state *RepoState, gitBin string) error {
+	cmd := exec.Command(gitBin, "stash")
+	cmd.Dir = state.Path
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git stash: %w\n%s", err, out)
+	}
+	return nil
+}
+
+// AutoStashPop runs `git stash pop` to restore the changes saved by
+// AutoStash. It is called after the rewrite completes (whether or not the
+// rewrite succeeded) so that the user's work is never left trapped in the
+// stash. gitBin must be the absolute path returned by FindGitBinary.
+func AutoStashPop(state *RepoState, gitBin string) error {
+	cmd := exec.Command(gitBin, "stash", "pop")
+	cmd.Dir = state.Path
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git stash pop: %w\n%s", err, out)
+	}
+	return nil
 }

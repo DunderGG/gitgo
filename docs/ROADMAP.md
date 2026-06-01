@@ -58,16 +58,16 @@
   - [x] Extract `commitSummariesFromEntries` helper shared by `GetCommitLog` and `RefreshLog`
 - [ ] Implement `git/rewrite.go`
   - [x] `AmendCommit` — modify the most recent commit (message, date, author)
-  - [ ] `RebaseRewrite` — modify any unpushed commit further back in history
-    - [ ] Walk commits from target to HEAD
-    - [ ] Apply diff-and-rebuild approach per commit (go-git has no native cherry-pick)
-    - [ ] Substitute edited metadata at target position
-    - [ ] Reset branch HEAD ref to new tip
-    - [ ] Restore original ref on any failure
-  - [ ] Detect `git` binary on PATH before auto-stash (go-git has no stash API)
-  - [ ] Auto-stash via native `git stash` / `git stash pop` if `git` is available; error clearly if not
-- [ ] Bind `App.UpdateCommit(hash, EditRequest)` to Wails
-  - [ ] Server-side safety check: reject if commit is not in unpushed set
+  - [x] `RebaseRewrite` — modify any unpushed commit further back in history
+    - [x] Walk commits from target to HEAD
+    - [x] Apply diff-and-rebuild approach per commit (go-git has no native cherry-pick)
+    - [x] Substitute edited metadata at target position
+    - [x] Reset branch HEAD ref to new tip
+    - [x] Restore original ref on any failure
+  - [x] Detect `git` binary on PATH before auto-stash (go-git has no stash API)
+  - [x] Auto-stash via native `git stash` / `git stash pop` if `git` is available; error clearly if not
+- [x] Bind `App.UpdateCommit(req EditRequest)` to Wails
+  - [x] Server-side safety check: reject if commit is not in unpushed set
 - [ ] Frontend: `EditPanel` component
   - [ ] Message text area (multi-line)
   - [ ] Date + time picker
@@ -78,13 +78,23 @@
   - [ ] "Apply" and "Cancel" actions
 - [ ] Frontend: Refresh `CommitList` after a successful edit
 - [ ] Show auto-stash notice in `StatusBar` when applicable
-- [x] Write integration tests for `git/rewrite.go` (6 tests, all passing)
+- [x] Write integration tests for `git/rewrite.go` (16 tests, all passing)
   - [x] `TestAmendCommit_UpdatesMessage`
   - [x] `TestAmendCommit_UpdatesAuthor`
   - [x] `TestAmendCommit_UpdatesDate`
   - [x] `TestAmendCommit_KeepsTree`
   - [x] `TestAmendCommit_KeepsParents`
   - [x] `TestAmendCommit_RejectsPushedCommit`
+  - [x] `TestRebaseRewrite_UpdatesTargetMessage`
+  - [x] `TestRebaseRewrite_KeepsNewerCommitContent`
+  - [x] `TestRebaseRewrite_PreservesUnchangedParent`
+  - [x] `TestRebaseRewrite_TargetIsHead`
+  - [x] `TestRebaseRewrite_RejectsPushedCommit`
+  - [x] `TestIsDirty_CleanWorktree`
+  - [x] `TestIsDirty_DirtyWorktree`
+  - [x] `TestAutoStash_StashesDirtyWorktree`
+  - [x] `TestAutoStashPop_RestoresChanges`
+  - [x] `TestAutoStash_FailsWithBadBinary`
 
 ---
 
