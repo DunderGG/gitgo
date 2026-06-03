@@ -3,6 +3,7 @@ package git
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -70,10 +71,8 @@ func Log(state *RepoState, limit int) ([]CommitEntry, error) {
 
 // firstLine returns the first line of s, trimming any trailing whitespace.
 func firstLine(s string) string {
-	for i, ch := range s {
-		if ch == '\n' {
-			return s[:i]
-		}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
 	}
 	return s
 }

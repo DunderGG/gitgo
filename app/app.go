@@ -36,14 +36,14 @@ func New() *App {
 
 // Startup is called when the Wails application starts and stores the context
 // for later use by bound methods.
-func (application *App) Startup(ctx context.Context) {
-	application.ctx = ctx
+func (app *App) Startup(ctx context.Context) {
+	app.ctx = ctx
 }
 
 // SelectDirectory opens a native directory picker dialog and returns the
 // selected path. Returns an empty string if the user cancels.
-func (application *App) SelectDirectory() (string, error) {
-	path, err := runtime.OpenDirectoryDialog(application.ctx, runtime.OpenDialogOptions{
+func (app *App) SelectDirectory() (string, error) {
+	path, err := runtime.OpenDirectoryDialog(app.ctx, runtime.OpenDialogOptions{
 		Title: "Select a Git Repository",
 	})
 	if err != nil {
@@ -55,15 +55,15 @@ func (application *App) SelectDirectory() (string, error) {
 // OpenRepository opens the git repository at the given path, validates its
 // state, and returns high-level repository information. The opened state is
 // retained for subsequent GetCommitLog calls.
-func (application *App) OpenRepository(path string) (RepoInfo, error) {
+func (app *App) OpenRepository(path string) (RepoInfo, error) {
 	state, err := gitpkg.Open(path)
 	if err != nil {
 		return RepoInfo{}, err
 	}
 
-	application.mutex.Lock()
-	application.repoState = state
-	application.mutex.Unlock()
+	app.mutex.Lock()
+	app.repoState = state
+	app.mutex.Unlock()
 
 	return RepoInfo{
 		Path:        state.Path,
@@ -75,10 +75,10 @@ func (application *App) OpenRepository(path string) (RepoInfo, error) {
 
 // GetCommitLog returns the commit history for the currently open repository.
 // OpenRepository must be called before this method.
-func (application *App) GetCommitLog() ([]CommitSummary, error) {
-	application.mutex.Lock()
-	state := application.repoState
-	application.mutex.Unlock()
+func (app *App) GetCommitLog() ([]CommitSummary, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
 
 	if state == nil {
 		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
@@ -94,10 +94,10 @@ func (application *App) GetCommitLog() ([]CommitSummary, error) {
 
 // GetCommitDetail returns full metadata for a single commit identified by its
 // 40-character hex hash. This is used to populate the edit panel.
-func (application *App) GetCommitDetail(hash string) (CommitDetail, error) {
-	application.mutex.Lock()
-	state := application.repoState
-	application.mutex.Unlock()
+func (app *App) GetCommitDetail(hash string) (CommitDetail, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
 
 	if state == nil {
 		return CommitDetail{}, fmt.Errorf("no repository is open; call OpenRepository first")
@@ -122,10 +122,10 @@ func (application *App) GetCommitDetail(hash string) (CommitDetail, error) {
 // RefreshLog re-opens the current repository to pick up any changes (e.g.
 // after a commit rewrite) and returns an updated commit list.
 // OpenRepository must be called before this method.
-func (application *App) RefreshLog() ([]CommitSummary, error) {
-	application.mutex.Lock()
-	state := application.repoState
-	application.mutex.Unlock()
+func (app *App) RefreshLog() ([]CommitSummary, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
 
 	if state == nil {
 		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
@@ -136,9 +136,9 @@ func (application *App) RefreshLog() ([]CommitSummary, error) {
 		return nil, err
 	}
 
-	application.mutex.Lock()
-	application.repoState = newState
-	application.mutex.Unlock()
+	app.mutex.Lock()
+	app.repoState = newState
+	app.mutex.Unlock()
 
 	entries, err := gitpkg.Log(newState, 0)
 	if err != nil {
@@ -171,10 +171,10 @@ func commitSummariesFromEntries(entries []gitpkg.CommitEntry) []CommitSummary {
 //
 // Under the hood, HEAD rewrites use AmendCommit (faster, no graph walk) and
 // older commits use RebaseRewrite (first-parent chain rebuild).
-func (application *App) UpdateCommit(req EditRequest) (OperationResult, error) {
-	application.mutex.Lock()
-	state := application.repoState
-	application.mutex.Unlock()
+func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
 
 	if state == nil {
 		return OperationResult{}, fmt.Errorf("no repository is open; call OpenRepository first")
@@ -257,9 +257,9 @@ func (application *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	// Refresh the stored RepoState so subsequent calls (GetCommitLog,
 	// GetCommitDetail, etc.) see the new HEAD. Not fatal if it fails.
 	if newState, refreshErr := gitpkg.Open(state.Path); refreshErr == nil {
-		application.mutex.Lock()
-		application.repoState = newState
-		application.mutex.Unlock()
+		app.mutex.Lock()
+		app.repoState = newState
+		app.mutex.Unlock()
 	}
 
 	if stashed {
