@@ -4,6 +4,8 @@ set -euo pipefail
 
 SKIP_BUILD=0
 RUN_AFTER_BUILD=0
+RUN_TESTS=0
+VERBOSE=0
 WAILS_ARGS=()
 
 for arg in "$@"; do
@@ -13,6 +15,12 @@ for arg in "$@"; do
             ;;
         --run)
             RUN_AFTER_BUILD=1
+            ;;
+        --test)
+            RUN_TESTS=1
+            ;;
+        --verbose)
+            VERBOSE=1
             ;;
         *)
             WAILS_ARGS+=("$arg")
@@ -86,6 +94,14 @@ if [[ "$SKIP_BUILD" -eq 1 ]] && [[ "$RUN_AFTER_BUILD" -eq 1 ]]; then
     echo "Cannot use --skip-build and --run together." >&2
     exit 1
 fi
+if [[ "$SKIP_BUILD" -eq 1 ]] && [[ "$RUN_TESTS" -eq 1 ]]; then
+    echo "Cannot use --skip-build and --test together." >&2
+    exit 1
+fi
+if [[ "$RUN_AFTER_BUILD" -eq 1 ]] && [[ "$RUN_TESTS" -eq 1 ]]; then
+    echo "Cannot use --run and --test together." >&2
+    exit 1
+fi
 
 if [[ "$SKIP_BUILD" -eq 1 ]]; then
     echo "Prerequisite check passed. Build skipped (--skip-build)."
@@ -93,16 +109,45 @@ if [[ "$SKIP_BUILD" -eq 1 ]]; then
 fi
 
 echo "Running: wails build"
-wails build "${WAILS_ARGS[@]}"
+if [[ "$VERBOSE" -eq 1 ]]; then
+    wails build "${WAILS_ARGS[@]}"
+else
+    # Filter out Wails' INFO banners and sponsorship notice — they add noise
+    # on every build but carry no actionable information.
+    # Temporarily disable pipefail so grep exiting 1 (no matching lines to
+    # remove) does not abort the script. We check wails' own exit code via
+    # PIPESTATUS and re-enable pipefail immediately after.
+    set +o pipefail
+    wails build "${WAILS_ARGS[@]}" 2>&1 | grep -vE '\bINFO\b|sponsoring the project|leaanthony'
+    wails_exit="${PIPESTATUS[0]}"
+    set -o pipefail
+    if [[ "$wails_exit" -ne 0 ]]; then
+        echo "wails build failed with exit code $wails_exit" >&2
+        exit "$wails_exit"
+    fi
+fi
 
 echo "Build completed successfully."
+
+if [[ "$RUN_TESTS" -eq 1 ]]; then
+    echo "Running tests..."
+    go test -count=1 ./...
+    echo "All tests passed."
+fi
 
 if [[ "$RUN_AFTER_BUILD" -eq 1 ]]; then
     binary_path="$(dirname "$0")/build/bin/gitgo"
     if [[ ! -f "$binary_path" ]]; then
-        echo "Build output not found at: $binary_path" >&2
-        exit 1
+        # Check for .exe suffix on Windows (Cygwin/MSYS2)
+        if [[ -f "${binary_path}.exe" ]]; then
+            binary_path="${binary_path}.exe"
+        else
+            echo "Build output not found at: $binary_path" >&2
+            exit 1
+        fi
     fi
     echo "Launching: $binary_path"
     "$binary_path" &
 fi
+
+echo "Success."

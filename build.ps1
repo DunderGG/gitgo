@@ -1,11 +1,18 @@
 param(
     [switch]$SkipBuild,
     [switch]$Run,
+    [switch]$Test,
+    [switch]$FullOutput,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$WailsArgs
 )
 
 $ErrorActionPreference = "Stop"
+
+# Force UTF-8 when reading output from external processes (Wails, go, node).
+# Without this PowerShell uses the system ANSI code page (e.g. Windows-1252),
+# which corrupts multi-byte characters like • and ♥ in Wails' output.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 function Sync-PathFromRegistry {
     # Refresh the current session PATH so newly installed tools are visible
@@ -25,7 +32,8 @@ function Add-CommonToolPaths {
     $candidatePaths = @(
         "C:\Program Files\nodejs",
         "C:\Program Files\Go\bin",
-        (Join-Path $env:USERPROFILE "go\bin")
+        (Join-Path $env:USERPROFILE "go\bin"),
+        (Join-Path $env:SystemDrive "wails")
     )
 
     foreach ($path in $candidatePaths) {
@@ -98,6 +106,12 @@ Write-Host "Wails:  $wailsVersion"
 if ($SkipBuild -and $Run) {
     throw "Cannot use -SkipBuild and -Run together."
 }
+if ($SkipBuild -and $Test) {
+    throw "Cannot use -SkipBuild and -Test together."
+}
+if ($Run -and $Test) {
+    throw "Cannot use -Run and -Test together."
+}
 
 if ($SkipBuild) {
     Write-Host "Prerequisite check passed. Build skipped (-SkipBuild)." -ForegroundColor Green
@@ -105,9 +119,27 @@ if ($SkipBuild) {
 }
 
 Write-Host "Running: wails build" -ForegroundColor Cyan
-& wails build @WailsArgs
+if ($FullOutput) {
+    & wails build @WailsArgs
+} else {
+    # Filter out Wails' INFO banners and sponsorship notice — they add noise
+    # on every build but carry no actionable information.
+    & wails build @WailsArgs 2>&1 | Where-Object { $_ -notmatch '\bINFO\b|sponsoring the project|leaanthony' }
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "wails build failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "Build completed successfully." -ForegroundColor Green
+
+if ($Test) {
+    Write-Host "Running tests..." -ForegroundColor Cyan
+    & go test -count=1 ./...
+    if ($LASTEXITCODE -ne 0) {
+        throw "Tests failed."
+    }
+    Write-Host "All tests passed." -ForegroundColor Green
+}
 
 if ($Run) {
     $binaryPath = Join-Path $PSScriptRoot "build\bin\gitgo.exe"
@@ -117,3 +149,5 @@ if ($Run) {
     Write-Host "Launching: $binaryPath" -ForegroundColor Cyan
     Start-Process -FilePath $binaryPath
 }
+
+Write-Host "Success." -ForegroundColor Green
