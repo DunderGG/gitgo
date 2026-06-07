@@ -5,37 +5,43 @@ actor User as U
 participant "CommitList" as CL
 participant "EditPanel" as EP
 participant "ConfirmDialog" as CD
-participant "Wails Bridge" as W
-participant "App Controller" as AC
-participant "GitService" as GS
+participant "Wails Bridge" as wails
+participant "app.App (app/app.go)" as app 
+participant "git package (git/*.go)" as git 
 
-U -> CL : Click unpushed commit
-CL -> W : GetCommitDetail(hash)
-W -> AC : GetCommitDetail(hash)
-AC -> GS : GetCommit(hash)
-GS --> AC : CommitDetail
-AC --> W : CommitDetail
-W --> CL : CommitDetail
+legend right
+    app.App = Go struct exposed to frontend by Wails
+    git package = helper functions in git/*.go
+    Go errors are shown in the UI as error state
+endlegend
+
+user -> CL : Click unpushed commit
+CL -> wails : GetCommitDetail(hash)
+wails -> app : GetCommitDetail(hash)
+app -> git  : CommitObject(hash)
+git  --> app : CommitDetail
+app --> wails : CommitDetail
+wails --> CL : CommitDetail
 CL -> EP : Populate form fields
 
-U -> EP : Edit message / date / author
-U -> EP : Click "Apply Changes"
+user -> EP : Edit message / date / author
+user -> EP : Click "Apply Changes"
 EP -> CD : Show diff preview (old vs new)
-U -> CD : Confirm
+user -> CD : Confirm
 
-CD -> W : UpdateCommit(hash, EditRequest)
-W -> AC : UpdateCommit(hash, req)
-AC -> AC : Validate (commit is unpushed)
+CD -> wails : UpdateCommit(hash, EditRequest)
+wails -> app : UpdateCommit(hash, req)
+app -> app : Check state.UnpushedHashes[hash]
 
 alt last commit
-    AC -> GS : AmendCommit(req)
+    app -> git  : AmendCommit(req)
 else older commit
-    AC -> GS : RebaseRewrite(hash, req)
+    app -> git  : RebaseRewrite(hash, req)
 end
 
-GS --> AC : OperationResult
-AC --> W : OperationResult
-W --> EP : OperationResult
+git  --> app : OperationResult
+app --> wails : OperationResult
+wails --> EP : OperationResult
 EP -> CL : Trigger log refresh
 
 @enduml

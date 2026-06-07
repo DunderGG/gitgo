@@ -1,53 +1,59 @@
 @startuml sequence-open-repo
 title Opening a Repository
 
-actor User as U
+actor User as user 
 participant "RepoSelector" as RS
 participant "Zustand Store" as ZS
 participant "CommitList" as CL
-participant "Wails Bridge" as W
-participant "App Controller" as AC
-participant "git package" as GS
+participant "Wails Bridge" as wails
+participant "app.App (app/app.go)" as app 
+participant "git package (git/*.go)" as git 
 
-U -> RS : Click "Open Repository"
-RS -> W : SelectDirectory()
-W -> AC : SelectDirectory()
-AC --> W : path (or "" if cancelled)
-W --> RS : path string
+legend right
+    app.App = Go struct exposed to frontend by Wails
+    git package = helper functions in git/*.go
+    Go errors are shown in the UI as error state
+endlegend
+
+user -> RS : Click "Open Repository"
+RS -> wails : SelectDirectory()
+wails -> app : SelectDirectory()
+app --> wails : path (or "" if cancelled)
+wails --> RS : path string
 
 alt user cancelled (empty path)
     RS -> RS : no-op
 else path selected
-    RS -> W : OpenRepository(path)
-    W -> AC : OpenRepository(path)
-    AC -> GS : Open(path)
+    RS -> wails : OpenRepository(path)
+    wails -> app : OpenRepository(path)
+    app -> git : Open(path)
 
     alt path is not a git repository
-        GS --> AC : error
-        AC --> W : ("", error)
-        W --> RS : rejected Promise
+        git --> app : error
+        app --> wails : (zero RepoInfo, error)
+        wails --> RS : error returned to UI
         RS -> ZS : setError(message)
     else detached HEAD
-        GS --> AC : ErrDetachedHead
-        AC --> W : ("", error)
-        W --> RS : rejected Promise
+        git --> app : ErrDetachedHead
+        app --> wails : (zero RepoInfo, error)
+        wails --> RS : error returned to UI
         RS -> ZS : setError(message)
     else in-progress git operation detected
-        GS --> AC : ErrOperationInProgress
-        AC --> W : ("", error)
-        W --> RS : rejected Promise
+        git --> app : ErrOperationInProgress
+        app --> wails : (zero RepoInfo, error)
+        wails --> RS : error returned to UI
         RS -> ZS : setError(message)
     else success
-        GS --> AC : *RepoState (branch, remote flags, unpushed set)
-        AC --> W : RepoInfo
-        W --> RS : RepoInfo
+        git --> app : *RepoState (branch, remote flags, unpushed set)
+        app --> wails : RepoInfo
+        wails --> RS : RepoInfo
 
-        RS -> W : GetCommitLog()
-        W -> AC : GetCommitLog()
-        AC -> GS : Log(state, 0)
-        GS --> AC : []CommitEntry
-        AC --> W : []CommitSummary
-        W --> RS : []CommitSummary
+        RS -> wails : GetCommitLog()
+        wails -> app : GetCommitLog()
+        app -> git : Log(state, 0)
+        git --> app : []CommitEntry
+        app --> wails : []CommitSummary
+        wails --> RS : []CommitSummary
 
         RS -> ZS : setRepo(RepoInfo, []CommitSummary)
         ZS --> CL : commits (reactive)

@@ -17,12 +17,12 @@ rectangle "Desktop Shell (Wails v2)" {
 
     rectangle "Wails IPC Bridge" as Bridge {
         component [Go Bindings\n(wails.Bind)] as BND
-        component [Event Bus\n(runtime.EventsEmit)] as EVT
+        component [App Events] as EVT
     }
 
     rectangle "Backend — Go" as BE {
-        component [App Controller\n(app/app.go)] as AC
-        component [git package\n(git/repo.go, git/log.go)] as GS
+        component [app.App\n(app/app.go)] as AC
+        component [git package\n(git/*.go)] as GS
         component [Domain Models\n(app/models.go)] as MD
 
         AC --> GS

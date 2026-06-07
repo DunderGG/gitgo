@@ -164,6 +164,26 @@
 
 ---
 
+## Future Improvements
+
+> Possible improvements we have found but not yet implemented.
+
+### Small polish
+
+- [ ] Copy actions for commit metadata (full hash, short hash, author name, author email)
+- [ ] Ahead-of-remote details in the status area (for example: exact number of commits ahead)
+- [ ] Persistent app preferences (window size, warning visibility, default UI behavior)
+- [ ] Open commit details in an external tool or terminal command
+- [ ] Export commit metadata or history summaries as text/JSON for sharing
+
+### Larger additions
+
+- [ ] Show a preview of the Git command that will actually be run
+- [ ] Commit search and filtering by message, author, date, or hash
+- [ ] Side-by-side commit comparison view
+
+---
+
 ## Deferred / Out of Scope
 
 These items are explicitly deferred to avoid scope creep in early phases:
