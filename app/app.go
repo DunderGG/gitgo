@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	gitpkg "gitgo/git"
@@ -11,23 +10,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
-
-// App is the main application struct. It is bound to the Wails runtime and
-// exposes methods to the frontend via IPC. All bound methods must return either
-// a single value or (T, error) to satisfy the Wails binding contract.
-type App struct {
-	ctx context.Context
-
-	// mutex guards repoState. Bound methods are called from the WebView's IPC
-	// goroutine, which is separate from the Go main goroutine, so concurrent
-	// access to repoState is possible even with a single user (e.g. the UI may
-	// auto-call GetCommitLog before OpenRepository has finished writing the
-	// pointer). The mutex keeps the Go race detector clean and satisfies the Go
-	// memory model without any real performance cost — contention never occurs
-	// in practice.
-	mutex     sync.Mutex
-	repoState *gitpkg.RepoState
-}
 
 // New creates a new App instance.
 func New() *App {
@@ -92,6 +74,23 @@ func (app *App) GetCommitLog() ([]CommitSummary, error) {
 	return commitSummariesFromEntries(entries), nil
 }
 
+// commitSummariesFromEntries maps a slice of git.CommitEntry to the
+// JSON-serialisable CommitSummary DTOs used by the frontend.
+func commitSummariesFromEntries(entries []gitpkg.CommitEntry) []CommitSummary {
+	summaries := make([]CommitSummary, len(entries))
+	for index, entry := range entries {
+		summaries[index] = CommitSummary{
+			Hash:       entry.Hash.String(),
+			ShortHash:  entry.ShortHash,
+			Message:    entry.Message,
+			Author:     entry.AuthorName,
+			Date:       entry.Date.Format("2006-01-02T15:04:05Z07:00"),
+			IsUnpushed: entry.IsUnpushed,
+		}
+	}
+	return summaries
+}
+
 // GetCommitDetail returns full metadata for a single commit identified by its
 // 40-character hex hash. This is used to populate the edit panel.
 func (app *App) GetCommitDetail(hash string) (CommitDetail, error) {
@@ -146,23 +145,6 @@ func (app *App) RefreshLog() ([]CommitSummary, error) {
 	}
 
 	return commitSummariesFromEntries(entries), nil
-}
-
-// commitSummariesFromEntries maps a slice of git.CommitEntry to the
-// JSON-serialisable CommitSummary DTOs used by the frontend.
-func commitSummariesFromEntries(entries []gitpkg.CommitEntry) []CommitSummary {
-	summaries := make([]CommitSummary, len(entries))
-	for index, entry := range entries {
-		summaries[index] = CommitSummary{
-			Hash:       entry.Hash.String(),
-			ShortHash:  entry.ShortHash,
-			Message:    entry.Message,
-			Author:     entry.AuthorName,
-			Date:       entry.Date.Format("2006-01-02T15:04:05Z07:00"),
-			IsUnpushed: entry.IsUnpushed,
-		}
-	}
-	return summaries
 }
 
 // UpdateCommit applies the metadata changes in req to the identified unpushed
@@ -230,6 +212,10 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		return OperationResult{}, fmt.Errorf("reading HEAD: %w", err)
 	}
 
+	// rewriteErr captures errors from either rewrite method; we want to report
+	// stash pop errors separately since the rewrite may have succeeded but the
+	// stash pop failed (leaving the user with a stash that they may not notice
+	// if we report it as part of the rewrite error).
 	var rewriteErr error
 	if head.Hash() == commitHash {
 		rewriteErr = gitpkg.AmendCommit(state, opts)

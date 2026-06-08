@@ -10,36 +10,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
-// ErrDetachedHead is returned when the repository is in a detached HEAD state.
-var ErrDetachedHead = errors.New("repository is in detached HEAD state; attach to a branch before using GitGo")
-
-// ErrOperationInProgress is returned when a git operation (merge, rebase, cherry-pick) is already underway.
-var ErrOperationInProgress = errors.New("a git operation is already in progress; complete or abort it before using GitGo")
-
-// RepoState holds an open repository and all computed metadata needed by the
-// log and rewrite layers.
-type RepoState struct {
-	// Repo is the underlying go-git repository handle.
-	Repo *gogit.Repository
-
-	// Path is the absolute path to the repository root (the working tree).
-	Path string
-
-	// Branch is the name of the currently checked-out branch.
-	Branch string
-
-	// HasRemote is true when at least one remote is configured.
-	HasRemote bool
-
-	// HasUpstream is true when the current branch has a remote tracking branch.
-	HasUpstream bool
-
-	// UnpushedHashes is the set of commit hashes that are strictly above the
-	// remote tracking tip (i.e. safe to edit). All commits are considered
-	// unpushed when there is no upstream.
-	UnpushedHashes map[plumbing.Hash]bool
-}
-
 // Open opens the git repository rooted at path, validates its state, and
 // returns a fully populated RepoState.
 //

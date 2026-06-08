@@ -181,6 +181,7 @@
 - [ ] Show a preview of the Git command that will actually be run
 - [ ] Commit search and filtering by message, author, date, or hash
 - [ ] Side-by-side commit comparison view
+- [ ] Include prerequisites with the app
 
 ---
 

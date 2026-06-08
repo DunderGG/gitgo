@@ -1,34 +1,13 @@
 package git
 
 import (
-	"errors"
 	"fmt"
 	"os/exec"
-	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
-
-// ErrCommitNotUnpushed is returned when the caller tries to rewrite a commit
-// that has already been pushed to a remote.
-var ErrCommitNotUnpushed = errors.New("commit has already been pushed and cannot be rewritten")
-
-// ErrNativeGitNotFound is returned when the working tree is dirty and the
-// native git binary cannot be found on PATH. go-git has no stash API, so
-// auto-stash requires shelling out to the system git.
-var ErrNativeGitNotFound = errors.New("git binary not found on PATH; commit or clean up working tree changes before editing commits")
-
-// AmendOptions holds the new metadata values for a commit being amended.
-// All fields are required; partial updates are not supported.
-type AmendOptions struct {
-	// Message is the full commit message, including a trailing newline.
-	Message     string
-	AuthorName  string
-	AuthorEmail string
-	Date        time.Time
-}
 
 // AmendCommit rewrites the HEAD commit with the values in opts, keeping the
 // existing file tree and parent chain intact. It is equivalent to

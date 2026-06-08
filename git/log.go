@@ -4,24 +4,11 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 )
 
 const defaultLogDepth = 100
-
-// CommitEntry is the git-layer representation of a single commit.
-// The app layer converts this to app.CommitSummary.
-type CommitEntry struct {
-	Hash       plumbing.Hash
-	ShortHash  string
-	Message    string
-	AuthorName string
-	Date       time.Time
-	IsUnpushed bool
-}
 
 // Log walks the commit history from HEAD and returns up to limit entries.
 // Each entry is annotated with IsUnpushed based on the precomputed set in
