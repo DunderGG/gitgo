@@ -1,6 +1,12 @@
 import { useRepoStore, CommitSummary } from '../store/repoStore'
 
-function CommitRow({ commit }: { commit: CommitSummary }) {
+interface CommitRowProps {
+  commit: CommitSummary
+  isSelected: boolean
+  onSelect: () => void
+}
+
+function CommitRow({ commit, isSelected, onSelect }: CommitRowProps) {
   const date = new Date(commit.date)
   const formattedDate = date.toLocaleDateString(undefined, {
     year: 'numeric',
@@ -10,9 +16,17 @@ function CommitRow({ commit }: { commit: CommitSummary }) {
 
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-800 hover:bg-gray-800/60 transition-colors ${
-        commit.isUnpushed ? '' : 'opacity-60'
-      }`}
+      // Rows are always clickable so the user can inspect any commit; the
+      // EditPanel will disable editing for pushed commits.
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => e.key === 'Enter' && onSelect()}
+      className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-800 cursor-pointer transition-colors ${
+        isSelected
+          ? 'bg-indigo-950/60 border-l-2 border-l-indigo-500'
+          : 'hover:bg-gray-800/60'
+      } ${commit.isUnpushed ? '' : 'opacity-60'}`}
     >
       {/* Pushed / unpushed indicator dot */}
       <span
@@ -47,6 +61,8 @@ function CommitRow({ commit }: { commit: CommitSummary }) {
 
 export default function CommitList() {
   const commits = useRepoStore((s) => s.commits)
+  const selectedHash = useRepoStore((s) => s.selectedHash)
+  const selectCommit = useRepoStore((s) => s.selectCommit)
 
   if (commits.length === 0) {
     return (
@@ -84,7 +100,12 @@ export default function CommitList() {
       {/* Scrollable commit rows */}
       <div className="flex-1 overflow-y-auto">
         {commits.map((commit) => (
-          <CommitRow key={commit.hash} commit={commit} />
+          <CommitRow
+            key={commit.hash}
+            commit={commit}
+            isSelected={commit.hash === selectedHash}
+            onSelect={() => selectCommit(commit.hash)}
+          />
         ))}
       </div>
     </div>
