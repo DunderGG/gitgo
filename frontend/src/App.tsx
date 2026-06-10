@@ -1,6 +1,7 @@
 import RepoSelector from './components/RepoSelector'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
+import EditPanel from './components/EditPanel'
 import { useRepoStore } from './store/repoStore'
 
 function App() {
@@ -21,7 +22,10 @@ function App() {
         {!repoInfo ? (
           <RepoSelector />
         ) : (
-          <CommitList />
+          <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] overflow-hidden">
+            <CommitList />
+            <EditPanel />
+          </div>
         )}
       </main>
 
