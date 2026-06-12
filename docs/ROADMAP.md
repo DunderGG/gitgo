@@ -68,11 +68,11 @@
   - [x] Auto-stash via native `git stash` / `git stash pop` if `git` is available; error clearly if not
 - [x] Bind `App.UpdateCommit(req EditRequest)` to Wails
   - [x] Server-side safety check: reject if commit is not in unpushed set
-- [ ] Frontend: `EditPanel` component
-  - [ ] Message text area (multi-line)
-  - [ ] Date + time picker
-  - [ ] Author name and email fields
-  - [ ] Fields disabled / hidden for pushed commits
+- [x] Frontend: `EditPanel` component
+  - [x] Message text area (multi-line)
+  - [x] Date + time picker
+  - [x] Author name and email fields
+  - [x] Fields disabled / hidden for pushed commits
 - [ ] Frontend: `ConfirmDialog` component
   - [ ] Display old vs new values side-by-side before confirming
   - [ ] "Apply" and "Cancel" actions
@@ -121,7 +121,7 @@
 - [ ] Loading indicators during git operations
 - [ ] Error boundary in frontend with user-friendly messages
 - [ ] Application icon and Wails window configuration (title, min size)
-- [ ] `CommitList` row selection state (highlight selected commit, drive `EditPanel`)
+- [x] `CommitList` row selection state (highlight selected commit, drive `EditPanel`)
 - [ ] Reload / refresh button in header to re-read the repo from disk
 
 ---

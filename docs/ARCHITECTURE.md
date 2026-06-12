@@ -160,7 +160,7 @@ Nothing else belongs here. All application logic lives in `app/` and `git/`.
 The IPC controller. It holds a single `*App` struct with three fields:
 
 - `ctx context.Context` — the Wails runtime context, stored in `Startup` and used for native dialog calls.
-- `mu sync.Mutex` — guards `repoState` so concurrent IPC calls from the frontend cannot race.
+- `mutex sync.Mutex` — guards `repoState` so concurrent IPC calls from the frontend cannot race.
 - `repoState *git.RepoState` — the currently open repository; `nil` when no repo is loaded.
 
 **Bound methods** (each maps directly to a callable in `wailsjs/go/app/App.js`):
@@ -170,6 +170,9 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `SelectDirectory() (string, error)` | Calls `runtime.OpenDirectoryDialog` with the Wails context to show a native OS folder picker. Returns the selected path or an empty string if the user cancels. Implemented as a bound Go method rather than via the auto-generated runtime JS, because that file is overwritten on every build. |
 | `OpenRepository(path string) (RepoInfo, error)` | Calls `git.Open(path)` to validate the path and build a `RepoState`. Stores the state under the mutex for later use. Maps the result to a `RepoInfo` DTO and returns it. Errors from `git.Open` (not a repo, detached HEAD, operation in progress) propagate directly as a rejected Promise on the frontend. |
 | `GetCommitLog() ([]CommitSummary, error)` | Reads `repoState` under the mutex; returns an error if no repo is open. Calls `git.Log(state, 0)` to walk up to 100 commits, then maps each `git.CommitEntry` to a `CommitSummary` DTO — including formatting the author date as an RFC 3339 string so the frontend can parse it with `new Date()`. |
+| `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, unpushed flag) for the edit UI. |
+| `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
+| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit. Performs server-side unpushed safety check, optional auto-stash/unstash when the worktree is dirty, dispatches to `AmendCommit` (HEAD) or `RebaseRewrite` (older commit), then refreshes in-memory state. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
 
@@ -297,14 +300,15 @@ Any error at any step calls `setError(String(err))`, which the `StatusBar` rende
 The main view after a repository is opened. Reads `commits` from the Zustand store (reactive — updates automatically if the store changes).
 
 Structure:
-- **Column headers** — a sticky row with labels for hash, message, author, and date.
+- **Column headers** — a fixed header row with labels for hash, message, author, and date.
 - **Legend** — a summary row showing the count of unpushed (indigo dot) vs pushed (grey dot) commits.
 - **Scrollable commit rows** — each rendered by the internal `CommitRow` component.
 
 `CommitRow` renders one commit. Visual treatment:
 - Unpushed commits render at full opacity with an indigo dot. Pushed commits render at 60% opacity with a grey dot, communicating they are read-only.
+- Rows are selectable (`onClick` and `Enter` key). The selected row is highlighted with a darker indigo background and left border.
 - The 7-character short hash is monospaced and `select-all` so users can copy it.
-- The commit message truncates with `text-ellipsis` but the full message is in a `title` attribute on hover.
+- The commit message truncates with Tailwind `truncate` and the full message is in a `title` attribute on hover.
 - The date is localised via `toLocaleDateString` rather than shown as a raw ISO string.
 - The author column is hidden on narrow viewports (`hidden sm:block`).
 
@@ -331,6 +335,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 |---|---|---|
 | `repoInfo` | `RepoInfo \| null` | `null` means no repo is open. Non-null switches the main view from `RepoSelector` to `CommitList`. |
 | `commits` | `CommitSummary[]` | The current log. Empty array while no repo is open. |
+| `selectedHash` | `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `status` | `string` | Most-recent informational message (e.g. `"Opened: /path/to/repo"`). |
 | `error` | `string \| null` | Most-recent error message. Non-null causes `StatusBar` to show it in red. Setting a new error does not clear `repoInfo` — the repo remains open. |
 
@@ -338,10 +343,11 @@ The single source of truth for all application state. Built with Zustand (no Pro
 
 | Action | Effect |
 |---|---|
-| `setRepo(info, commits)` | Sets `repoInfo` and `commits` together, clears `error`, sets `status` to `"Opened: <path>"`. |
+| `setRepo(info, commits)` | Sets `repoInfo` and `commits` together, clears `selectedHash` and `error`, sets `status` to `"Opened: <path>"`. |
+| `selectCommit(hash)` | Sets `selectedHash` when a commit row is clicked or keyboard-selected. |
 | `setStatus(message)` | Updates `status` without touching anything else. Used for in-progress messages like `"Opening repository…"`. |
 | `setError(error)` | Sets `error`. Pass `null` to dismiss. |
-| `clearRepo()` | Resets all state to initial values — returns the app to the `RepoSelector` view. |
+| `clearRepo()` | Resets all state (including `selectedHash`) to initial values — returns the app to the `RepoSelector` view. |
 
 ---
 
@@ -383,23 +389,23 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 |---|---|
 | `App.tsx` | Root layout; switches between `RepoSelector` and `CommitList` based on store state |
 | `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo` |
-| `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend |
+| `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state |
 | `StatusBar` | Persistent footer; branch name, remote notices, status/error display |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author |
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
-| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `status`, `error` |
+| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `selectedHash`, `status`, `error` |
 
 ### Backend
 
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog` |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit` |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open`: validate path, detect edge cases, build `RepoState` with unpushed set |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
-| `git/git_test.go` | 11 unit tests covering `Open` and `Log` using real on-disk repos |
-| `git/rewrite.go` | *(Phase 2)* `AmendCommit` and `RebaseRewrite` |
+| `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
+| `git/rewrite.go` | *(Phase 2)* `AmendCommit`, `RebaseRewrite`, dirty-worktree detection, and auto-stash helpers |
 
 ---
 
