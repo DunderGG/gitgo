@@ -48,6 +48,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full detail on each phase.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed breakdown of each technology and every file in the project.
 
+If you are new to the frontend stack, see [frontend/FRONTEND_GUIDE.md](frontend/FRONTEND_GUIDE.md) for a beginner-friendly walkthrough of the TypeScript/React files.
+
 ---
 
 ## Getting Started
