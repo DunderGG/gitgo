@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { GetCommitDetail } from '../../wailsjs/go/app/App'
+import { GetCommitDetail, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
+import ConfirmDialog, { ConfirmValues } from './ConfirmDialog'
 import { useRepoStore } from '../store/repoStore'
 
 interface EditFormState {
@@ -26,12 +27,64 @@ function toLocalDateTimeInputValue(rfc3339: string): string {
   return `${year}-${month}-${day}T${hour}:${minute}`
 }
 
+function toRfc3339FromLocalDateTime(localValue: string): string {
+  const date = new Date(localValue)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+  return date.toISOString()
+}
+
+function toPreviewDateText(localValue: string): string {
+  if (!localValue) {
+    return ''
+  }
+
+  const date = new Date(localValue)
+  if (Number.isNaN(date.getTime())) {
+    return localValue
+  }
+
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function formsEqual(left: EditFormState, right: EditFormState): boolean {
+  return (
+    left.message === right.message &&
+    left.authorName === right.authorName &&
+    left.authorEmail === right.authorEmail &&
+    left.dateLocal === right.dateLocal
+  )
+}
+
+function formToConfirmValues(form: EditFormState): ConfirmValues {
+  return {
+    message: form.message,
+    authorName: form.authorName,
+    authorEmail: form.authorEmail,
+    dateText: toPreviewDateText(form.dateLocal),
+  }
+}
+
 export default function EditPanel() {
   const selectedHash = useRepoStore((s) => s.selectedHash)
+  const repoInfo = useRepoStore((s) => s.repoInfo)
+  const setRepo = useRepoStore((s) => s.setRepo)
+  const setStatus = useRepoStore((s) => s.setStatus)
+  const setError = useRepoStore((s) => s.setError)
 
   const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [isUnpushed, setIsUnpushed] = useState(false)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [originalForm, setOriginalForm] = useState<EditFormState | null>(null)
   const [form, setForm] = useState<EditFormState>({
     message: '',
     authorName: '',
@@ -46,6 +99,8 @@ export default function EditPanel() {
       setIsLoading(false)
       setLoadError(null)
       setIsUnpushed(false)
+      setShowConfirmDialog(false)
+      setOriginalForm(null)
       setForm({ message: '', authorName: '', authorEmail: '', dateLocal: '' })
       return () => {
         isActive = false
@@ -67,12 +122,14 @@ export default function EditPanel() {
         }
 
         setIsUnpushed(detail.isUnpushed)
-        setForm({
+        const loadedForm = {
           message: detail.message,
           authorName: detail.authorName,
           authorEmail: detail.authorEmail,
           dateLocal: toLocalDateTimeInputValue(detail.date),
-        })
+        }
+        setOriginalForm(loadedForm)
+        setForm(loadedForm)
       } catch (error) {
         if (!isActive) {
           return
@@ -92,14 +149,57 @@ export default function EditPanel() {
     }
   }, [selectedHash])
 
-  const fieldsDisabled = !selectedHash || isLoading || !isUnpushed
+  const fieldsDisabled = !selectedHash || isLoading || isSubmitting || !isUnpushed
+  const hasChanges = originalForm !== null && !formsEqual(form, originalForm)
+
+  async function handleConfirmApply() {
+    if (!selectedHash || !repoInfo || !originalForm) {
+      return
+    }
+
+    const rfc3339Date = toRfc3339FromLocalDateTime(form.dateLocal)
+    if (!rfc3339Date) {
+      setError('Enter a valid date and time before applying changes.')
+      setShowConfirmDialog(false)
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      const result = await UpdateCommit({
+        hash: selectedHash,
+        message: form.message,
+        authorName: form.authorName,
+        authorEmail: form.authorEmail,
+        date: rfc3339Date,
+      })
+
+      const refreshedCommits = await RefreshLog()
+      setRepo(repoInfo, refreshedCommits)
+
+      if (result.success) {
+        setError(null)
+        setStatus(result.message)
+      } else {
+        setError(result.message)
+      }
+
+      setShowConfirmDialog(false)
+    } catch (error) {
+      setError(String(error))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   return (
-    <aside className="h-full border-t lg:border-t-0 lg:border-l border-gray-800 bg-gray-900/60">
-      <div className="h-full overflow-y-auto p-4 sm:p-5">
+    <>
+      <aside className="h-full border-t lg:border-t-0 lg:border-l border-gray-800 bg-gray-900/60">
+        <div className="h-full overflow-y-auto p-4 sm:p-5">
         <h2 className="text-base font-semibold text-gray-100">Edit Commit</h2>
         <p className="mt-1 text-xs text-gray-400">
-          Select a commit to load its metadata. Apply/confirm flow is added in Step 7.
+          Select a commit to load its metadata, then review changes before applying them.
         </p>
 
         {!selectedHash && (
@@ -130,7 +230,15 @@ export default function EditPanel() {
           </div>
         )}
 
-        <form className="mt-5 space-y-4" onSubmit={(e) => e.preventDefault()}>
+        <form
+          className="mt-5 space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!fieldsDisabled && hasChanges) {
+              setShowConfirmDialog(true)
+            }
+          }}
+        >
           <div>
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">
               Message
@@ -185,8 +293,38 @@ export default function EditPanel() {
               placeholder="author@example.com"
             />
           </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              disabled={fieldsDisabled || !hasChanges}
+              onClick={() => originalForm && setForm(originalForm)}
+              className="rounded-md border border-gray-700 px-4 py-2 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Reset
+            </button>
+            <button
+              type="submit"
+              disabled={fieldsDisabled || !hasChanges}
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Review Changes
+            </button>
+          </div>
         </form>
-      </div>
-    </aside>
+        </div>
+      </aside>
+
+      {originalForm && (
+        <ConfirmDialog
+          isOpen={showConfirmDialog}
+          isSubmitting={isSubmitting}
+          before={formToConfirmValues(originalForm)}
+          after={formToConfirmValues(form)}
+          onCancel={() => setShowConfirmDialog(false)}
+          onConfirm={handleConfirmApply}
+        />
+      )}
+    </>
   )
 }

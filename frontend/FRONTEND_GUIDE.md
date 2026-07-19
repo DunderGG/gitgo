@@ -139,6 +139,28 @@ Current behavior:
 - pushed commits use a gray dot and reduced opacity
 - rows are selectable and highlight when selected
 
+### src/components/EditPanel.tsx
+
+Edit form for the currently selected commit.
+
+Current behavior:
+
+- loads full commit metadata from GetCommitDetail when a row is selected
+- keeps local form state for message, date/time, author name, and author email
+- disables fields for pushed commits
+- opens ConfirmDialog before applying a rewrite
+- calls UpdateCommit and then RefreshLog after confirmation
+
+### src/components/ConfirmDialog.tsx
+
+Review dialog shown before rewriting commit history.
+
+Current behavior:
+
+- shows current values and new values side-by-side
+- highlights changed values
+- provides Apply and Cancel actions
+
 ### src/components/StatusBar.tsx
 
 Bottom status area.
@@ -148,6 +170,7 @@ Shows:
 - branch name
 - no-remote or no-upstream warnings
 - status message or error message
+- successful rewrite messages, including the auto-stash restore notice when applicable
 
 ## Wails binding files you will see
 
@@ -180,7 +203,9 @@ Type models generated from Go structs.
 4. repoStore saves that data.
 5. App switches from RepoSelector to CommitList.
 6. User selects a row in CommitList and selectedHash updates in repoStore.
-7. StatusBar reflects status or error messages from repoStore.
+7. EditPanel loads full commit details for the selected hash.
+8. ConfirmDialog lets the user review old vs new values before applying.
+9. UpdateCommit rewrites the commit, RefreshLog reloads the list, and StatusBar reflects the result.
 
 ## If you are new to TypeScript, focus on this first
 
@@ -191,6 +216,8 @@ Read in this order:
 3. src/store/repoStore.ts
 4. src/components/RepoSelector.tsx
 5. src/components/CommitList.tsx
-6. src/components/StatusBar.tsx
+6. src/components/EditPanel.tsx
+7. src/components/ConfirmDialog.tsx
+8. src/components/StatusBar.tsx
 
 That path will give you the big picture before diving into config files.

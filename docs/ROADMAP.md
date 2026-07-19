@@ -73,11 +73,11 @@
   - [x] Date + time picker
   - [x] Author name and email fields
   - [x] Fields disabled / hidden for pushed commits
-- [ ] Frontend: `ConfirmDialog` component
-  - [ ] Display old vs new values side-by-side before confirming
-  - [ ] "Apply" and "Cancel" actions
-- [ ] Frontend: Refresh `CommitList` after a successful edit
-- [ ] Show auto-stash notice in `StatusBar` when applicable
+- [x] Frontend: `ConfirmDialog` component
+  - [x] Display old vs new values side-by-side before confirming
+  - [x] "Apply" and "Cancel" actions
+- [x] Frontend: Refresh `CommitList` after a successful edit
+- [x] Show auto-stash notice in `StatusBar` when applicable
 - [x] Write integration tests for `git/rewrite.go` (16 tests, all passing)
   - [x] `TestAmendCommit_UpdatesMessage`
   - [x] `TestAmendCommit_UpdatesAuthor`

@@ -272,7 +272,7 @@ The React entry point. Mounts the `<App>` component into `#root` inside `index.h
 The root layout component. Renders a full-height flex column with three vertical sections:
 
 - **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`.
-- **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or `<CommitList>` (repo open), driven by `repoInfo` from the Zustand store.
+- **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
 `App.tsx` owns the top-level conditional render. It subscribes to only `repoInfo` from the store to decide which view to show, keeping re-renders minimal.
@@ -314,12 +314,41 @@ Structure:
 
 ---
 
+#### `frontend/src/components/EditPanel.tsx`
+
+The edit workspace for the currently selected commit. Reads `selectedHash` from the Zustand store and lazily fetches full commit metadata with `GetCommitDetail(hash)` whenever the selection changes.
+
+Behaviour:
+- Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke.
+- Tracks the originally loaded values separately from the current form values so it can detect changes, support reset, and feed the confirmation dialog with an explicit before/after comparison.
+- Disables all editable controls while commit details are loading, while a rewrite is being submitted, and for pushed commits (`isUnpushed == false`).
+- On submit, opens `<ConfirmDialog>` instead of immediately rewriting history.
+- On confirm, calls `UpdateCommit` followed by `RefreshLog`, then writes the refreshed commit list back into the store and clears selection via `setRepo`.
+
+The panel intentionally owns transient UI state (loading, local form values, dialog visibility, submit-in-progress) while long-lived application state remains in `repoStore.ts`.
+
+---
+
+#### `frontend/src/components/ConfirmDialog.tsx`
+
+A modal confirmation dialog rendered by `EditPanel`. Its only responsibility is review and confirmation — it does not own any repository state itself.
+
+Behaviour:
+- Receives precomputed `before` and `after` values from `EditPanel`.
+- Shows a side-by-side comparison for message, date/time, author name, and author email.
+- Highlights changed values visually so the user can quickly verify what will be rewritten.
+- Exposes `Cancel` and `Apply` actions; `Apply` is disabled while a rewrite request is already in flight.
+
+---
+
 #### `frontend/src/components/StatusBar.tsx`
 
 A persistent footer bar rendered on every screen. Reads three independent slices from the Zustand store:
 
 - **Left side** — when a repo is open: shows the branch name in indigo. Conditionally appends a yellow "No remote configured" or "No upstream set" notice, driven by `repoInfo.hasRemote` and `repoInfo.hasUpstream`.
 - **Right side** — mutually exclusive: if `error` is non-null, shows it in red; otherwise shows the `status` string in muted grey. This means any error immediately replaces a previous status message.
+
+Successful rewrite messages from `UpdateCommit` also surface here. That includes the auto-stash notice (`"commit updated; stashed changes restored"`) returned by the backend when the worktree had to be stashed around the rewrite.
 
 The component subscribes to three separate store selectors rather than the whole store, so it only re-renders when one of those three values changes.
 
@@ -387,11 +416,11 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 
 | Component | Responsibility |
 |---|---|
-| `App.tsx` | Root layout; switches between `RepoSelector` and `CommitList` based on store state |
+| `App.tsx` | Root layout; switches between `RepoSelector` and the repo workspace (`CommitList` + `EditPanel`) based on store state |
 | `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo` |
 | `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state |
-| `StatusBar` | Persistent footer; branch name, remote notices, status/error display |
-| `EditPanel` | *(Phase 2)* Edit form for message, date, author |
+| `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite/auto-stash messages |
+| `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
 | `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `selectedHash`, `status`, `error` |
 
