@@ -1,21 +1,39 @@
 import { OpenRepository, GetCommitLog, SelectDirectory } from '../../wailsjs/go/app/App'
 import { useRepoStore } from '../store/repoStore'
 
+function looksLikeMissingPathError(errorText: string): boolean {
+  return /does not exist|cannot find|no such file|cannot resolve path/i.test(errorText)
+}
+
 export default function RepoSelector() {
-  const { setRepo, setError, setStatus } = useRepoStore()
+  const { recentRepos, setRepo, setError, setStatus, removeRecentRepo } = useRepoStore()
 
-  async function handleOpen() {
+  async function openRepo(path: string) {
+    setStatus('Opening repository…')
+    setError(null)
+
     try {
-      const path = await SelectDirectory()
-      if (!path) return
-
-      setStatus('Opening repository…')
       const repoInfo = await OpenRepository(path)
       const commits = await GetCommitLog()
       setRepo(repoInfo, commits)
-    } catch (err) {
-      setError(String(err))
+    } catch (error) {
+      const errorText = String(error)
+      setError(errorText)
+
+      // Remove stale recent entries when the folder no longer exists.
+      if (looksLikeMissingPathError(errorText)) {
+        removeRecentRepo(path)
+      }
     }
+  }
+
+  async function handleOpen() {
+    const path = await SelectDirectory()
+    if (!path) {
+      return
+    }
+
+    await openRepo(path)
   }
 
   return (
@@ -34,6 +52,36 @@ export default function RepoSelector() {
       >
         Open Repository
       </button>
+
+      {recentRepos.length > 0 && (
+        <div className="w-full max-w-3xl rounded-lg border border-gray-800 bg-gray-900/70 p-4">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            Recent Repositories
+          </h3>
+          <div className="mt-3 space-y-2">
+            {recentRepos.map((path) => (
+              <div key={path} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openRepo(path)}
+                  className="flex-1 rounded-md border border-gray-800 bg-gray-800/40 px-3 py-2 text-left text-sm text-gray-300 transition hover:border-indigo-700 hover:bg-gray-800"
+                  title={path}
+                >
+                  <span className="block truncate">{path}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeRecentRepo(path)}
+                  className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-400 transition hover:border-gray-500 hover:text-gray-200"
+                  title="Remove from recent list"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

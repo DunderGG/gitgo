@@ -102,10 +102,10 @@
 
 > Goal: the app feels complete and production-quality for everyday use.
 
-- [ ] Recent repositories list (persisted in `localStorage`)
-  - [ ] Store last 10 opened paths
-  - [ ] Show in `RepoSelector` with quick-open buttons
-  - [ ] Remove entry if path no longer exists
+- [x] Recent repositories list (persisted in `localStorage`)
+  - [x] Store last 10 opened paths
+  - [x] Show in `RepoSelector` with quick-open buttons
+  - [x] Remove entry if path no longer exists
 - [ ] Undo last rewrite operation
   - [ ] Record pre-rewrite HEAD ref in memory
   - [ ] Expose `App.UndoLastOperation()` binding

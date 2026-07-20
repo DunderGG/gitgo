@@ -105,6 +105,7 @@ State currently includes:
 
 - repoInfo: opened repository details
 - commits: commit list shown in CommitList
+- recentRepos: last 10 opened repository paths (saved in localStorage)
 - selectedHash: currently selected commit row
 - status: normal status text
 - error: current error text
@@ -112,6 +113,7 @@ State currently includes:
 Actions currently include:
 
 - setRepo: save repo info and commit list
+- removeRecentRepo: remove one path from the recent list
 - selectCommit: set selected row
 - setStatus: set status message
 - setError: set error message
@@ -127,6 +129,12 @@ It calls generated Wails functions to:
 - open selected repository in backend
 - fetch commit log
 - write results into the Zustand store
+
+It also shows recent repositories as quick-open buttons.
+
+- The list is persisted in localStorage.
+- It stores up to 10 unique paths (most recent first).
+- If a quick-open fails because the folder no longer exists, the stale entry is removed.
 
 ### src/components/CommitList.tsx
 

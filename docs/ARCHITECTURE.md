@@ -283,6 +283,8 @@ The root layout component. Renders a full-height flex column with three vertical
 
 The empty-state view shown before any repository is loaded. Contains a centred card with a heading, subtext, and an "Open Repository" button.
 
+It also renders a "Recent Repositories" list driven by `repoStore.recentRepos` (persisted in `localStorage`). Each entry can be quick-opened, and entries can be removed manually.
+
 When the button is clicked, `handleOpen` runs the following sequence over the Wails IPC bridge:
 
 1. `SelectDirectory()` — opens the native OS folder picker. Returns empty string if cancelled; bails out immediately.
@@ -291,7 +293,7 @@ When the button is clicked, `handleOpen` runs the following sequence over the Wa
 4. `GetCommitLog()` — walks the commit log and returns `[]CommitSummary`.
 5. `setRepo(repoInfo, commits)` — writes both into the Zustand store atomically. This triggers the `App.tsx` conditional to switch from `RepoSelector` to `CommitList`.
 
-Any error at any step calls `setError(String(err))`, which the `StatusBar` renders in red.
+Any error at any step calls `setError(String(err))`, which the `StatusBar` renders in red. If a quick-opened recent path appears to no longer exist, `removeRecentRepo(path)` prunes the stale entry from the list.
 
 ---
 
@@ -364,6 +366,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 |---|---|---|
 | `repoInfo` | `RepoInfo \| null` | `null` means no repo is open. Non-null switches the main view from `RepoSelector` to `CommitList`. |
 | `commits` | `CommitSummary[]` | The current log. Empty array while no repo is open. |
+| `recentRepos` | `string[]` | Most-recent repository paths, stored in `localStorage`, deduplicated, and capped to 10 entries. |
 | `selectedHash` | `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `status` | `string` | Most-recent informational message (e.g. `"Opened: /path/to/repo"`). |
 | `error` | `string \| null` | Most-recent error message. Non-null causes `StatusBar` to show it in red. Setting a new error does not clear `repoInfo` — the repo remains open. |
@@ -373,6 +376,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | Action | Effect |
 |---|---|
 | `setRepo(info, commits)` | Sets `repoInfo` and `commits` together, clears `selectedHash` and `error`, sets `status` to `"Opened: <path>"`. |
+| `removeRecentRepo(path)` | Removes one path from the recent list and persists the updated list to `localStorage`. |
 | `selectCommit(hash)` | Sets `selectedHash` when a commit row is clicked or keyboard-selected. |
 | `setStatus(message)` | Updates `status` without touching anything else. Used for in-progress messages like `"Opening repository…"`. |
 | `setError(error)` | Sets `error`. Pass `null` to dismiss. |
@@ -417,12 +421,12 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | Component | Responsibility |
 |---|---|
 | `App.tsx` | Root layout; switches between `RepoSelector` and the repo workspace (`CommitList` + `EditPanel`) based on store state |
-| `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo` |
+| `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo`; also renders and manages quick-open recent repositories |
 | `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state |
 | `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite/auto-stash messages |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
-| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `selectedHash`, `status`, `error` |
+| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `status`, `error` |
 
 ### Backend
 
