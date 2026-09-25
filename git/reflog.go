@@ -15,8 +15,9 @@ import (
 
 // Reflog messages written by GitGo, shown by `git reflog`.
 const (
-	reflogEditPrefix = "gitgo: edit commit "
-	reflogUndo       = "gitgo: undo edit"
+	reflogEditPrefix     = "gitgo: edit commit "
+	reflogEditManyFormat = "gitgo: edit %d commits"
+	reflogUndo           = "gitgo: undo edit"
 )
 
 // moveBranch moves branch from oldHash to newHash and records the move in the

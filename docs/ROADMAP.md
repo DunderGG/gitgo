@@ -238,6 +238,10 @@ Found in the follow-up review (2026-09-25):
 - [ ] Export commit metadata or history summaries as text/JSON for sharing
 - [x] Add tiny date/time buttons under the date field to add +1 hour, +1 day, current time, etc.
   - [x] `EditPanel` has −1d, −1h, +1h, +1d (shift the wall-clock time, keeping the offset) and Now (current time and this computer's offset)
+- [ ] Shift the dates of several selected commits at once (multi-select in `CommitList`, ±1h/±1d in a bulk panel)
+  - [x] `RewriteCommits`: edit any set of unpushed commits in one chain rebuild, so one undo and one reflog entry cover the batch (`TestRewriteCommits_*`); `AmendCommit` / `RebaseRewrite` now wrap it
+  - [ ] `ShiftCommitDates` bound method (relative shift per commit, keeping each commit's offset; optionally shift committer dates)
+  - [ ] Multi-select in `CommitList` (Ctrl/Shift-click, Shift+↑/↓; unpushed commits only) and a bulk date panel with a per-commit preview in `ConfirmDialog`
 
 ### Larger additions
 

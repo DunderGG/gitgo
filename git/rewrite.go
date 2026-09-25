@@ -28,47 +28,11 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 	if err := validateIdentity(opts); err != nil {
 		return err
 	}
-
-	headHash := head.Hash()
-	if !state.UnpushedHashes[headHash] {
-		return ErrCommitNotUnpushed
-	}
-
-	headCommit, err := state.Repo.CommitObject(headHash)
-	if err != nil {
-		return fmt.Errorf("loading HEAD commit: %w", err)
-	}
-
-	author, committer := editedSignatures(headCommit, opts)
-
-	// Build the replacement commit. The tree (the directory snapshot) is kept
-	// unchanged because we're only editing metadata, not file contents, and the
-	// parents keep the commit's position in the graph.
-	newCommit := rebuildCommit(headCommit, author, committer, opts.Message, headCommit.ParentHashes)
-
-	newHash, err := storeCommit(state, newCommit)
-	if err != nil {
-		return fmt.Errorf("storing amended commit: %w", err)
-	}
-
-	// head is the branch ref (refs/heads/<branch>). When the branch is checked
-	// out, HEAD is a symbolic ref to it, so moving the branch ref also moves
-	// HEAD — the correct way to move a branch tip in git's object model.
-	message := reflogEditMessage(headHash)
-	if err := moveBranch(state, head.Name(), headHash, newHash, message); err != nil {
-		return err
-	}
-	return moveOtherBranches(state, opts.MoveBranches, map[plumbing.Hash]plumbing.Hash{headHash: newHash}, message)
+	return RewriteCommits(state, map[plumbing.Hash]CommitEdit{head.Hash(): amendEdit(opts)}, opts.MoveBranches)
 }
 
-// RebaseRewrite rewrites a single unpushed commit anywhere in history by
-// rebuilding the first-parent chain from the target commit up to the tip of
-// state.Branch. The branch does not need to be checked out.
-// Commits above the target are rebuilt with the same tree and metadata but
-// updated parent hashes; only the target receives the values in opts.
-//
-// Merge commits in the chain are rebuilt with their non-first parents
-// preserved unchanged.
+// RebaseRewrite rewrites a single unpushed commit anywhere in history with the
+// values in opts; see RewriteCommits for how the commits above it are rebuilt.
 //
 // Branches in opts.MoveBranches are moved along; if any cannot be moved the
 // edit still stands and a *RefsNotMovedError is returned.
@@ -78,8 +42,47 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 	if err := validateIdentity(opts); err != nil {
 		return err
 	}
-	if !state.UnpushedHashes[targetHash] {
-		return ErrCommitNotUnpushed
+	return RewriteCommits(state, map[plumbing.Hash]CommitEdit{targetHash: amendEdit(opts)}, opts.MoveBranches)
+}
+
+// CommitEdit returns the new author, committer and message for original. The
+// tree, parents and other headers are handled by RewriteCommits.
+type CommitEdit func(original *object.Commit) (author, committer object.Signature, message string)
+
+// amendEdit is the CommitEdit that applies opts to a commit.
+func amendEdit(opts AmendOptions) CommitEdit {
+	return func(original *object.Commit) (object.Signature, object.Signature, string) {
+		author, committer := editedSignatures(original, opts)
+		return author, committer, opts.Message
+	}
+}
+
+// RewriteCommits applies each edit to its commit in one pass, by rebuilding
+// the first-parent chain from the tip of state.Branch down to the oldest
+// edited commit. The branch does not need to be checked out; only its ref is
+// moved, once and with a single reflog entry, so one undo reverts the whole
+// rewrite.
+//
+// Commits in the chain without an edit are rebuilt with the same tree and
+// metadata but updated parent hashes. Merge commits keep their non-first
+// parents unchanged.
+//
+// Branches in moveBranches are moved along; if any cannot be moved the
+// rewrite still stands and a *RefsNotMovedError is returned.
+//
+// Returns ErrCommitNotUnpushed if any edited commit is not in
+// state.UnpushedHashes, and an error if one is not on the branch's
+// first-parent chain. The branch is left unchanged in both cases.
+func RewriteCommits(state *RepoState, edits map[plumbing.Hash]CommitEdit, moveBranches []string) error {
+	if len(edits) == 0 {
+		return fmt.Errorf("no commits to rewrite")
+	}
+	targets := make([]plumbing.Hash, 0, len(edits))
+	for hash := range edits {
+		if !state.UnpushedHashes[hash] {
+			return ErrCommitNotUnpushed
+		}
+		targets = append(targets, hash)
 	}
 
 	head, err := branchTip(state)
@@ -88,23 +91,23 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 	}
 	headHash := head.Hash()
 
-	// Collect the chain from HEAD down to targetHash, inclusive.
-	// chain[0] == HEAD, chain[len-1] == target.
-	chain, err := collectChain(state, headHash, targetHash)
+	// Collect the chain from HEAD down to the oldest target, inclusive.
+	// chain[0] == HEAD.
+	chain, err := collectChain(state, headHash, targets...)
 	if err != nil {
 		return err
 	}
 
-	// Walk the chain bottom-up (target first, HEAD last) so that by the time we
-	// rebuild a commit we have already computed the new hash for its parent.
-	// oldToNew maps each original commit hash to its replacement, letting us
-	// fix up parent pointers as we go.
+	// Walk the chain bottom-up (oldest target first, HEAD last) so that by the
+	// time we rebuild a commit we have already computed the new hash for its
+	// parent. oldToNew maps each original commit hash to its replacement,
+	// letting us fix up parent pointers as we go.
 	oldToNew := make(map[plumbing.Hash]plumbing.Hash, len(chain))
 	for i := len(chain) - 1; i >= 0; i-- {
 		original := chain[i]
 
 		// Replace any parent hash that was already rebuilt so the chain stays
-		// connected. Parents that are below the target (i.e. not in oldToNew)
+		// connected. Parents below the oldest target (i.e. not in oldToNew)
 		// keep their original hashes unchanged.
 		newParents := make([]plumbing.Hash, len(original.ParentHashes))
 		for j, ph := range original.ParentHashes {
@@ -115,20 +118,16 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 			}
 		}
 
-		var rebuilt *object.Commit
-		if original.Hash == targetHash {
-			// This is the commit the user wants to edit. Replace its author
-			// and message with the values from opts while keeping the
-			// original tree (file snapshot) and the (possibly remapped) parents.
-			author, committer := editedSignatures(original, opts)
-			rebuilt = rebuildCommit(original, author, committer, opts.Message, newParents)
-		} else {
-			// This commit is above the target — its content is unchanged, but
-			// its parent pointer may have been remapped, so we must store a new
-			// object. Git hashes include parent hashes, so even an identical
-			// commit with a different parent produces a different hash.
-			rebuilt = rebuildCommit(original, original.Author, original.Committer, original.Message, newParents)
+		// Edited commits get their new metadata; the tree (file snapshot) is
+		// always kept. The other commits are unchanged apart from their parent
+		// pointer, but must still be stored as new objects: git hashes include
+		// parent hashes, so an identical commit with a different parent
+		// produces a different hash.
+		author, committer, message := original.Author, original.Committer, original.Message
+		if edit, ok := edits[original.Hash]; ok {
+			author, committer, message = edit(original)
 		}
+		rebuilt := rebuildCommit(original, author, committer, message, newParents)
 
 		// Store the rebuilt commit and record its new hash.
 		newHash, storeErr := storeCommit(state, rebuilt)
@@ -140,16 +139,22 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 
 	// Point the branch ref at the rebuilt HEAD. The rebuilt commits are only
 	// new objects until this succeeds, so a failure leaves the branch as it was.
-	message := reflogEditMessage(targetHash)
+	// When the branch is checked out, HEAD is a symbolic ref to it, so moving
+	// the branch ref also moves HEAD.
+	message := reflogRewriteMessage(targets)
 	if err := moveBranch(state, head.Name(), headHash, oldToNew[headHash], message); err != nil {
 		return err
 	}
-	return moveOtherBranches(state, opts.MoveBranches, oldToNew, message)
+	return moveOtherBranches(state, moveBranches, oldToNew, message)
 }
 
-// reflogEditMessage is the reflog message for an edit of the given commit.
-func reflogEditMessage(target plumbing.Hash) string {
-	return reflogEditPrefix + target.String()[:7]
+// reflogRewriteMessage is the reflog message for a rewrite of the given
+// commits: the short hash for a single commit, the count for several.
+func reflogRewriteMessage(targets []plumbing.Hash) string {
+	if len(targets) == 1 {
+		return reflogEditPrefix + targets[0].String()[:7]
+	}
+	return fmt.Sprintf(reflogEditManyFormat, len(targets))
 }
 
 // editedSignatures builds the new author and committer signatures for
@@ -234,13 +239,19 @@ func storeCommit(state *RepoState, commit *object.Commit) (plumbing.Hash, error)
 }
 
 // collectChain walks from headHash following the first parent of each commit
-// until targetHash is reached (inclusive), returning commits in HEAD-first
-// order. Returns an error when targetHash is not reachable.
+// until every target has been seen, returning the commits in HEAD-first order
+// down to the oldest target (inclusive). Returns an error when a target is not
+// reachable this way.
 //
 // We follow only the first parent so that the chain stays linear even when
 // merge commits are present. Non-first parents (the merged-in branches) are
 // preserved as-is in the rebuilt commits by the caller.
-func collectChain(state *RepoState, headHash, targetHash plumbing.Hash) ([]*object.Commit, error) {
+func collectChain(state *RepoState, headHash plumbing.Hash, targets ...plumbing.Hash) ([]*object.Commit, error) {
+	remaining := make(map[plumbing.Hash]bool, len(targets))
+	for _, target := range targets {
+		remaining[target] = true
+	}
+
 	var chain []*object.Commit
 	current := headHash
 	for {
@@ -249,14 +260,17 @@ func collectChain(state *RepoState, headHash, targetHash plumbing.Hash) ([]*obje
 			return nil, fmt.Errorf("loading commit %s: %w", current, err)
 		}
 		chain = append(chain, commit)
-		if current == targetHash {
+		delete(remaining, current)
+		if len(remaining) == 0 {
 			return chain, nil
 		}
 		// A commit with no parents is the very first commit in the repo.
-		// If we reach it without finding targetHash, the target is not in
-		// this branch's first-parent history.
+		// If we reach it with targets left, they are not in this branch's
+		// first-parent history.
 		if len(commit.ParentHashes) == 0 {
-			return nil, fmt.Errorf("commit %s is not reachable from HEAD", targetHash)
+			for missing := range remaining {
+				return nil, fmt.Errorf("commit %s is not reachable from HEAD", missing)
+			}
 		}
 		current = commit.ParentHashes[0]
 	}

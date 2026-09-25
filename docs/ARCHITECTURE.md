@@ -525,7 +525,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
-| `git/rewrite.go` | *(Phase 2)* `AmendCommit`, `RebaseRewrite`, commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author validation (`validateIdentity`) |
+| `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers; commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author validation (`validateIdentity`) |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
 | `git/branch_test.go` | *(Phase 3)* Tests for `ListBranches`, `OpenBranch`, and rewriting/undoing on a branch that is not checked out |
 
