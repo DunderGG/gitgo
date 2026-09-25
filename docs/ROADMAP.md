@@ -245,6 +245,16 @@ Found in the follow-up review (2026-09-25):
   - [x] `ShiftCommitDates` bound method (relative shift per commit, keeping each commit's offset; optionally shift committer dates) and `GetAffectedRefs` for several commits (`TestShiftDates_*`, `TestShiftCommitDates_*`)
   - [x] Multi-select in `CommitList` (Ctrl/Shift-click, Shift+↑/↓; unpushed commits only) and `BulkDatePanel` with a per-commit preview in `ConfirmDialog` (now a generic frame; `CommitComparison` holds the single-commit rows)
 
+### Buttons and quick actions
+
+- [ ] **Close / switch repository** button in the header. Once a repository is open there is no way back to the start screen and its recent list; `clearRepo` exists in the store but only `ErrorBoundary` calls it
+- [ ] **Open folder** button next to the terminal button, showing the repository in Explorer / Finder / the Linux file manager
+- [ ] **Use my identity** button by the author fields in `EditPanel`, filling in `user.name` / `user.email` from the Git config (the lookup already exists for reflog entries in `git/reflog.go`). The most common reason to change an author is a commit made with the wrong identity
+- [ ] **Set author on several commits** in `BulkDatePanel`, next to the date shift, with the same Use my identity button, so a batch of wrongly attributed commits is fixed in one rewrite
+- [ ] **Select all unpushed** (button above `CommitList` and `Ctrl+A`), as the starting point for a bulk shift or author fix
+- [ ] **Redo** after an undo (`Ctrl+Shift+Z` / `Ctrl+Y` and a button in the status bar), by keeping the undone tip the way `lastRewrite` keeps the pre-rewrite one
+- [ ] **Spread dates evenly** in `BulkDatePanel`: set a first and last date and space the selected commits between them, for backdating a series without making every commit share the same shift
+
 ### Larger additions
 
 - [ ] Show a preview of the Git command that will actually be run
