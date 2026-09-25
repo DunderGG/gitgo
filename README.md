@@ -5,7 +5,7 @@
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 [![Wails](https://img.shields.io/badge/Wails-v2-red)](https://wails.io/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Last commit](https://img.shields.io/github/last-commit/DunderGG/gitgo)](https://github.com/DunderGG/gitgo/commits/main)
+[![CI](https://img.shields.io/github/actions/workflow/status/DunderGG/gitgo/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/DunderGG/gitgo/actions/workflows/ci.yml)
 
 A cross-platform desktop app for editing local Git history, without memorising CLI commands.
 
