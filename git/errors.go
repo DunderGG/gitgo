@@ -24,6 +24,11 @@ var ErrOperationInProgress = errors.New("a git operation is already in progress;
 // rewrite that is being undone.
 var ErrBranchMoved = errors.New("the branch has changed since the last rewrite; undo is no longer available")
 
+// ErrBranchChanged is returned when a branch no longer points where it did
+// when the operation started, e.g. a commit was made from a terminal while a
+// rewrite was running. The branch is left untouched.
+var ErrBranchChanged = errors.New("the branch changed on disk during the operation; reload and try again")
+
 // ErrBranchNotFound is returned by OpenBranch when the requested local branch
 // does not exist.
 var ErrBranchNotFound = errors.New("branch not found")

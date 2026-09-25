@@ -43,6 +43,11 @@ const rules: FriendlyRule[] = [
       'GitGo could not stash your uncommitted changes, so nothing was edited. Commit or stash them yourself and try again.',
   },
   {
+    pattern: /writing reflog/i,
+    message:
+      'GitGo could not write the reflog in .git/logs, so nothing was changed. Check that the repository folder is writable.',
+  },
+  {
     pattern: /invalid date/i,
     message: 'The date is not valid. Pick a date and time and try again.',
   },

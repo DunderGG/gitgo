@@ -15,30 +15,17 @@ import (
 // The update is a compare-and-swap: if the branch no longer points at
 // expectedTip (a new commit was made, or the branch was deleted), nothing is
 // changed and ErrBranchMoved is returned.
+//
+// The move is recorded in the reflog like any other GitGo branch update.
 func ResetBranch(state *RepoState, branch plumbing.ReferenceName, expectedTip, targetHash plumbing.Hash) error {
-	current, err := state.Repo.Reference(branch, true)
-	if errors.Is(err, plumbing.ErrReferenceNotFound) {
-		return ErrBranchMoved
-	}
-	if err != nil {
-		return fmt.Errorf("reading branch %s: %w", branch.Short(), err)
-	}
-	if current.Hash() != expectedTip {
-		return ErrBranchMoved
-	}
-
 	// Make sure the target commit still exists before pointing a branch at it.
 	if _, err := state.Repo.CommitObject(targetHash); err != nil {
 		return fmt.Errorf("loading commit %s: %w", targetHash, err)
 	}
 
-	// CheckAndSetReference only writes the new ref when the stored ref still
-	// matches the old one, guarding against a concurrent change on disk.
-	newRef := plumbing.NewHashReference(branch, targetHash)
-	oldRef := plumbing.NewHashReference(branch, expectedTip)
-	if err := state.Repo.Storer.CheckAndSetReference(newRef, oldRef); err != nil {
-		return fmt.Errorf("updating branch ref: %w", err)
+	err := moveBranch(state, branch, expectedTip, targetHash, reflogUndo)
+	if errors.Is(err, ErrBranchChanged) {
+		return ErrBranchMoved
 	}
-
-	return nil
+	return err
 }

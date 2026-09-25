@@ -55,12 +55,7 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 	// head is the branch ref (refs/heads/<branch>). When the branch is checked
 	// out, HEAD is a symbolic ref to it, so moving the branch ref also moves
 	// HEAD — the correct way to move a branch tip in git's object model.
-	newRef := plumbing.NewHashReference(head.Name(), newHash)
-	if err := state.Repo.Storer.SetReference(newRef); err != nil {
-		return fmt.Errorf("updating branch ref: %w", err)
-	}
-
-	return nil
+	return moveBranch(state, head.Name(), headHash, newHash, reflogEditMessage(headHash))
 }
 
 // RebaseRewrite rewrites a single unpushed commit anywhere in history by
@@ -146,17 +141,14 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 		oldToNew[original.Hash] = newHash
 	}
 
-	// Point the branch ref at the rebuilt HEAD.
-	newHeadHash := oldToNew[headHash]
-	newRef := plumbing.NewHashReference(head.Name(), newHeadHash)
-	if setErr := state.Repo.Storer.SetReference(newRef); setErr != nil {
-		// Restore the original ref so the repo is left in a consistent state.
-		origRef := plumbing.NewHashReference(head.Name(), headHash)
-		_ = state.Repo.Storer.SetReference(origRef)
-		return fmt.Errorf("updating branch ref: %w", setErr)
-	}
+	// Point the branch ref at the rebuilt HEAD. The rebuilt commits are only
+	// new objects until this succeeds, so a failure leaves the branch as it was.
+	return moveBranch(state, head.Name(), headHash, oldToNew[headHash], reflogEditMessage(targetHash))
+}
 
-	return nil
+// reflogEditMessage is the reflog message for an edit of the given commit.
+func reflogEditMessage(target plumbing.Hash) string {
+	return reflogEditPrefix + target.String()[:7]
 }
 
 // editedSignatures builds the new author and committer signatures for

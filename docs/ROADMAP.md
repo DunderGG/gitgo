@@ -157,9 +157,11 @@
   - `AmendCommit` / `RebaseRewrite` set `Committer = Author`, so a message-only edit also replaces the committer name, email, and date
   - [x] Decided: keep the original committer name, email, and date; an "Also set committer date" checkbox in `EditPanel` sets the committer date to the author date (checked by default when the two dates already match)
   - [x] Show the committer (read-only) in `EditPanel` and the committer date in `ConfirmDialog`
-- [ ] **Rewrites leave no reflog entry**
+- [x] **Rewrites leave no reflog entry**
   - go-git's `SetReference` does not write to the reflog, so `git reflog` cannot be used to recover the pre-rewrite tip
-  - [ ] Write a reflog entry for the branch and HEAD on every rewrite (or create a backup ref such as `refs/gitgo/backup/<branch>`)
+  - [x] Write a reflog entry for the branch (and HEAD when it points at the branch) on every rewrite, as `gitgo: edit commit <hash>`; recover with `git reset --hard <branch>@{1}`
+  - [x] Undo is recorded too (`gitgo: undo edit`), and every branch move is now a compare-and-swap that fails if the branch changed on disk
+  - [x] Honour `core.logAllRefUpdates=false` (only append to existing reflogs)
   - Related: the Phase 3 undo feature
 - [ ] **Pushed/unpushed state can go stale**
   - `UnpushedHashes` is computed when the repo is opened; pushing from a terminal while the app is open leaves those commits editable
