@@ -67,13 +67,28 @@ export interface CommitSummary {
   isUnpushed: boolean
 }
 
+const NO_SELECTION = { selectedHash: null, selectedHashes: [] as string[], selectionAnchor: null }
+
+// The unpushed commits among hashes, in commit list order.
+function unpushedInOrder(commits: CommitSummary[], hashes: string[]): string[] {
+  const wanted = new Set(hashes)
+  return commits.filter((commit) => commit.isUnpushed && wanted.has(commit.hash)).map((commit) => commit.hash)
+}
+
 interface RepoStore {
   repoInfo: RepoInfo | null
   commits: CommitSummary[]
   recentRepos: string[]
   // Hash of the commit currently selected in CommitList; null when nothing is
-  // selected. EditPanel reads this to know which commit to load.
+  // selected. EditPanel reads this to know which commit to load. With several
+  // commits selected it is the one last clicked or moved to.
   selectedHash: string | null
+  // Every selected commit, in list order: [selectedHash] for a single
+  // selection, or several unpushed commits selected with Ctrl/Shift-click or
+  // Shift+arrow keys, which BulkDatePanel shifts together.
+  selectedHashes: string[]
+  // Commit a Shift-click or Shift+arrow range starts from.
+  selectionAnchor: string | null
   // True after a successful rewrite that the backend can still undo. Any
   // setRepo call (open, refresh, undo) resets it; EditPanel sets it again
   // after a rewrite.
@@ -94,6 +109,10 @@ interface RepoStore {
   setRepo: (info: RepoInfo, commits: CommitSummary[]) => void
   removeRecentRepo: (path: string) => void
   selectCommit: (hash: string | null) => void
+  // Ctrl/Cmd-click: add or remove an unpushed commit from the selection.
+  toggleCommitSelection: (hash: string) => void
+  // Shift-click / Shift+arrow: select the unpushed commits from the anchor to hash.
+  extendSelection: (hash: string) => void
   requestEditFocus: () => void
   consumeEditFocus: () => void
   setCanUndo: (canUndo: boolean) => void
@@ -111,6 +130,8 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   commits: [],
   recentRepos: loadRecentRepos(),
   selectedHash: null,
+  selectedHashes: [],
+  selectionAnchor: null,
   canUndo: false,
   activity: null,
   pendingEditFocus: false,
@@ -129,7 +150,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
         repoInfo: info,
         commits,
         recentRepos,
-        selectedHash: null,
+        ...NO_SELECTION,
         canUndo: false,
         error: null,
         errorDetail: null,
@@ -144,7 +165,60 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       return { recentRepos }
     }),
 
-  selectCommit: (hash) => set({ selectedHash: hash }),
+  selectCommit: (hash) =>
+    set(hash ? { selectedHash: hash, selectedHashes: [hash], selectionAnchor: hash } : NO_SELECTION),
+
+  toggleCommitSelection: (hash) => {
+    const { commits, selectedHash, selectedHashes } = get()
+    if (!commits.find((commit) => commit.hash === hash)?.isUnpushed) {
+      set({ status: 'Only unpushed commits can be selected together' })
+      return
+    }
+
+    // A pushed commit can be viewed on its own but never joins a
+    // multi-selection, so start over from the clicked commit.
+    const current = new Set(unpushedInOrder(commits, selectedHashes))
+    if (current.has(hash)) {
+      current.delete(hash)
+    } else {
+      current.add(hash)
+    }
+    const next = unpushedInOrder(commits, [...current])
+    if (next.length === 0) {
+      set(NO_SELECTION)
+      return
+    }
+    set({
+      selectedHashes: next,
+      selectedHash: current.has(hash) ? hash : selectedHash && current.has(selectedHash) ? selectedHash : next[0],
+      selectionAnchor: hash,
+    })
+  },
+
+  extendSelection: (hash) => {
+    const { commits, selectedHash, selectionAnchor, selectCommit } = get()
+    const anchor = selectionAnchor ?? selectedHash ?? hash
+    const from = commits.findIndex((commit) => commit.hash === anchor)
+    const to = commits.findIndex((commit) => commit.hash === hash)
+    if (from < 0 || to < 0) {
+      selectCommit(hash)
+      return
+    }
+
+    const range = commits
+      .slice(Math.min(from, to), Math.max(from, to) + 1)
+      .filter((commit) => commit.isUnpushed)
+      .map((commit) => commit.hash)
+    if (range.length === 0) {
+      selectCommit(hash)
+      return
+    }
+    set({
+      selectedHashes: range,
+      selectedHash: range.includes(hash) ? hash : range[range.length - 1],
+      selectionAnchor: anchor,
+    })
+  },
 
   requestEditFocus: () => set({ pendingEditFocus: true }),
 
@@ -181,13 +255,17 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       await runGitOperation(reloadActivityLabel, async () => {
         const info = await ReloadRepository()
         const commits = await GetCommitLog()
-        const { selectedHash, canUndo } = get()
+        const { selectedHash, selectedHashes, selectionAnchor, canUndo } = get()
         const branchChanged = info.branch !== previous.branch
+        const exists = (hash: string | null) => hash !== null && commits.some((commit) => commit.hash === hash)
+        const keptHashes = selectedHashes.filter(exists)
 
         set({
           repoInfo: info,
           commits,
-          selectedHash: selectedHash && commits.some((commit) => commit.hash === selectedHash) ? selectedHash : null,
+          selectedHash: exists(selectedHash) ? selectedHash : keptHashes.length > 1 ? keptHashes[0] : null,
+          selectedHashes: exists(selectedHash) || keptHashes.length > 1 ? keptHashes : [],
+          selectionAnchor: exists(selectionAnchor) ? selectionAnchor : null,
           // A different branch means the undo record belongs elsewhere.
           canUndo: branchChanged ? false : canUndo,
           error: null,
@@ -241,5 +319,5 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     set({ error: friendly, errorDetail: isSameText ? null : error })
   },
 
-  clearRepo: () => set({ repoInfo: null, commits: [], selectedHash: null, canUndo: false, status: '', error: null, errorDetail: null }),
+  clearRepo: () => set({ repoInfo: null, commits: [], ...NO_SELECTION, canUndo: false, status: '', error: null, errorDetail: null }),
 }))

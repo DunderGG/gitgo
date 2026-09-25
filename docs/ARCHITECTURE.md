@@ -354,6 +354,7 @@ Structure:
 - Unpushed commits render at full opacity with an indigo dot. Pushed commits render at 60% opacity with a grey dot, communicating they are read-only.
 - Rows are selectable by click. The selected row is highlighted with a darker indigo background and left border. Each row carries a `data-commit-hash` attribute so keyboard code can focus it.
 - Keyboard: `Enter` selects the focused row and calls `requestEditFocus()` so `EditPanel` focuses its message field once the commit has loaded (editable commits only). `↑` / `↓` move the selection and focus to the previous / next row.
+- Multi-selection: `Ctrl`/`Cmd`-click toggles a row (`toggleCommitSelection`), and `Shift`-click or `Shift+↑` / `↓` selects the range from the anchor row (`extendSelection`). Only unpushed commits join a multi-selection. All selected rows are highlighted, the one last clicked with a brighter border, and the legend shows the count. With more than one commit selected, `App` shows `BulkDatePanel` instead of `EditPanel`.
 - The 7-character short hash is monospaced and `select-all` so users can copy it.
 - The commit message truncates with Tailwind `truncate` and the full message is in a `title` attribute on hover.
 - The date is localised via `toLocaleDateString` rather than shown as a raw ISO string.
@@ -379,13 +380,25 @@ The panel intentionally owns transient UI state (loading, local form values, dia
 
 ---
 
-#### `frontend/src/components/ConfirmDialog.tsx`
+#### `frontend/src/components/BulkDatePanel.tsx`
 
-A modal confirmation dialog rendered by `EditPanel`. Its only responsibility is review and confirmation — it does not own any repository state itself.
+Replaces `EditPanel` while several commits are selected (`selectedHashes.length > 1`). It works from the `CommitSummary` entries already in the store, so it loads nothing.
 
 Behaviour:
-- Receives precomputed `before` and `after` values from `EditPanel`.
-- Shows a side-by-side comparison for message, date/time, author name, and author email.
+- The shared `DateShiftButtons` (±1h / ±1d) add to one accumulated shift; nothing is written until the user confirms. Each selected commit shows its current and new author date in its own offset (helpers in `src/dates.ts`).
+- "Also shift committer dates" (on by default) keeps each commit's author/committer gap.
+- Warns, and disables "Review Changes", when a selected commit has been pushed since it was selected; warns when the shift makes a commit older than the one listed below it.
+- On confirm, calls `ShiftCommitDates` inside `runGitOperation('Shifting commit dates…', …)`, then `RefreshLog` and `setRepo`, which clears the selection because every shifted commit has a new hash. One undo reverts the whole shift.
+
+---
+
+#### `frontend/src/components/ConfirmDialog.tsx`
+
+A modal confirmation dialog rendered by `EditPanel` and `BulkDatePanel`. Its only responsibility is review and confirmation — it does not own any repository state itself.
+
+Behaviour:
+- Renders the comparison it is given as children: `EditPanel` passes `<CommitComparison before after>` (a side-by-side comparison for message, dates, author name, and author email); `BulkDatePanel` passes a table of current and new author dates.
+- Lists affected branches and tags (from `GetAffectedRefs`) with the option to move branches along.
 - Highlights changed values visually so the user can quickly verify what will be rewritten.
 - Exposes `Cancel` and `Apply` actions; `Apply` is disabled while a rewrite request is already in flight.
 - While open, a capture-phase `keydown` listener on `window` makes `Escape` cancel the dialog (unless a rewrite is in flight) and swallows `Ctrl+Z`, stopping both from reaching the app-wide shortcuts.
@@ -560,9 +573,12 @@ GitGo/
 │   └── src/
 │       ├── main.tsx
 │       ├── errors.ts               # (Phase 3) Friendly error messages
+│       ├── dates.ts                # Wall-clock + offset date helpers
 │       ├── App.tsx
 │       ├── components/
 │       │   ├── BranchSelector.tsx  # (Phase 3)
+│       │   ├── BulkDatePanel.tsx   # Shift dates of several commits
+│       │   ├── DateShiftButtons.tsx
 │       │   ├── RepoSelector.tsx
 │       │   ├── Spinner.tsx         # (Phase 3)
 │       │   ├── CommitList.tsx

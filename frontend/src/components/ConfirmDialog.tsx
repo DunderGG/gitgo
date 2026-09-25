@@ -1,12 +1,13 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import Spinner from './Spinner'
 import type { app } from '../../wailsjs/go/models'
 
 interface ConfirmDialogProps {
   isOpen: boolean
   isSubmitting: boolean
-  before: ConfirmValues
-  after: ConfirmValues
+  title: string
+  // The before/after comparison, e.g. CommitComparison.
+  children: ReactNode
   // Other branches and tags the edit affects (see GetAffectedRefs).
   affectedRefs: app.AffectedRef[]
   moveBranches: boolean
@@ -60,6 +61,19 @@ function CompareRow({ label, before, after, multiline = false }: CompareRowProps
         </div>
       </div>
     </div>
+  )
+}
+
+// Current and new values of a single commit's editable fields.
+export function CommitComparison({ before, after }: { before: ConfirmValues; after: ConfirmValues }) {
+  return (
+    <>
+      <CompareRow label="Message" before={before.message} after={after.message} multiline />
+      <CompareRow label="Author Date" before={before.dateText} after={after.dateText} />
+      <CompareRow label="Committer Date" before={before.committerDateText} after={after.committerDateText} />
+      <CompareRow label="Author Name" before={before.authorName} after={after.authorName} />
+      <CompareRow label="Author Email" before={before.authorEmail} after={after.authorEmail} />
+    </>
   )
 }
 
@@ -127,8 +141,8 @@ function AffectedRefsNotice({ refs, moveBranches, onMoveBranchesChange, disabled
 export default function ConfirmDialog({
   isOpen,
   isSubmitting,
-  before,
-  after,
+  title,
+  children,
   affectedRefs,
   moveBranches,
   onMoveBranchesChange,
@@ -171,22 +185,14 @@ export default function ConfirmDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/75 p-4">
       <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 shadow-2xl">
         <div className="border-b border-gray-800 px-5 py-4">
-          <h2 className="text-lg font-semibold text-gray-100">Confirm Commit Update</h2>
+          <h2 className="text-lg font-semibold text-gray-100">{title}</h2>
           <p className="mt-1 text-sm text-gray-400">
             Review the current values against the new values before rewriting history.
           </p>
         </div>
 
         <div className="space-y-4 p-5">
-          <CompareRow label="Message" before={before.message} after={after.message} multiline />
-          <CompareRow label="Author Date" before={before.dateText} after={after.dateText} />
-          <CompareRow
-            label="Committer Date"
-            before={before.committerDateText}
-            after={after.committerDateText}
-          />
-          <CompareRow label="Author Name" before={before.authorName} after={after.authorName} />
-          <CompareRow label="Author Email" before={before.authorEmail} after={after.authorEmail} />
+          {children}
           <AffectedRefsNotice
             refs={affectedRefs}
             moveBranches={moveBranches}

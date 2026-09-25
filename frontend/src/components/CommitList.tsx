@@ -1,15 +1,17 @@
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, MouseEvent } from 'react'
 import { focusCommitRow } from '../hooks/useKeyboardShortcuts'
 import { useRepoStore, CommitSummary, RepoInfo } from '../store/repoStore'
 
 interface CommitRowProps {
   commit: CommitSummary
   isSelected: boolean
-  onSelect: () => void
+  // The selected commit last clicked or moved to.
+  isPrimary: boolean
+  onSelect: (event: MouseEvent<HTMLDivElement>) => void
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void
 }
 
-function CommitRow({ commit, isSelected, onSelect, onKeyDown }: CommitRowProps) {
+function CommitRow({ commit, isSelected, isPrimary, onSelect, onKeyDown }: CommitRowProps) {
   const date = new Date(commit.date)
   const formattedDate = date.toLocaleDateString(undefined, {
     year: 'numeric',
@@ -24,11 +26,14 @@ function CommitRow({ commit, isSelected, onSelect, onKeyDown }: CommitRowProps) 
       role="button"
       tabIndex={0}
       data-commit-hash={commit.hash}
+      aria-pressed={isSelected}
       onClick={onSelect}
+      // Keep Shift-click from selecting the row text.
+      onMouseDown={(event) => event.shiftKey && event.preventDefault()}
       onKeyDown={onKeyDown}
       className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-800 cursor-pointer transition-colors ${
         isSelected
-          ? 'bg-indigo-950/60 border-l-2 border-l-indigo-500'
+          ? `bg-indigo-950/60 border-l-2 ${isPrimary ? 'border-l-indigo-500' : 'border-l-indigo-800'}`
           : 'hover:bg-gray-800/60'
       } ${commit.isUnpushed ? '' : 'opacity-60'}`}
     >
@@ -100,11 +105,28 @@ export default function CommitList() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
   const commits = useRepoStore((s) => s.commits)
   const selectedHash = useRepoStore((s) => s.selectedHash)
+  const selectedHashes = useRepoStore((s) => s.selectedHashes)
   const selectCommit = useRepoStore((s) => s.selectCommit)
+  const toggleCommitSelection = useRepoStore((s) => s.toggleCommitSelection)
+  const extendSelection = useRepoStore((s) => s.extendSelection)
   const requestEditFocus = useRepoStore((s) => s.requestEditFocus)
+  const isMultiSelect = selectedHashes.length > 1
+
+  // A plain click selects one commit; Ctrl/Cmd-click and Shift-click build a
+  // selection of unpushed commits for BulkDatePanel.
+  function handleRowClick(event: MouseEvent<HTMLDivElement>, hash: string) {
+    if (event.ctrlKey || event.metaKey) {
+      toggleCommitSelection(hash)
+    } else if (event.shiftKey) {
+      extendSelection(hash)
+    } else {
+      selectCommit(hash)
+    }
+  }
 
   // Enter opens the commit in EditPanel (focusing its first field when the
-  // commit is editable); the arrow keys move the selection between rows.
+  // commit is editable); the arrow keys move the selection between rows, and
+  // Shift+arrow extends it.
   function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>, index: number) {
     if (event.key === 'Enter') {
       event.preventDefault()
@@ -117,7 +139,11 @@ export default function CommitList() {
     const next = commits[index + offset]
     if (offset !== 0 && next) {
       event.preventDefault()
-      selectCommit(next.hash)
+      if (event.shiftKey) {
+        extendSelection(next.hash)
+      } else {
+        selectCommit(next.hash)
+      }
       focusCommitRow(next.hash)
     }
   }
@@ -154,6 +180,11 @@ export default function CommitList() {
           <span className="w-2 h-2 rounded-full bg-gray-600 inline-block" />
           {commits.length - unpushedCount} pushed
         </span>
+        {isMultiSelect && (
+          <span className="ml-auto text-indigo-300">
+            {selectedHashes.length} selected · Esc to clear
+          </span>
+        )}
       </div>
 
       {notice && (
@@ -168,8 +199,9 @@ export default function CommitList() {
           <CommitRow
             key={commit.hash}
             commit={commit}
-            isSelected={commit.hash === selectedHash}
-            onSelect={() => selectCommit(commit.hash)}
+            isSelected={selectedHashes.includes(commit.hash)}
+            isPrimary={commit.hash === selectedHash}
+            onSelect={(event) => handleRowClick(event, commit.hash)}
             onKeyDown={(event) => handleRowKeyDown(event, index)}
           />
         ))}

@@ -125,7 +125,9 @@ Actions currently include:
 
 - setRepo: save repo info and commit list
 - removeRecentRepo: remove one path from the recent list
-- selectCommit: set selected row
+- selectCommit: select one row (or none), replacing any multi-selection
+- toggleCommitSelection: Ctrl/Cmd-click; add or remove an unpushed commit from the selection
+- extendSelection: Shift-click / Shift+arrow; select the unpushed commits from the anchor row to the clicked one
 - setCanUndo: show or hide the Undo button
 - reloadRepository: re-read the repository from disk, keeping the selected commit and the Undo button
 - runGitOperation: run one git operation at a time, setting activity (the label shown with a spinner in StatusBar) while it runs
@@ -167,6 +169,7 @@ Current behavior:
 - rows are selectable and highlight when selected
 - Enter on a row selects it and focuses the edit form (editable commits only)
 - Up / Down arrows move the selection between rows
+- Ctrl/Cmd-click, Shift-click and Shift+Up / Down select several unpushed commits (pushed commits never join a multi-selection); the legend then shows how many are selected
 - a banner above the rows explains when the repo has no remote, the branch has no upstream (every commit counts as unpushed), or every commit is already pushed
 - shows "This branch has no commits yet." when the log is empty
 
@@ -180,12 +183,32 @@ Current behavior:
 - with nothing selected, shows how to select a commit, or that there is nothing to edit when every commit is pushed
 - keeps local form state for message, date/time, author name, and author email
 - disables fields for pushed commits (pushed state comes from the commit list, so it updates after a reload)
+- tiny buttons under the date (DateShiftButtons plus Now) adjust it by ±1 hour / ±1 day or set the current time
 - opens ConfirmDialog before applying a rewrite
 - calls UpdateCommit and then RefreshLog after confirmation
 
+### src/components/BulkDatePanel.tsx
+
+Shown instead of EditPanel while several commits are selected.
+
+Current behavior:
+
+- the ±1h / ±1d buttons add up to one shift, shown with a before/after author date for each selected commit
+- "Also shift committer dates" (on by default) moves the committer dates by the same amount
+- warns when a selected commit has been pushed (Review Changes is disabled) or when the shift puts a commit before the one below it in the list
+- calls ShiftCommitDates (one rewrite, one undo) and then RefreshLog after confirmation
+
+### src/components/DateShiftButtons.tsx
+
+The row of −1d / −1h / +1h / +1d buttons shared by EditPanel and BulkDatePanel.
+
+### src/dates.ts
+
+Date helpers shared by the edit panels. Commit dates are kept as a wall-clock time plus a UTC offset, so they stay in the commit's own time zone.
+
 ### src/components/ConfirmDialog.tsx
 
-Review dialog shown before rewriting commit history.
+Review dialog shown before rewriting commit history. The panel that opens it passes the comparison as children: CommitComparison for a single commit, a table of dates for a bulk shift.
 
 Current behavior:
 

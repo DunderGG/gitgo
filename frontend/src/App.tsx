@@ -5,6 +5,7 @@ import RepoSelector from './components/RepoSelector'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
+import BulkDatePanel from './components/BulkDatePanel'
 import Spinner from './components/Spinner'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { reloadActivityLabel, useRepoStore } from './store/repoStore'
@@ -22,6 +23,7 @@ function windowTitle(path: string | undefined, branch: string | undefined): stri
 function App() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
   const activity = useRepoStore((s) => s.activity)
+  const isMultiSelect = useRepoStore((s) => s.selectedHashes.length > 1)
   const reloadRepository = useRepoStore((s) => s.reloadRepository)
   useKeyboardShortcuts()
 
@@ -68,7 +70,7 @@ function App() {
         ) : (
           <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] overflow-hidden">
             <CommitList />
-            <EditPanel />
+            {isMultiSelect ? <BulkDatePanel /> : <EditPanel />}
           </div>
         )}
       </main>

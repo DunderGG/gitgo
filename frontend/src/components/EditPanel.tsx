@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { GetAffectedRefs, GetCommitDetail, GetCommitLog, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
-import ConfirmDialog, { ConfirmValues } from './ConfirmDialog'
+import ConfirmDialog, { CommitComparison, ConfirmValues } from './ConfirmDialog'
+import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
 import Spinner from './Spinner'
+import {
+  formatOffset,
+  nowWallClock,
+  shiftWallClock,
+  splitRfc3339,
+  toPreviewDateText,
+  WALL_CLOCK_PATTERN,
+} from '../dates'
 import { errorText, friendlyError } from '../errors'
 import { useRepoStore } from '../store/repoStore'
 
@@ -47,29 +56,9 @@ const COMMON_OFFSETS = [
   '+10:30', '+11:00', '+12:00', '+12:45', '+13:00', '+14:00',
 ]
 
-const WALL_CLOCK_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/
-
-// Splits an RFC 3339 date from the backend into its wall-clock part and
-// offset, keeping the commit's own time zone instead of converting to local.
-function splitRfc3339(rfc3339: string): Pick<EditFormState, 'dateLocal' | 'offset'> {
-  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(rfc3339)
-  if (!match) {
-    return { dateLocal: '', offset: EMPTY_FORM.offset }
-  }
-  return { dateLocal: match[1], offset: match[2] === 'Z' ? '+00:00' : match[2] }
-}
-
 // datetime-local inputs leave out ":00" seconds in their value, so add them back.
 function normalizeWallClock(inputValue: string): string {
   return inputValue.length === 16 ? `${inputValue}:00` : inputValue.slice(0, 19)
-}
-
-const pad2 = (value: number) => String(value).padStart(2, '0')
-
-function formatOffset(totalMinutes: number): string {
-  const sign = totalMinutes < 0 ? '-' : '+'
-  const absolute = Math.abs(totalMinutes)
-  return `${sign}${pad2(Math.floor(absolute / 60))}:${pad2(absolute % 60)}`
 }
 
 function offsetMinutes(offset: string): number {
@@ -86,68 +75,6 @@ function localOffsetAt(dateLocal: string): string | null {
     return null
   }
   return formatOffset(-date.getTimezoneOffset())
-}
-
-// Formats a Date's UTC fields as a wall-clock value (YYYY-MM-DDTHH:mm:ss).
-function formatWallClockUtc(date: Date): string {
-  return (
-    `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}` +
-    `T${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}:${pad2(date.getUTCSeconds())}`
-  )
-}
-
-// Shifts a wall-clock value by a number of minutes. The offset is fixed, so
-// the arithmetic is done in UTC where there are no daylight saving jumps.
-function shiftWallClock(dateLocal: string, minutes: number): string | null {
-  const date = new Date(`${dateLocal}Z`)
-  if (!WALL_CLOCK_PATTERN.test(dateLocal) || Number.isNaN(date.getTime())) {
-    return null
-  }
-  return formatWallClockUtc(new Date(date.getTime() + minutes * 60_000))
-}
-
-// The current time in this computer's time zone, as `git commit` would record it.
-function nowWallClock(): Pick<EditFormState, 'dateLocal' | 'offset'> {
-  const now = new Date()
-  const offsetMins = -now.getTimezoneOffset()
-  return {
-    dateLocal: formatWallClockUtc(new Date(now.getTime() + offsetMins * 60_000)),
-    offset: formatOffset(offsetMins),
-  }
-}
-
-const DATE_SHIFTS = [
-  { label: '−1d', minutes: -24 * 60, title: 'One day earlier' },
-  { label: '−1h', minutes: -60, title: 'One hour earlier' },
-  { label: '+1h', minutes: 60, title: 'One hour later' },
-  { label: '+1d', minutes: 24 * 60, title: 'One day later' },
-]
-
-const DATE_BUTTON_CLASS =
-  'rounded border border-gray-700 px-1.5 py-0.5 font-mono text-[11px] text-gray-400 transition hover:border-gray-600 hover:bg-gray-800 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent'
-
-function toPreviewDateText({ dateLocal, offset }: { dateLocal: string; offset: string }): string {
-  if (!dateLocal) {
-    return ''
-  }
-
-  // Parse the wall-clock time as UTC and format it in UTC so the browser's own
-  // time zone does not shift it; the commit's offset is shown separately.
-  const date = new Date(`${dateLocal}Z`)
-  if (Number.isNaN(date.getTime())) {
-    return `${dateLocal} (UTC${offset})`
-  }
-
-  const wallClock = date.toLocaleString(undefined, {
-    timeZone: 'UTC',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-  return `${wallClock} (UTC${offset})`
 }
 
 // Mirrors validateIdentity in git/rewrite.go: these values would produce a
@@ -420,7 +347,7 @@ export default function EditPanel() {
             {hasUnpushedCommits ? (
               <>
                 No commit selected yet. Click a commit, or use <Kbd>↑</Kbd> <Kbd>↓</Kbd> and{' '}
-                <Kbd>Enter</Kbd>.
+                <Kbd>Enter</Kbd>. Ctrl- or Shift-click to shift the dates of several unpushed commits at once.
               </>
             ) : (
               'There are no unpushed commits on this branch. Pushed commits can be viewed but not edited.'
@@ -507,33 +434,26 @@ export default function EditPanel() {
                 ))}
               </select>
             </div>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {DATE_SHIFTS.map(({ label, minutes, title }) => (
+            <div className="mt-1.5">
+              <DateShiftButtons
+                disabled={fieldsDisabled || !WALL_CLOCK_PATTERN.test(form.dateLocal)}
+                onShift={(minutes) =>
+                  setForm((current) => {
+                    const dateLocal = shiftWallClock(current.dateLocal, minutes)
+                    return dateLocal ? { ...current, dateLocal } : current
+                  })
+                }
+              >
                 <button
-                  key={label}
                   type="button"
-                  title={title}
-                  disabled={fieldsDisabled || !WALL_CLOCK_PATTERN.test(form.dateLocal)}
-                  onClick={() =>
-                    setForm((current) => {
-                      const dateLocal = shiftWallClock(current.dateLocal, minutes)
-                      return dateLocal ? { ...current, dateLocal } : current
-                    })
-                  }
+                  title="Current time in this computer's time zone"
+                  disabled={fieldsDisabled}
+                  onClick={() => setForm((current) => ({ ...current, ...nowWallClock() }))}
                   className={DATE_BUTTON_CLASS}
                 >
-                  {label}
+                  Now
                 </button>
-              ))}
-              <button
-                type="button"
-                title="Current time in this computer's time zone"
-                disabled={fieldsDisabled}
-                onClick={() => setForm((current) => ({ ...current, ...nowWallClock() }))}
-                className={DATE_BUTTON_CLASS}
-              >
-                Now
-              </button>
+              </DateShiftButtons>
             </div>
             <label className="mt-2 flex items-center gap-2 text-sm text-gray-300">
               <input
@@ -614,16 +534,20 @@ export default function EditPanel() {
         <ConfirmDialog
           isOpen={showConfirmDialog}
           isSubmitting={isSubmitting}
-          // "Current" always shows the stored committer date, whatever the
-          // checkbox started as.
-          before={formToConfirmValues({ ...originalForm, syncCommitterDate: false }, committer)}
-          after={formToConfirmValues(form, committer)}
+          title="Confirm Commit Update"
           affectedRefs={affectedRefs}
           moveBranches={moveBranches}
           onMoveBranchesChange={setMoveBranches}
           onCancel={() => setShowConfirmDialog(false)}
           onConfirm={handleConfirmApply}
-        />
+        >
+          <CommitComparison
+            // "Current" always shows the stored committer date, whatever the
+            // checkbox started as.
+            before={formToConfirmValues({ ...originalForm, syncCommitterDate: false }, committer)}
+            after={formToConfirmValues(form, committer)}
+          />
+        </ConfirmDialog>
       )}
     </>
   )
