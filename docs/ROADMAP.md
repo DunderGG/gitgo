@@ -123,7 +123,9 @@
   - [x] Also: branch with no upstream, and a clear `ErrNoCommits` for a repository with no commits yet
 - [x] Loading indicators during git operations
   - [x] Shared `activity` state: status-bar spinner, and only one git operation at a time
-- [ ] Error boundary in frontend with user-friendly messages
+- [x] Error boundary in frontend with user-friendly messages
+  - [x] Friendly mapping for raw backend errors, with the raw text kept as a tooltip
+  - [x] Uncaught promise rejections shown in `StatusBar`
 - [ ] Application icon and Wails window configuration (title, min size)
 - [x] `CommitList` row selection state (highlight selected commit, drive `EditPanel`)
 - [ ] Reload / refresh button in header to re-read the repo from disk

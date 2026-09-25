@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { GetCommitDetail, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import ConfirmDialog, { ConfirmValues } from './ConfirmDialog'
 import Spinner from './Spinner'
+import { errorText, friendlyError } from '../errors'
 import { useRepoStore } from '../store/repoStore'
 
 interface EditFormState {
@@ -155,7 +156,7 @@ export default function EditPanel() {
         if (!isActive) {
           return
         }
-        setLoadError(String(error))
+        setLoadError(friendlyError(errorText(error)))
       } finally {
         if (isActive) {
           setIsLoading(false)

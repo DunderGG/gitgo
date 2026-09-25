@@ -82,7 +82,15 @@ Installed npm dependencies.
 
 ### src/main.tsx
 
-Entry point for React. Loads global CSS and renders App.
+Entry point for React. Loads global CSS and renders App inside ErrorBoundary. Also sends any uncaught promise rejection to setError so it shows in StatusBar.
+
+### src/errors.ts
+
+Turns raw backend error text into friendly messages (friendlyError). setError in the store uses it automatically, so components can keep calling setError(String(error)). Add a rule here when a new backend error reads badly.
+
+### src/components/ErrorBoundary.tsx
+
+Catches errors thrown while rendering and shows a "Something went wrong" screen with technical details and Try again / Close repository / Reload GitGo buttons, instead of a blank window.
 
 ### src/index.css
 
@@ -109,7 +117,8 @@ State currently includes:
 - selectedHash: currently selected commit row
 - canUndo: true after a rewrite that can still be undone
 - status: normal status text
-- error: current error text
+- error: current error, as a friendly message
+- errorDetail: raw error text behind it (shown as a tooltip)
 
 Actions currently include:
 
@@ -121,7 +130,7 @@ Actions currently include:
 - undoLastOperation: undo the last rewrite (used by the Undo button and Ctrl+Z)
 - requestEditFocus / consumeEditFocus: ask EditPanel to focus its form after Enter on a row
 - setStatus: set status message
-- setError: set error message
+- setError: set error from raw text (converted to a friendly message), or null to dismiss
 - clearRepo: reset store to initial state
 
 ### src/components/RepoSelector.tsx

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { CanUndo, RefreshLog, UndoLastOperation } from '../../wailsjs/go/app/App'
+import { errorText, friendlyError } from '../errors'
 
 const recentReposStorageKey = 'gitgo.recentRepos'
 const maxRecentRepos = 10
@@ -81,7 +82,11 @@ interface RepoStore {
   // commit has loaded and focuses the first field if the commit is editable.
   pendingEditFocus: boolean
   status: string
+  // User-facing error message (see friendlyError), or null.
   error: string | null
+  // Raw error text behind error, shown as a tooltip; null when error is
+  // already the raw text or there is no error.
+  errorDetail: string | null
   setRepo: (info: RepoInfo, commits: CommitSummary[]) => void
   removeRecentRepo: (path: string) => void
   selectCommit: (hash: string | null) => void
@@ -91,6 +96,7 @@ interface RepoStore {
   runGitOperation: <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
   undoLastOperation: () => Promise<void>
   setStatus: (message: string) => void
+  // Accepts raw error text; stores a friendly message plus the raw detail.
   setError: (error: string | null) => void
   clearRepo: () => void
 }
@@ -105,6 +111,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   pendingEditFocus: false,
   status: '',
   error: null,
+  errorDetail: null,
 
   // Opening a new repo clears any previous selection so EditPanel doesn't
   // show stale data from the prior repository.
@@ -120,6 +127,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
         selectedHash: null,
         canUndo: false,
         error: null,
+        errorDetail: null,
         status: `Opened: ${info.path}`,
       }
     }),
@@ -167,19 +175,29 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
         const refreshedCommits = await RefreshLog()
         // setRepo clears canUndo, which is correct: only one level is kept.
         setRepo(repoInfo, refreshedCommits)
-        set({ error: null, status: result.message })
+        set({ error: null, errorDetail: null, status: result.message })
       } catch (err) {
         // The backend drops the undo record when it can never succeed (e.g.
         // the branch moved), so ask it whether the button should stay.
         const stillUndoable = await CanUndo().catch(() => false)
-        set({ error: String(err), canUndo: stillUndoable })
+        get().setError(errorText(err))
+        set({ canUndo: stillUndoable })
       }
     })
   },
 
   setStatus: (message) => set({ status: message }),
 
-  setError: (error) => set({ error }),
+  setError: (error) => {
+    if (error === null) {
+      set({ error: null, errorDetail: null })
+      return
+    }
+    const friendly = friendlyError(error)
+    // Only keep the raw text when it says more than the friendly message.
+    const isSameText = friendly.toLowerCase() === error.replace(/^Error:\s*/, '').trim().toLowerCase()
+    set({ error: friendly, errorDetail: isSameText ? null : error })
+  },
 
-  clearRepo: () => set({ repoInfo: null, commits: [], selectedHash: null, canUndo: false, status: '', error: null }),
+  clearRepo: () => set({ repoInfo: null, commits: [], selectedHash: null, canUndo: false, status: '', error: null, errorDetail: null }),
 }))

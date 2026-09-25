@@ -275,7 +275,24 @@ Tests are grouped into two areas:
 
 #### `frontend/src/main.tsx`
 
-The React entry point. Mounts the `<App>` component into `#root` inside `index.html`. No application logic lives here.
+The React entry point. Mounts the `<App>` component, wrapped in `<ErrorBoundary>`, into `#root` inside `index.html`. It also registers a window `unhandledrejection` listener that passes any uncaught promise rejection (e.g. a failed backend call nobody caught) to `setError`, so it shows in `StatusBar` instead of being lost. No other application logic lives here.
+
+---
+
+#### `frontend/src/errors.ts`
+
+Turns raw error text into messages a user can act on. Wails rejects a bound method's promise with the Go error's message, so matching is done on that text.
+
+- `friendlyError(raw)` — checks an ordered list of regex rules (not a git repository, branch not found, no repository open, commit not found, stash failures, invalid date) and returns the first matching friendly message. Unmatched text is tidied: a leading `Error: ` is dropped and the first letter capitalised. The sentinel errors in `git/errors.go` are already written for users and pass through this way.
+- `errorText(error)` — converts any thrown value to its message text.
+
+When adding a new backend error whose raw text is not user-friendly, add a rule here.
+
+---
+
+#### `frontend/src/components/ErrorBoundary.tsx`
+
+A class component (React has no hook equivalent) that catches errors thrown while rendering. Instead of a blank window it shows a "Something went wrong" screen explaining that the repository was not changed, a collapsible "Technical details" block with the stack, and three recovery actions: **Try again** (re-render with the same state), **Close repository** (`clearRepo()` and back to `RepoSelector`), and **Reload GitGo** (`window.location.reload()`; the Go backend keeps running). Errors in event handlers and promises are not caught by React boundaries; those go through `setError`.
 
 ---
 
@@ -313,7 +330,7 @@ When the button is clicked, `handleOpen` runs the following sequence over the Wa
 4. `GetCommitLog()` — walks the commit log and returns `[]CommitSummary`.
 5. `setRepo(repoInfo, commits)` — writes both into the Zustand store atomically. This triggers the `App.tsx` conditional to switch from `RepoSelector` to `CommitList`.
 
-Any error at any step calls `setError(String(err))`, which the `StatusBar` renders in red. If a quick-opened recent path appears to no longer exist, `removeRecentRepo(path)` prunes the stale entry from the list.
+Any error at any step calls `setError(String(err))`, which maps it to a friendly message that the `StatusBar` renders in red. If a quick-opened recent path appears to no longer exist, `removeRecentRepo(path)` prunes the stale entry from the list.
 
 ---
 
@@ -375,7 +392,7 @@ Behaviour:
 A persistent footer bar rendered on every screen. Reads three independent slices from the Zustand store:
 
 - **Left side** — when a repo is open: shows the branch name in indigo, plus a "Not checked out" notice when viewing a branch other than HEAD's. Conditionally appends a yellow "No remote configured" or "No upstream set" notice, driven by `repoInfo.hasRemote` and `repoInfo.hasUpstream`.
-- **Right side** — mutually exclusive: while `activity` is set, shows a spinner with the running operation's label; otherwise, if `error` is non-null, shows it in red; otherwise shows the `status` string in muted grey. This means any error immediately replaces a previous status message.
+- **Right side** — mutually exclusive: while `activity` is set, shows a spinner with the running operation's label; otherwise, if `error` is non-null, shows it in red; otherwise shows the `status` string in muted grey. This means any error immediately replaces a previous status message. Errors are truncated to fit; the tooltip shows the full message plus the raw `errorDetail`, and a **×** button dismisses the error.
 
 Successful rewrite messages from `UpdateCommit` also surface here. That includes the auto-stash notice (`"commit updated; stashed changes restored"`) returned by the backend when the worktree had to be stashed around the rewrite.
 
@@ -420,7 +437,8 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
 | `pendingEditFocus` | `boolean` | Set by `Enter` on a commit row; consumed by `EditPanel` after the commit loads. |
 | `status` | `string` | Most-recent informational message (e.g. `"Opened: /path/to/repo"`). |
-| `error` | `string \| null` | Most-recent error message. Non-null causes `StatusBar` to show it in red. Setting a new error does not clear `repoInfo` — the repo remains open. |
+| `error` | `string \| null` | Most-recent error, as a user-friendly message (see `errors.ts`). Non-null causes `StatusBar` to show it in red. Setting a new error does not clear `repoInfo` — the repo remains open. |
+| `errorDetail` | `string \| null` | The raw error text behind `error`, shown in the `StatusBar` tooltip. `null` when the friendly message says the same thing. |
 
 **Actions:**
 
@@ -434,7 +452,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `requestEditFocus()` / `consumeEditFocus()` | Set / clear `pendingEditFocus`. |
 | `setStatus(message)` | Updates `status` without touching anything else. |
 | `runGitOperation(label, operation)` | Async. Runs one git operation at a time: sets `activity` to `label`, awaits `operation`, and clears `activity` afterwards. If another operation is already running it skips the new one and returns `undefined`. Errors propagate to the caller. Used for opening a repository, switching branch, rewriting, and undoing. |
-| `setError(error)` | Sets `error`. Pass `null` to dismiss. |
+| `setError(error)` | Takes raw error text, stores `friendlyError(error)` in `error` and the raw text in `errorDetail`. Pass `null` to dismiss. |
 | `clearRepo()` | Resets all state (including `selectedHash`) to initial values — returns the app to the `RepoSelector` view. |
 
 ---
@@ -485,6 +503,8 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
 | `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `canUndo`, `activity`, `pendingEditFocus`, `status`, `error`; also owns the shared `runGitOperation` and `undoLastOperation` actions |
 | `Spinner` | *(Phase 3)* Inline loading indicator used wherever a git operation is in progress |
+| `ErrorBoundary` | *(Phase 3)* Catches render errors and shows a recovery screen (try again / close repository / reload) |
+| `errors.ts` | *(Phase 3)* Maps raw backend error text to user-friendly messages |
 
 ### Backend
 
@@ -528,6 +548,7 @@ GitGo/
 │   ├── tailwind.config.ts
 │   └── src/
 │       ├── main.tsx
+│       ├── errors.ts               # (Phase 3) Friendly error messages
 │       ├── App.tsx
 │       ├── components/
 │       │   ├── BranchSelector.tsx  # (Phase 3)
@@ -535,6 +556,7 @@ GitGo/
 │       │   ├── Spinner.tsx         # (Phase 3)
 │       │   ├── CommitList.tsx
 │       │   ├── EditPanel.tsx       # (Phase 2)
+│       │   ├── ErrorBoundary.tsx   # (Phase 3)
 │       │   ├── ConfirmDialog.tsx   # (Phase 2)
 │       │   └── StatusBar.tsx
 │       ├── hooks/
@@ -602,6 +624,8 @@ All Go methods on the `App` struct that are exposed to the frontend via `wails.B
 - `func (...) (T, error)` — returns a value and an error
 
 The `error` return is automatically serialised into a rejected JavaScript Promise. Every bound method in `app/app.go` must follow this pattern. Methods that only signal success/failure should return `(OperationResult, error)`.
+
+On the frontend, rejected promises are caught and passed to `setError`, which translates the raw text via `friendlyError` in `frontend/src/errors.ts`. Prefer writing Go error messages that are readable as-is (as the sentinels in `git/errors.go` are); otherwise add a mapping rule there.
 
 ### Edge Cases & Boundary Conditions
 The following conditions must be detected at the start of any operation and returned as errors before any rewrite is attempted:

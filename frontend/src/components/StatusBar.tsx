@@ -5,6 +5,8 @@ export default function StatusBar() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
   const status = useRepoStore((s) => s.status)
   const error = useRepoStore((s) => s.error)
+  const errorDetail = useRepoStore((s) => s.errorDetail)
+  const setError = useRepoStore((s) => s.setError)
   const canUndo = useRepoStore((s) => s.canUndo)
   const activity = useRepoStore((s) => s.activity)
   const undoLastOperation = useRepoStore((s) => s.undoLastOperation)
@@ -32,7 +34,7 @@ export default function StatusBar() {
           </>
         )}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {/* A running operation takes precedence over the last status or error. */}
         {activity ? (
           <span className="flex items-center gap-2 text-indigo-300" role="status">
@@ -40,7 +42,24 @@ export default function StatusBar() {
             {activity}
           </span>
         ) : error ? (
-          <span className="text-red-400">{error}</span>
+          <span className="flex min-w-0 items-center gap-2 text-red-400" role="alert">
+            {/* Long messages are truncated; the tooltip has the full text and the raw detail. */}
+            <span
+              className="truncate max-w-[60vw]"
+              title={errorDetail ? `${error}\n\nDetails: ${errorDetail}` : error}
+            >
+              {error}
+            </span>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="shrink-0 rounded px-1 text-red-300 transition hover:bg-gray-700 hover:text-red-200"
+              title="Dismiss"
+              aria-label="Dismiss error"
+            >
+              ×
+            </button>
+          </span>
         ) : (
           <span className="text-gray-400">{status}</span>
         )}
