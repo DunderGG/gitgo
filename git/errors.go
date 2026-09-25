@@ -18,3 +18,8 @@ var ErrDetachedHead = errors.New("repository is in detached HEAD state; attach t
 
 // ErrOperationInProgress is returned when a git operation (merge, rebase, cherry-pick) is already underway.
 var ErrOperationInProgress = errors.New("a git operation is already in progress; complete or abort it before using GitGo")
+
+// ErrBranchMoved is returned by ResetBranch when the branch tip no longer
+// matches the expected hash, e.g. because a new commit was made after the
+// rewrite that is being undone.
+var ErrBranchMoved = errors.New("the branch has changed since the last rewrite; undo is no longer available")

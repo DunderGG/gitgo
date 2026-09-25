@@ -107,6 +107,7 @@ State currently includes:
 - commits: commit list shown in CommitList
 - recentRepos: last 10 opened repository paths (saved in localStorage)
 - selectedHash: currently selected commit row
+- canUndo: true after a rewrite that can still be undone
 - status: normal status text
 - error: current error text
 
@@ -179,6 +180,7 @@ Shows:
 - no-remote or no-upstream warnings
 - status message or error message
 - successful rewrite messages, including the auto-stash restore notice when applicable
+- an Undo button after a rewrite, which calls UndoLastOperation and reloads the log
 
 ## Wails binding files you will see
 
@@ -194,6 +196,8 @@ Methods currently exposed include:
 - GetCommitDetail
 - RefreshLog
 - UpdateCommit
+- UndoLastOperation
+- CanUndo
 
 ### wailsjs/go/app/App.js
 

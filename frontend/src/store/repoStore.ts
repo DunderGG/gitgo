@@ -66,11 +66,16 @@ interface RepoStore {
   // Hash of the commit currently selected in CommitList; null when nothing is
   // selected. EditPanel reads this to know which commit to load.
   selectedHash: string | null
+  // True after a successful rewrite that the backend can still undo. Any
+  // setRepo call (open, refresh, undo) resets it; EditPanel sets it again
+  // after a rewrite.
+  canUndo: boolean
   status: string
   error: string | null
   setRepo: (info: RepoInfo, commits: CommitSummary[]) => void
   removeRecentRepo: (path: string) => void
   selectCommit: (hash: string | null) => void
+  setCanUndo: (canUndo: boolean) => void
   setStatus: (message: string) => void
   setError: (error: string | null) => void
   clearRepo: () => void
@@ -81,6 +86,7 @@ export const useRepoStore = create<RepoStore>((set) => ({
   commits: [],
   recentRepos: loadRecentRepos(),
   selectedHash: null,
+  canUndo: false,
   status: '',
   error: null,
 
@@ -96,6 +102,7 @@ export const useRepoStore = create<RepoStore>((set) => ({
         commits,
         recentRepos,
         selectedHash: null,
+        canUndo: false,
         error: null,
         status: `Opened: ${info.path}`,
       }
@@ -110,9 +117,11 @@ export const useRepoStore = create<RepoStore>((set) => ({
 
   selectCommit: (hash) => set({ selectedHash: hash }),
 
+  setCanUndo: (canUndo) => set({ canUndo }),
+
   setStatus: (message) => set({ status: message }),
 
   setError: (error) => set({ error }),
 
-  clearRepo: () => set({ repoInfo: null, commits: [], selectedHash: null, status: '', error: null }),
+  clearRepo: () => set({ repoInfo: null, commits: [], selectedHash: null, canUndo: false, status: '', error: null }),
 }))

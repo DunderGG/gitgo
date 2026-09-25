@@ -78,6 +78,7 @@ export default function EditPanel() {
   const setRepo = useRepoStore((s) => s.setRepo)
   const setStatus = useRepoStore((s) => s.setStatus)
   const setError = useRepoStore((s) => s.setError)
+  const setCanUndo = useRepoStore((s) => s.setCanUndo)
 
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -177,6 +178,9 @@ export default function EditPanel() {
 
       const refreshedCommits = await RefreshLog()
       setRepo(repoInfo, refreshedCommits)
+      // The rewrite itself succeeded even when result.success is false (only
+      // the stash pop failed), so it can always be undone at this point.
+      setCanUndo(true)
 
       if (result.success) {
         setError(null)

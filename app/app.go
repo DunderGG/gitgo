@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -45,6 +46,7 @@ func (app *App) OpenRepository(path string) (RepoInfo, error) {
 
 	app.mutex.Lock()
 	app.repoState = state
+	app.lastRewrite = nil
 	app.mutex.Unlock()
 
 	return RepoInfo{
@@ -223,6 +225,22 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		rewriteErr = gitpkg.RebaseRewrite(state, commitHash, opts)
 	}
 
+	// Record the pre- and post-rewrite tips so the operation can be undone.
+	// This happens before the stash pop so the record exists even when the
+	// pop fails, since the rewrite itself still succeeded.
+	if rewriteErr == nil {
+		if newHead, headErr := state.Repo.Head(); headErr == nil {
+			app.mutex.Lock()
+			app.lastRewrite = &rewriteRecord{
+				RepoPath:   state.Path,
+				Branch:     head.Name(),
+				BeforeHash: head.Hash(),
+				AfterHash:  newHead.Hash(),
+			}
+			app.mutex.Unlock()
+		}
+	}
+
 	// Always restore the stash — whether or not the rewrite succeeded — so the
 	// user's in-progress work is never left trapped in the stash.
 	if stashed {
@@ -252,4 +270,59 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		return OperationResult{Success: true, Message: "commit updated; stashed changes restored"}, nil
 	}
 	return OperationResult{Success: true, Message: "commit updated"}, nil
+}
+
+// UndoLastOperation reverts the most recent successful UpdateCommit by moving
+// the branch back to the commit it pointed at before the rewrite. Only one
+// level of undo is kept; the record is cleared once it has been used.
+//
+// Undo is refused (ErrBranchMoved) when the branch has changed since the
+// rewrite, e.g. a new commit was made or another branch was checked out.
+func (app *App) UndoLastOperation() (OperationResult, error) {
+	app.mutex.Lock()
+	record := app.lastRewrite
+	app.mutex.Unlock()
+
+	if record == nil {
+		return OperationResult{}, fmt.Errorf("there is no operation to undo")
+	}
+
+	// Re-open the repository so the checks run against the current on-disk
+	// state (in-progress operations, detached HEAD, current branch tip).
+	state, err := gitpkg.Open(record.RepoPath)
+	if err != nil {
+		return OperationResult{}, err
+	}
+
+	if err := gitpkg.ResetBranch(state, record.Branch, record.AfterHash, record.BeforeHash); err != nil {
+		if errors.Is(err, gitpkg.ErrBranchMoved) {
+			// The record can never become valid again, so drop it.
+			app.mutex.Lock()
+			app.lastRewrite = nil
+			app.mutex.Unlock()
+		}
+		return OperationResult{}, err
+	}
+
+	app.mutex.Lock()
+	app.lastRewrite = nil
+	app.mutex.Unlock()
+
+	// Refresh the stored RepoState so subsequent calls see the restored HEAD.
+	// Not fatal if it fails.
+	if newState, refreshErr := gitpkg.Open(record.RepoPath); refreshErr == nil {
+		app.mutex.Lock()
+		app.repoState = newState
+		app.mutex.Unlock()
+	}
+
+	return OperationResult{Success: true, Message: "last rewrite undone"}, nil
+}
+
+// CanUndo reports whether UndoLastOperation currently has a rewrite to revert.
+// The frontend uses it to re-sync its Undo button after a failed undo.
+func (app *App) CanUndo() bool {
+	app.mutex.Lock()
+	defer app.mutex.Unlock()
+	return app.lastRewrite != nil
 }

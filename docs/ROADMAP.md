@@ -106,10 +106,10 @@
   - [x] Store last 10 opened paths
   - [x] Show in `RepoSelector` with quick-open buttons
   - [x] Remove entry if path no longer exists
-- [ ] Undo last rewrite operation
-  - [ ] Record pre-rewrite HEAD ref in memory
-  - [ ] Expose `App.UndoLastOperation()` binding
-  - [ ] Show "Undo" button in `StatusBar` after each successful edit
+- [x] Undo last rewrite operation
+  - [x] Record pre-rewrite HEAD ref in memory
+  - [x] Expose `App.UndoLastOperation()` binding
+  - [x] Show "Undo" button in `StatusBar` after each successful edit
 - [ ] Branch selector
   - [ ] List local branches
   - [ ] Switch view to selected branch's log

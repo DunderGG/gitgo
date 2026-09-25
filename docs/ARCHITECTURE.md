@@ -162,6 +162,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 - `ctx context.Context` — the Wails runtime context, stored in `Startup` and used for native dialog calls.
 - `mutex sync.Mutex` — guards `repoState` so concurrent IPC calls from the frontend cannot race.
 - `repoState *git.RepoState` — the currently open repository; `nil` when no repo is loaded.
+- `lastRewrite *rewriteRecord` — the branch ref plus its tip hash before and after the most recent successful rewrite, used by `UndoLastOperation`. In memory only; cleared by `OpenRepository` and after an undo.
 
 **Bound methods** (each maps directly to a callable in `wailsjs/go/app/App.js`):
 
@@ -172,7 +173,9 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetCommitLog() ([]CommitSummary, error)` | Reads `repoState` under the mutex; returns an error if no repo is open. Calls `git.Log(state, 0)` to walk up to 100 commits, then maps each `git.CommitEntry` to a `CommitSummary` DTO — including formatting the author date as an RFC 3339 string so the frontend can parse it with `new Date()`. |
 | `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, unpushed flag) for the edit UI. |
 | `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
-| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit. Performs server-side unpushed safety check, optional auto-stash/unstash when the worktree is dirty, dispatches to `AmendCommit` (HEAD) or `RebaseRewrite` (older commit), then refreshes in-memory state. |
+| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit. Performs server-side unpushed safety check, optional auto-stash/unstash when the worktree is dirty, dispatches to `AmendCommit` (HEAD) or `RebaseRewrite` (older commit), records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state. |
+| `UndoLastOperation() (OperationResult, error)` | Re-opens the repo and calls `git.ResetBranch` to move the branch from the post-rewrite tip back to the pre-rewrite tip. Only one level of undo is kept. Returns `ErrBranchMoved` (and drops the record) if the branch no longer points at the rewritten tip, e.g. a new commit was made. The worktree is not touched: rewrites only change metadata, so both tips have the same tree. |
+| `CanUndo() bool` | Reports whether `lastRewrite` is set. Used by the frontend to re-sync the Undo button after a failed undo. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
 
@@ -352,6 +355,8 @@ A persistent footer bar rendered on every screen. Reads three independent slices
 
 Successful rewrite messages from `UpdateCommit` also surface here. That includes the auto-stash notice (`"commit updated; stashed changes restored"`) returned by the backend when the worktree had to be stashed around the rewrite.
 
+When `canUndo` is true, an **Undo** button appears next to the status text. It calls `UndoLastOperation` followed by `RefreshLog`, then writes the refreshed log back via `setRepo` (which clears `canUndo`). If the undo fails, the error is shown and `CanUndo()` is queried to decide whether the button stays.
+
 The component subscribes to three separate store selectors rather than the whole store, so it only re-renders when one of those three values changes.
 
 ---
@@ -368,6 +373,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `commits` | `CommitSummary[]` | The current log. Empty array while no repo is open. |
 | `recentRepos` | `string[]` | Most-recent repository paths, stored in `localStorage`, deduplicated, and capped to 10 entries. |
 | `selectedHash` | `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
+| `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
 | `status` | `string` | Most-recent informational message (e.g. `"Opened: /path/to/repo"`). |
 | `error` | `string \| null` | Most-recent error message. Non-null causes `StatusBar` to show it in red. Setting a new error does not clear `repoInfo` — the repo remains open. |
 
@@ -378,6 +384,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `setRepo(info, commits)` | Sets `repoInfo` and `commits` together, clears `selectedHash` and `error`, sets `status` to `"Opened: <path>"`. |
 | `removeRecentRepo(path)` | Removes one path from the recent list and persists the updated list to `localStorage`. |
 | `selectCommit(hash)` | Sets `selectedHash` when a commit row is clicked or keyboard-selected. |
+| `setCanUndo(canUndo)` | Sets `canUndo`. `EditPanel` sets it to `true` after a rewrite. |
 | `setStatus(message)` | Updates `status` without touching anything else. Used for in-progress messages like `"Opening repository…"`. |
 | `setError(error)` | Sets `error`. Pass `null` to dismiss. |
 | `clearRepo()` | Resets all state (including `selectedHash`) to initial values — returns the app to the `RepoSelector` view. |
@@ -423,22 +430,23 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `App.tsx` | Root layout; switches between `RepoSelector` and the repo workspace (`CommitList` + `EditPanel`) based on store state |
 | `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo`; also renders and manages quick-open recent repositories |
 | `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state |
-| `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite/auto-stash messages |
+| `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite/auto-stash messages, Undo button after a rewrite |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
-| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `status`, `error` |
+| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `canUndo`, `status`, `error` |
 
 ### Backend
 
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit` |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `UndoLastOperation`, `CanUndo` |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open`: validate path, detect edge cases, build `RepoState` with unpushed set |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
 | `git/rewrite.go` | *(Phase 2)* `AmendCommit`, `RebaseRewrite`, dirty-worktree detection, and auto-stash helpers |
+| `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
 
 ---
 
@@ -459,7 +467,8 @@ GitGo/
 │   ├── repo.go              # Open, branch info, in-progress detection, unpushed set
 │   ├── log.go               # Commit log walking
 │   ├── git_test.go          # Unit tests (real on-disk repos via t.TempDir)
-│   └── rewrite.go           # (Phase 2) Amend + rebase-based rewriting
+│   ├── rewrite.go           # (Phase 2) Amend + rebase-based rewriting
+│   └── undo.go              # (Phase 3) Reset branch to pre-rewrite tip
 │
 ├── frontend/
 │   ├── index.html

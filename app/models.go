@@ -4,6 +4,8 @@ import (
 	"context"
 	gitpkg "gitgo/git"
 	"sync"
+
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
 // App is the main application struct. It is bound to the Wails runtime and
@@ -21,6 +23,20 @@ type App struct {
 	// in practice.
 	mutex     sync.Mutex
 	repoState *gitpkg.RepoState
+
+	// lastRewrite records the most recent successful rewrite so it can be
+	// undone. It lives in memory only and is cleared when a repository is
+	// opened or the rewrite is undone. Guarded by mutex.
+	lastRewrite *rewriteRecord
+}
+
+// rewriteRecord captures the branch tip before and after a rewrite. Undo moves
+// the branch from AfterHash back to BeforeHash.
+type rewriteRecord struct {
+	RepoPath   string
+	Branch     plumbing.ReferenceName
+	BeforeHash plumbing.Hash
+	AfterHash  plumbing.Hash
 }
 
 // RepoInfo holds high-level information about the currently opened repository.
