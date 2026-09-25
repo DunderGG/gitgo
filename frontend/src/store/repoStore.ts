@@ -1,9 +1,13 @@
 import { create } from 'zustand'
-import { CanUndo, RefreshLog, UndoLastOperation } from '../../wailsjs/go/app/App'
+import { CanUndo, GetCommitLog, RefreshLog, ReloadRepository, UndoLastOperation } from '../../wailsjs/go/app/App'
 import { errorText, friendlyError } from '../errors'
 
 const recentReposStorageKey = 'gitgo.recentRepos'
 const maxRecentRepos = 10
+
+// Activity label used while reloadRepository runs; the header's reload button
+// compares against it to show its own spinner.
+export const reloadActivityLabel = 'Reloading repository…'
 
 function loadRecentRepos(): string[] {
   if (typeof window === 'undefined') {
@@ -95,6 +99,7 @@ interface RepoStore {
   setCanUndo: (canUndo: boolean) => void
   runGitOperation: <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
   undoLastOperation: () => Promise<void>
+  reloadRepository: () => Promise<void>
   setStatus: (message: string) => void
   // Accepts raw error text; stores a friendly message plus the raw detail.
   setError: (error: string | null) => void
@@ -160,6 +165,40 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       return await operation()
     } finally {
       set({ activity: null })
+    }
+  },
+
+  // reloadRepository re-reads the repository from disk. Unlike setRepo it keeps
+  // the selected commit (if it still exists, so unsaved form edits survive)
+  // and the Undo button, since nothing was changed by the app.
+  reloadRepository: async () => {
+    const { repoInfo: previous, runGitOperation } = get()
+    if (!previous) {
+      return
+    }
+
+    try {
+      await runGitOperation(reloadActivityLabel, async () => {
+        const info = await ReloadRepository()
+        const commits = await GetCommitLog()
+        const { selectedHash, canUndo } = get()
+        const branchChanged = info.branch !== previous.branch
+
+        set({
+          repoInfo: info,
+          commits,
+          selectedHash: selectedHash && commits.some((commit) => commit.hash === selectedHash) ? selectedHash : null,
+          // A different branch means the undo record belongs elsewhere.
+          canUndo: branchChanged ? false : canUndo,
+          error: null,
+          errorDetail: null,
+          status: branchChanged
+            ? `Branch ${previous.branch} no longer exists; showing ${info.branch}`
+            : 'Reloaded from disk',
+        })
+      })
+    } catch (err) {
+      get().setError(errorText(err))
     }
   },
 

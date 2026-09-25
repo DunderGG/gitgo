@@ -98,7 +98,7 @@
 
 ---
 
-## Phase 3 — UX Polish
+## Phase 3 — UX Polish ✅
 
 > Goal: the app feels complete and production-quality for everyday use.
 
@@ -131,7 +131,8 @@
   - [x] Dark native title bar on Windows and macOS
   - [x] Window title shows the open repository and branch
 - [x] `CommitList` row selection state (highlight selected commit, drive `EditPanel`)
-- [ ] Reload / refresh button in header to re-read the repo from disk
+- [x] Reload / refresh button in header to re-read the repo from disk
+  - [x] `F5` / `Ctrl+R` reload the repository instead of the webview
 
 ---
 

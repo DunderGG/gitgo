@@ -174,6 +174,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, unpushed flag) for the edit UI. |
 | `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
 | `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit. Performs server-side unpushed safety check, optional auto-stash/unstash when the worktree is dirty (only when the target branch is checked out), dispatches to `AmendCommit` (branch tip) or `RebaseRewrite` (older commit), records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state. |
+| `ReloadRepository() (RepoInfo, error)` | Re-opens the current repository and branch from disk (`git.OpenBranch`) and returns fresh `RepoInfo`, so upstream, remote and checked-out state are re-read too. If the branch no longer exists it falls back to the checked-out branch. Keeps `lastRewrite`; if the branch moved, `UndoLastOperation` reports it. |
 | `SwitchBranch(branch string) (RepoInfo, error)` | Calls `git.OpenBranch(path, branch)` to target another local branch **without checking it out**: HEAD and the working tree are untouched, and later edits move only that branch's ref. Replaces `repoState`, clears `lastRewrite`, and returns the new `RepoInfo`. |
 | `ListBranches() ([]string, error)` | Returns the short names of all local branches, sorted alphabetically. |
 | `UndoLastOperation() (OperationResult, error)` | Re-opens the repo and calls `git.ResetBranch` to move the branch from the post-rewrite tip back to the pre-rewrite tip. Only one level of undo is kept. Returns `ErrBranchMoved` (and drops the record) if the branch no longer points at the rewritten tip, e.g. a new commit was made. The worktree is not touched: rewrites only change metadata, so both tips have the same tree. |
@@ -300,7 +301,7 @@ A class component (React has no hook equivalent) that catches errors thrown whil
 
 The root layout component. Renders a full-height flex column with three vertical sections:
 
-- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and a `<BranchSelector>` on the right.
+- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation).
 - **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
@@ -366,7 +367,7 @@ Behaviour:
 - With nothing selected, shows a hint: how to select a commit (click, or `↑` / `↓` and `Enter`), or, when the branch has no unpushed commits, that there is nothing to edit.
 - Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke.
 - Tracks the originally loaded values separately from the current form values so it can detect changes, support reset, and feed the confirmation dialog with an explicit before/after comparison.
-- Disables all editable controls while commit details are loading (shown with a spinner), while a rewrite is being submitted, and for pushed commits (`isUnpushed == false`). "Review Changes" is also disabled while any other git operation is running.
+- Disables all editable controls while commit details are loading (shown with a spinner), while a rewrite is being submitted, and for pushed commits. `isUnpushed` is read from the matching entry in the store's `commits` (not from the loaded detail), so a reload that finds the commit was pushed makes it read-only immediately without resetting the form. "Review Changes" is also disabled while any other git operation is running.
 - The rewrite (`UpdateCommit` + `RefreshLog`) runs inside `runGitOperation('Rewriting commit history…', …)`; the dialog's Apply button shows a spinner meanwhile.
 - On submit, opens `<ConfirmDialog>` instead of immediately rewriting history.
 - On confirm, calls `UpdateCommit` followed by `RefreshLog`, then writes the refreshed commit list back into the store and clears selection via `setRepo`.
@@ -414,6 +415,7 @@ Registers the app-wide keyboard shortcuts on `window`; called once from `App.tsx
 
 | Shortcut | Effect |
 |---|---|
+| `F5` / `Ctrl+R` / `Cmd+R` | Calls `reloadRepository()` when a repo is open. Always intercepted, because in the Wails webview these keys would otherwise reload the page and lose all UI state. |
 | `Ctrl+Z` / `Cmd+Z` | Calls `undoLastOperation()`. Ignored when the key event comes from an `input`, `textarea`, `select` or editable element, so the browser's own text undo keeps working there. |
 | `Escape` | When a commit is selected: clears the selection (closing the edit panel and discarding unsaved form changes) and moves focus back to that row in `CommitList`. |
 
@@ -450,6 +452,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `removeRecentRepo(path)` | Removes one path from the recent list and persists the updated list to `localStorage`. |
 | `selectCommit(hash)` | Sets `selectedHash` when a commit row is clicked or keyboard-selected. |
 | `setCanUndo(canUndo)` | Sets `canUndo`. `EditPanel` sets it to `true` after a rewrite. |
+| `reloadRepository()` | Async. Runs as `runGitOperation(reloadActivityLabel, …)`: calls `ReloadRepository` then `GetCommitLog` and writes both into the store directly (not via `setRepo`), keeping the selected commit if it still exists and keeping `canUndo` unless the branch changed. Sets `status` to `"Reloaded from disk"`, or explains the fallback when the branch was deleted. |
 | `undoLastOperation()` | Async. No-op unless `canUndo` and not already undoing. Calls `UndoLastOperation` then `RefreshLog` and writes the log back via `setRepo` (which clears `canUndo`). On failure, shows the error and asks `CanUndo()` whether undo is still possible. |
 | `requestEditFocus()` / `consumeEditFocus()` | Set / clear `pendingEditFocus`. |
 | `setStatus(message)` | Updates `status` without touching anything else. |
@@ -517,7 +520,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |

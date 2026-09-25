@@ -103,7 +103,11 @@ export default function EditPanel() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [isUnpushed, setIsUnpushed] = useState(false)
+  // Read from the commit list rather than the loaded detail, so a reload that
+  // finds the commit was pushed in the meantime makes it read-only at once.
+  const isUnpushed = useRepoStore(
+    (s) => s.commits.find((commit) => commit.hash === selectedHash)?.isUnpushed ?? false,
+  )
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [originalForm, setOriginalForm] = useState<EditFormState | null>(null)
   const [form, setForm] = useState<EditFormState>({
@@ -120,7 +124,6 @@ export default function EditPanel() {
       setLoadedHash(null)
       setIsLoading(false)
       setLoadError(null)
-      setIsUnpushed(false)
       setShowConfirmDialog(false)
       setOriginalForm(null)
       setForm({ message: '', authorName: '', authorEmail: '', dateLocal: '' })
@@ -143,7 +146,6 @@ export default function EditPanel() {
           return
         }
 
-        setIsUnpushed(detail.isUnpushed)
         const loadedForm = {
           message: detail.message,
           authorName: detail.authorName,

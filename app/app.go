@@ -80,6 +80,36 @@ func (app *App) SwitchBranch(branch string) (RepoInfo, error) {
 	return repoInfoFromState(newState), nil
 }
 
+// ReloadRepository re-reads the open repository and branch from disk and
+// returns up-to-date RepoInfo (upstream, remote and checked-out state can all
+// change outside the app). If the branch was deleted in the meantime, it falls
+// back to the checked-out branch. The undo record is kept: if the branch moved,
+// UndoLastOperation reports that itself.
+// OpenRepository must be called before this method.
+func (app *App) ReloadRepository() (RepoInfo, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return RepoInfo{}, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	newState, err := gitpkg.OpenBranch(state.Path, state.Branch)
+	if errors.Is(err, gitpkg.ErrBranchNotFound) {
+		newState, err = gitpkg.Open(state.Path)
+	}
+	if err != nil {
+		return RepoInfo{}, err
+	}
+
+	app.mutex.Lock()
+	app.repoState = newState
+	app.mutex.Unlock()
+
+	return repoInfoFromState(newState), nil
+}
+
 // ListBranches returns the short names of all local branches in the open
 // repository, sorted alphabetically.
 func (app *App) ListBranches() ([]string, error) {

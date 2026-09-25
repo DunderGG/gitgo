@@ -18,6 +18,7 @@ export function focusCommitRow(hash: string) {
 }
 
 // useKeyboardShortcuts registers the app-wide shortcuts:
+//   - F5 / Ctrl+R / Cmd+R: reload the repository from disk (instead of the page)
 //   - Ctrl+Z / Cmd+Z: undo the last rewrite (not while typing in a field)
 //   - Escape: close the edit panel by clearing the selection
 //
@@ -26,7 +27,20 @@ export function focusCommitRow(hash: string) {
 export function useKeyboardShortcuts() {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      const { selectedHash, selectCommit, undoLastOperation } = useRepoStore.getState()
+      const { repoInfo, selectedHash, selectCommit, undoLastOperation, reloadRepository } = useRepoStore.getState()
+
+      // F5 / Ctrl+R would otherwise reload the whole webview and lose the UI
+      // state, so they are always intercepted and reload the repository instead.
+      const isReloadShortcut =
+        event.key === 'F5' || ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'r')
+
+      if (isReloadShortcut) {
+        event.preventDefault()
+        if (repoInfo) {
+          reloadRepository()
+        }
+        return
+      }
 
       const isUndoShortcut =
         (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'z'

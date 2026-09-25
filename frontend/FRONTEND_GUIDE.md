@@ -100,7 +100,7 @@ Global stylesheet. Right now it only imports Tailwind base layers.
 
 Top-level layout and routing-by-state:
 
-- Header with app title, currently opened repo path, and BranchSelector
+- Header with app title, currently opened repo path, BranchSelector, and a ↻ reload button
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
@@ -127,6 +127,7 @@ Actions currently include:
 - removeRecentRepo: remove one path from the recent list
 - selectCommit: set selected row
 - setCanUndo: show or hide the Undo button
+- reloadRepository: re-read the repository from disk, keeping the selected commit and the Undo button
 - runGitOperation: run one git operation at a time, setting activity (the label shown with a spinner in StatusBar) while it runs
 - undoLastOperation: undo the last rewrite (used by the Undo button and Ctrl+Z)
 - requestEditFocus / consumeEditFocus: ask EditPanel to focus its form after Enter on a row
@@ -178,7 +179,7 @@ Current behavior:
 - loads full commit metadata from GetCommitDetail when a row is selected
 - with nothing selected, shows how to select a commit, or that there is nothing to edit when every commit is pushed
 - keeps local form state for message, date/time, author name, and author email
-- disables fields for pushed commits
+- disables fields for pushed commits (pushed state comes from the commit list, so it updates after a reload)
 - opens ConfirmDialog before applying a rewrite
 - calls UpdateCommit and then RefreshLog after confirmation
 
@@ -220,6 +221,7 @@ Shows:
 
 App-wide keyboard shortcuts, registered once from App.tsx:
 
+- F5 / Ctrl+R: reload the repository from disk (instead of reloading the page)
 - Ctrl+Z (Cmd+Z on macOS): undo the last rewrite; ignored while typing in a field so normal text undo still works
 - Escape: close the edit panel by clearing the selection, and return focus to the commit row
 
@@ -237,6 +239,7 @@ Methods currently exposed include:
 - GetCommitDetail
 - RefreshLog
 - UpdateCommit
+- ReloadRepository
 - SwitchBranch
 - ListBranches
 - UndoLastOperation

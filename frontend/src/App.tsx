@@ -5,8 +5,9 @@ import RepoSelector from './components/RepoSelector'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
+import Spinner from './components/Spinner'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
-import { useRepoStore } from './store/repoStore'
+import { reloadActivityLabel, useRepoStore } from './store/repoStore'
 
 // windowTitle names the open repository and branch, e.g. "GitGo — myrepo (main)",
 // so the window is easy to find in the taskbar / window switcher.
@@ -20,6 +21,8 @@ function windowTitle(path: string | undefined, branch: string | undefined): stri
 
 function App() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
+  const activity = useRepoStore((s) => s.activity)
+  const reloadRepository = useRepoStore((s) => s.reloadRepository)
   useKeyboardShortcuts()
 
   const title = windowTitle(repoInfo?.path, repoInfo?.branch)
@@ -42,8 +45,18 @@ function App() {
             <span className="ml-4 text-sm text-gray-400 truncate">
               {repoInfo.path}
             </span>
-            <div className="ml-auto pl-4">
+            <div className="ml-auto flex items-center gap-3 pl-4">
               <BranchSelector />
+              <button
+                type="button"
+                onClick={reloadRepository}
+                disabled={activity !== null}
+                title="Reload the repository from disk (F5)"
+                aria-label="Reload repository"
+                className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {activity === reloadActivityLabel ? <Spinner className="h-4 w-4" /> : '↻'}
+              </button>
             </div>
           </>
         )}

@@ -14,16 +14,18 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - Open any local Git repository
 - Browse commit history with a clear pushed / unpushed distinction
 
-**Phase 2 (planned) — Core Editing**
+**Phase 2 (complete) — Core Editing**
 - Edit commit message, date, and author metadata
 - Preview every change before it is applied
 - Automatic stash/unstash of uncommitted work around history rewrites
 
-**Phase 3 (planned) — UX Polish**
+**Phase 3 (complete) — UX Polish**
 - Recent repositories list
 - Undo last rewrite operation
-- Branch selector
-- Keyboard shortcuts
+- Branch selector (view and edit branches without checking them out)
+- Keyboard shortcuts (`Ctrl+Z`, `Enter`, `Escape`, `↑`/`↓`, `F5`)
+- Empty states, loading indicators, and friendly error messages
+- Reload the repository from disk
 
 **Phase 4 (planned) — Advanced Operations**
 - Squash, reorder, and drop unpushed commits
@@ -135,7 +137,8 @@ GitGo/
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx       # Root layout; switches between RepoSelector and CommitList
-│   │   ├── components/   # RepoSelector, CommitList, StatusBar (+ EditPanel, ConfirmDialog in Phase 2)
+│   │   ├── components/   # RepoSelector, BranchSelector, CommitList, EditPanel, ConfirmDialog, StatusBar, ...
+│   │   ├── hooks/        # useKeyboardShortcuts
 │   │   └── store/        # Zustand store (repoStore.ts)
 │   └── wailsjs/          # Auto-generated Wails bindings (gitignored)
 └── docs/                 # Architecture and roadmap documentation
@@ -147,7 +150,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full design overview and 
 
 ## Status
 
-**Phase 1 complete.** The app compiles and runs. Opening a repository displays the full commit log with pushed/unpushed distinction. Phase 2 (commit editing) is next — see [docs/ROADMAP.md](docs/ROADMAP.md).
+**Phases 1–3 complete.** You can open a repository, browse and switch branches, and edit the message, date, and author of unpushed commits with a preview and one-step undo. Phase 5 (correctness and safety hardening) fixes known issues found in review — until then, see the caution in [docs/ROADMAP.md](docs/ROADMAP.md) before using GitGo on real repositories.
 
 ---
 
