@@ -78,7 +78,9 @@ type EditRequest struct {
 	Message     string `json:"message"`
 	AuthorName  string `json:"authorName"`
 	AuthorEmail string `json:"authorEmail"`
-	Date        string `json:"date"`
+	// Date is the new author date as RFC 3339 with the desired offset, or
+	// empty to keep the original author date.
+	Date string `json:"date"`
 }
 
 // OperationResult is returned by all mutating bound methods to convey

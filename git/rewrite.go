@@ -35,11 +35,7 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 
 	// object.Signature is go-git's combined author/committer identity.
 	// Setting Committer == Author mirrors what `git commit --amend --reset-author` does.
-	sig := object.Signature{
-		Name:  opts.AuthorName,
-		Email: opts.AuthorEmail,
-		When:  opts.Date,
-	}
+	sig := editedSignature(headCommit, opts)
 
 	// Build the replacement commit. TreeHash is the root tree object (the
 	// directory snapshot) — we keep it unchanged because we're only editing
@@ -124,11 +120,7 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 			// original tree (file snapshot) and the (possibly remapped) parents.
 			// Setting Committer == Author is the same behaviour as
 			// `git commit --amend --reset-author`.
-			sig := object.Signature{
-				Name:  opts.AuthorName,
-				Email: opts.AuthorEmail,
-				When:  opts.Date,
-			}
+			sig := editedSignature(original, opts)
 			rebuilt = &object.Commit{
 				Author:       sig,
 				Committer:    sig,
@@ -169,6 +161,21 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 	}
 
 	return nil
+}
+
+// editedSignature builds the new author signature for original from opts.
+// A zero opts.Date keeps the original author date, including its time zone
+// offset, so edits that do not touch the date leave it byte-for-byte intact.
+func editedSignature(original *object.Commit, opts AmendOptions) object.Signature {
+	when := opts.Date
+	if when.IsZero() {
+		when = original.Author.When
+	}
+	return object.Signature{
+		Name:  opts.AuthorName,
+		Email: opts.AuthorEmail,
+		When:  when,
+	}
 }
 
 // storeCommit encodes commit and writes it to the object store, returning the

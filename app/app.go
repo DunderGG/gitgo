@@ -254,9 +254,15 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	}
 
 	// Parse the date string supplied by the frontend (RFC 3339 / ISO 8601).
-	date, err := time.Parse(time.RFC3339, req.Date)
-	if err != nil {
-		return OperationResult{}, fmt.Errorf("invalid date %q: %w", req.Date, err)
+	// The offset in the string becomes the commit's time zone. An empty date
+	// leaves the zero time, which keeps the original author date.
+	var date time.Time
+	var err error
+	if req.Date != "" {
+		date, err = time.Parse(time.RFC3339, req.Date)
+		if err != nil {
+			return OperationResult{}, fmt.Errorf("invalid date %q: %w", req.Date, err)
+		}
 	}
 
 	opts := gitpkg.AmendOptions{

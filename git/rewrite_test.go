@@ -107,6 +107,63 @@ func TestAmendCommit_UpdatesDate(test *testing.T) {
 	}
 }
 
+// authorDateISO returns the author date of rev exactly as git stores it,
+// including seconds and the time zone offset.
+func authorDateISO(test *testing.T, dir, rev string) string {
+	test.Helper()
+	return gitOutputFromDir(test, dir, "git", "log", "-1", "--format=%aI", rev)
+}
+
+// TestAmendCommit_KeepsSecondsAndOffset verifies that the new date is stored
+// with its seconds and its own time zone offset rather than converted to UTC.
+func TestAmendCommit_KeepsSecondsAndOffset(test *testing.T) {
+	const wantDate = "2025-06-15T10:20:37+05:30"
+
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original commit", gitCmd)
+
+	newDate, err := time.Parse(time.RFC3339, wantDate)
+	if err != nil {
+		test.Fatalf("time.Parse: %v", err)
+	}
+	opts := baseAmendOpts()
+	opts.Date = newDate
+	mustAmend(test, mustOpen(test, dir), opts)
+
+	if got := authorDateISO(test, dir, "HEAD"); got != wantDate {
+		test.Errorf("author date = %q, want %q", got, wantDate)
+	}
+}
+
+// TestAmendCommit_ZeroDateKeepsOriginal verifies that a zero Date leaves the
+// original author date, seconds and offset untouched.
+func TestAmendCommit_ZeroDateKeepsOriginal(test *testing.T) {
+	const wantDate = "2025-06-15T10:20:37-07:00"
+
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original commit", gitCmd)
+
+	// Give the commit a non-UTC date with seconds first.
+	originalDate, err := time.Parse(time.RFC3339, wantDate)
+	if err != nil {
+		test.Fatalf("time.Parse: %v", err)
+	}
+	opts := baseAmendOpts()
+	opts.Date = originalDate
+	mustAmend(test, mustOpen(test, dir), opts)
+
+	opts = baseAmendOpts()
+	opts.Message = "message-only edit\n"
+	opts.Date = time.Time{}
+	mustAmend(test, mustOpen(test, dir), opts)
+
+	if got := authorDateISO(test, dir, "HEAD"); got != wantDate {
+		test.Errorf("author date = %q, want %q", got, wantDate)
+	}
+}
+
 // TestAmendCommit_KeepsTree verifies that the file tree is unchanged after amend.
 func TestAmendCommit_KeepsTree(test *testing.T) {
 	dir := test.TempDir()
@@ -197,6 +254,27 @@ func TestRebaseRewrite_UpdatesTargetMessage(test *testing.T) {
 	}
 	if entries[1].Message != "amended second" {
 		test.Errorf("entries[1].Message = %q, want %q", entries[1].Message, "amended second")
+	}
+}
+
+// TestRebaseRewrite_ZeroDateKeepsOriginal verifies that a message-only
+// rewrite of an older commit keeps its original author date and offset.
+func TestRebaseRewrite_ZeroDateKeepsOriginal(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+	addCommit(test, dir, "third", gitCmd)
+	wantDate := authorDateISO(test, dir, "HEAD~1")
+
+	targetHash := plumbing.NewHash(gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~1"))
+	opts := baseAmendOpts()
+	opts.Message = "amended second\n"
+	opts.Date = time.Time{}
+	mustRebaseRewrite(test, mustOpen(test, dir), targetHash, opts)
+
+	if got := authorDateISO(test, dir, "HEAD~1"); got != wantDate {
+		test.Errorf("author date = %q, want %q", got, wantDate)
 	}
 }
 

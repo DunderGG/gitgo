@@ -148,11 +148,11 @@
   - [x] Also exclude commits reachable from any `refs/remotes/*` ref, so branches without an upstream don't expose commits already pushed on other branches
   - [x] Tests: diverged branch (local + remote each have new commits), branch behind upstream, merge commit from `git pull`, no-upstream branch with pushed history, up-to-date branch
      - Note: the remote history is walked completely (no commit-date cut-off) so clock skew can never mark a pushed commit editable; this may be slow on very large repositories
-- [ ] **Edits silently reset seconds and time zone**
+- [x] **Edits silently reset seconds and time zone**
   - `EditPanel` uses a `datetime-local` input (minute precision) and sends `toISOString()` (UTC), so any edit — even message-only — changes the seconds to `:00` and the commit's offset to `+0000`
-  - [ ] Preserve seconds (add a seconds field or `step="1"`)
-  - [ ] Preserve the original time zone offset (send the date with its original offset, or let the user choose one)
-  - [ ] Only send the date when it was actually changed
+  - [x] Preserve seconds (`step="1"` on the date input)
+  - [x] Preserve the original time zone offset: the date is shown and edited in the commit's own offset, with a selector to change it
+  - [x] Only send the date when it was actually changed (an empty date keeps the original author date in `AmendCommit` / `RebaseRewrite`)
 - [ ] **Committer identity is always overwritten by the author**
   - `AmendCommit` / `RebaseRewrite` set `Committer = Author`, so a message-only edit also replaces the committer name, email, and date
   - [ ] Decide on the intended behaviour (keep original committer, or set committer date to now like `git commit --amend`) and optionally expose committer date in the UI

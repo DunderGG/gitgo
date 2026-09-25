@@ -8,13 +8,14 @@ import (
 )
 
 // AmendOptions holds the new metadata values for a commit being amended.
-// All fields are required; partial updates are not supported.
 type AmendOptions struct {
 	// Message is the full commit message, including a trailing newline.
 	Message     string
 	AuthorName  string
 	AuthorEmail string
-	Date        time.Time
+	// Date is the new author date, including its time zone offset. The zero
+	// value keeps the commit's original author date unchanged.
+	Date time.Time
 }
 
 // CommitEntry is the git-layer representation of a single commit.

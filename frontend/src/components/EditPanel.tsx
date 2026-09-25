@@ -9,51 +9,93 @@ interface EditFormState {
   message: string
   authorName: string
   authorEmail: string
-  // datetime-local input format: YYYY-MM-DDTHH:mm
+  // Wall-clock time in the commit's own time zone, in datetime-local input
+  // format with seconds: YYYY-MM-DDTHH:mm:ss
   dateLocal: string
+  // Time zone offset of the commit date: +HH:MM or -HH:MM
+  offset: string
 }
 
-function toLocalDateTimeInputValue(rfc3339: string): string {
-  const date = new Date(rfc3339)
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
+const EMPTY_FORM: EditFormState = {
+  message: '',
+  authorName: '',
+  authorEmail: '',
+  dateLocal: '',
+  offset: '+00:00',
+}
 
+// UTC offsets in use around the world. The commit's original offset is added
+// to the list when it is not one of these.
+const COMMON_OFFSETS = [
+  '-12:00', '-11:00', '-10:00', '-09:30', '-09:00', '-08:00', '-07:00', '-06:00',
+  '-05:00', '-04:00', '-03:30', '-03:00', '-02:00', '-01:00', '+00:00', '+01:00',
+  '+02:00', '+03:00', '+03:30', '+04:00', '+04:30', '+05:00', '+05:30', '+05:45',
+  '+06:00', '+06:30', '+07:00', '+08:00', '+08:45', '+09:00', '+09:30', '+10:00',
+  '+10:30', '+11:00', '+12:00', '+12:45', '+13:00', '+14:00',
+]
+
+const WALL_CLOCK_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/
+
+// Splits an RFC 3339 date from the backend into its wall-clock part and
+// offset, keeping the commit's own time zone instead of converting to local.
+function splitRfc3339(rfc3339: string): Pick<EditFormState, 'dateLocal' | 'offset'> {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(rfc3339)
+  if (!match) {
+    return { dateLocal: '', offset: EMPTY_FORM.offset }
+  }
+  return { dateLocal: match[1], offset: match[2] === 'Z' ? '+00:00' : match[2] }
+}
+
+// datetime-local inputs leave out ":00" seconds in their value, so add them back.
+function normalizeWallClock(inputValue: string): string {
+  return inputValue.length === 16 ? `${inputValue}:00` : inputValue.slice(0, 19)
+}
+
+function formatOffset(totalMinutes: number): string {
   const pad = (value: number) => String(value).padStart(2, '0')
-  const year = date.getFullYear()
-  const month = pad(date.getMonth() + 1)
-  const day = pad(date.getDate())
-  const hour = pad(date.getHours())
-  const minute = pad(date.getMinutes())
-
-  return `${year}-${month}-${day}T${hour}:${minute}`
+  const sign = totalMinutes < 0 ? '-' : '+'
+  const absolute = Math.abs(totalMinutes)
+  return `${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
 }
 
-function toRfc3339FromLocalDateTime(localValue: string): string {
-  const date = new Date(localValue)
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-  return date.toISOString()
+function offsetMinutes(offset: string): number {
+  const sign = offset.startsWith('-') ? -1 : 1
+  const [hours, minutes] = offset.slice(1).split(':').map(Number)
+  return sign * (hours * 60 + minutes)
 }
 
-function toPreviewDateText(localValue: string): string {
-  if (!localValue) {
+// Offset of this computer's time zone at the given wall-clock time, used to
+// label the matching option.
+function localOffsetAt(dateLocal: string): string | null {
+  const date = new Date(dateLocal)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  return formatOffset(-date.getTimezoneOffset())
+}
+
+function toPreviewDateText(form: EditFormState): string {
+  if (!form.dateLocal) {
     return ''
   }
 
-  const date = new Date(localValue)
+  // Parse the wall-clock time as UTC and format it in UTC so the browser's own
+  // time zone does not shift it; the commit's offset is shown separately.
+  const date = new Date(`${form.dateLocal}Z`)
   if (Number.isNaN(date.getTime())) {
-    return localValue
+    return `${form.dateLocal} (UTC${form.offset})`
   }
 
-  return date.toLocaleString(undefined, {
+  const wallClock = date.toLocaleString(undefined, {
+    timeZone: 'UTC',
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    second: '2-digit',
   })
+  return `${wallClock} (UTC${form.offset})`
 }
 
 function formsEqual(left: EditFormState, right: EditFormState): boolean {
@@ -61,7 +103,8 @@ function formsEqual(left: EditFormState, right: EditFormState): boolean {
     left.message === right.message &&
     left.authorName === right.authorName &&
     left.authorEmail === right.authorEmail &&
-    left.dateLocal === right.dateLocal
+    left.dateLocal === right.dateLocal &&
+    left.offset === right.offset
   )
 }
 
@@ -70,7 +113,7 @@ function formToConfirmValues(form: EditFormState): ConfirmValues {
     message: form.message,
     authorName: form.authorName,
     authorEmail: form.authorEmail,
-    dateText: toPreviewDateText(form.dateLocal),
+    dateText: toPreviewDateText(form),
   }
 }
 
@@ -110,12 +153,7 @@ export default function EditPanel() {
   )
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [originalForm, setOriginalForm] = useState<EditFormState | null>(null)
-  const [form, setForm] = useState<EditFormState>({
-    message: '',
-    authorName: '',
-    authorEmail: '',
-    dateLocal: '',
-  })
+  const [form, setForm] = useState<EditFormState>(EMPTY_FORM)
 
   useEffect(() => {
     let isActive = true
@@ -126,7 +164,7 @@ export default function EditPanel() {
       setLoadError(null)
       setShowConfirmDialog(false)
       setOriginalForm(null)
-      setForm({ message: '', authorName: '', authorEmail: '', dateLocal: '' })
+      setForm(EMPTY_FORM)
       return () => {
         isActive = false
       }
@@ -150,7 +188,7 @@ export default function EditPanel() {
           message: detail.message,
           authorName: detail.authorName,
           authorEmail: detail.authorEmail,
-          dateLocal: toLocalDateTimeInputValue(detail.date),
+          ...splitRfc3339(detail.date),
         }
         setOriginalForm(loadedForm)
         setForm(loadedForm)
@@ -190,17 +228,30 @@ export default function EditPanel() {
   }, [pendingEditFocus, isLoading, selectedHash, loadedHash, fieldsDisabled, loadError, consumeEditFocus])
   const hasChanges = originalForm !== null && !formsEqual(form, originalForm)
 
+  const offsetOptions = [...COMMON_OFFSETS]
+  for (const offset of [originalForm?.offset, form.offset]) {
+    if (offset && !offsetOptions.includes(offset)) {
+      offsetOptions.push(offset)
+    }
+  }
+  offsetOptions.sort((left, right) => offsetMinutes(left) - offsetMinutes(right))
+  const localOffset = localOffsetAt(form.dateLocal)
+
   async function handleConfirmApply() {
     if (!selectedHash || !repoInfo || !originalForm) {
       return
     }
 
-    const rfc3339Date = toRfc3339FromLocalDateTime(form.dateLocal)
-    if (!rfc3339Date) {
+    if (!WALL_CLOCK_PATTERN.test(form.dateLocal)) {
       setError('Enter a valid date and time before applying changes.')
       setShowConfirmDialog(false)
       return
     }
+    // An empty date tells the backend to keep the original author date, so
+    // edits that do not touch the date leave it exactly as it was.
+    const dateChanged =
+      form.dateLocal !== originalForm.dateLocal || form.offset !== originalForm.offset
+    const rfc3339Date = dateChanged ? form.dateLocal + form.offset : ''
 
     const hashToUpdate = selectedHash
     setIsSubmitting(true)
@@ -312,13 +363,32 @@ export default function EditPanel() {
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">
               Date & Time
             </label>
-            <input
-              type="datetime-local"
-              value={form.dateLocal}
-              onChange={(e) => setForm((current) => ({ ...current, dateLocal: e.target.value }))}
-              disabled={fieldsDisabled}
-              className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-            />
+            <div className="mt-1 flex flex-wrap gap-2">
+              <input
+                type="datetime-local"
+                step={1}
+                value={form.dateLocal}
+                onChange={(e) =>
+                  setForm((current) => ({ ...current, dateLocal: normalizeWallClock(e.target.value) }))
+                }
+                disabled={fieldsDisabled}
+                className="min-w-[13rem] flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              <select
+                value={form.offset}
+                onChange={(e) => setForm((current) => ({ ...current, offset: e.target.value }))}
+                disabled={fieldsDisabled}
+                aria-label="Time zone offset"
+                className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {offsetOptions.map((offset) => (
+                  <option key={offset} value={offset}>
+                    UTC{offset}
+                    {offset === localOffset ? ' (local)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
