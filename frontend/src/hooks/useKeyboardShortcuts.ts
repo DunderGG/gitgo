@@ -21,13 +21,24 @@ export function focusCommitRow(hash: string) {
 //   - F5 / Ctrl+R / Cmd+R: reload the repository from disk (instead of the page)
 //   - Ctrl+Z / Cmd+Z: undo the last rewrite (not while typing in a field)
 //   - Escape: close the edit panel by clearing the selection
+//   - F1: open the help
 //
 // Row-level shortcuts (Enter, arrow keys) live in CommitList, and
-// ConfirmDialog handles Escape itself while it is open.
+// ConfirmDialog and HelpDialog handle Escape themselves while they are open.
 export function useKeyboardShortcuts() {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      const { repoInfo, selectedHash, selectCommit, undoLastOperation, reloadRepository } = useRepoStore.getState()
+      const { repoInfo, selectedHash, selectCommit, undoLastOperation, reloadRepository, setHelpOpen } =
+        useRepoStore.getState()
+
+      if (event.key === 'F1') {
+        event.preventDefault()
+        // Not on top of another dialog, where Escape would close both.
+        if (!document.querySelector('[aria-modal="true"]')) {
+          setHelpOpen(true)
+        }
+        return
+      }
 
       // F5 / Ctrl+R would otherwise reload the whole webview and lose the UI
       // state, so they are always intercepted and reload the repository instead.

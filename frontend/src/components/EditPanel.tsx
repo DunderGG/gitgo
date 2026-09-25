@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { GetAffectedRefs, GetCommitDetail, GetCommitLog, GetSignedCommits, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog, { CommitComparison, ConfirmValues } from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
+import Kbd from './Kbd'
 import Spinner from './Spinner'
 import {
   formatOffset,
@@ -111,14 +112,6 @@ function formToConfirmValues(form: EditFormState, committer: CommitterInfo): Con
     dateText: toPreviewDateText(form),
     committerDateText: toPreviewDateText(form.syncCommitterDate ? form : committer),
   }
-}
-
-function Kbd({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="rounded border border-gray-700 bg-gray-800 px-1 font-mono text-[11px] text-gray-300">
-      {children}
-    </kbd>
-  )
 }
 
 export default function EditPanel() {

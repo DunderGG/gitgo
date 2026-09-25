@@ -100,6 +100,8 @@ interface RepoStore {
   // Set by the Enter shortcut on a commit row. EditPanel consumes it once the
   // commit has loaded and focuses the first field if the commit is editable.
   pendingEditFocus: boolean
+  // Whether HelpDialog is open (header button or F1).
+  isHelpOpen: boolean
   status: string
   // User-facing error message (see friendlyError), or null.
   error: string | null
@@ -115,6 +117,7 @@ interface RepoStore {
   extendSelection: (hash: string) => void
   requestEditFocus: () => void
   consumeEditFocus: () => void
+  setHelpOpen: (isHelpOpen: boolean) => void
   setCanUndo: (canUndo: boolean) => void
   runGitOperation: <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
   undoLastOperation: () => Promise<void>
@@ -135,6 +138,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   canUndo: false,
   activity: null,
   pendingEditFocus: false,
+  isHelpOpen: false,
   status: '',
   error: null,
   errorDetail: null,
@@ -223,6 +227,8 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   requestEditFocus: () => set({ pendingEditFocus: true }),
 
   consumeEditFocus: () => set({ pendingEditFocus: false }),
+
+  setHelpOpen: (isHelpOpen) => set({ isHelpOpen }),
 
   setCanUndo: (canUndo) => set({ canUndo }),
 

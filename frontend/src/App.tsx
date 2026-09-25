@@ -6,6 +6,7 @@ import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
 import BulkDatePanel from './components/BulkDatePanel'
+import HelpDialog from './components/HelpDialog'
 import Spinner from './components/Spinner'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { reloadActivityLabel, useRepoStore } from './store/repoStore'
@@ -25,6 +26,7 @@ function App() {
   const activity = useRepoStore((s) => s.activity)
   const isMultiSelect = useRepoStore((s) => s.selectedHashes.length > 1)
   const reloadRepository = useRepoStore((s) => s.reloadRepository)
+  const setHelpOpen = useRepoStore((s) => s.setHelpOpen)
   useKeyboardShortcuts()
 
   const title = windowTitle(repoInfo?.path, repoInfo?.branch)
@@ -43,11 +45,13 @@ function App() {
       <header className="flex items-center px-4 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
         <h1 className="text-lg font-semibold text-white tracking-tight">GitGo</h1>
         {repoInfo && (
-          <>
-            <span className="ml-4 text-sm text-gray-400 truncate">
-              {repoInfo.path}
-            </span>
-            <div className="ml-auto flex items-center gap-3 pl-4">
+          <span className="ml-4 text-sm text-gray-400 truncate">
+            {repoInfo.path}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-3 pl-4">
+          {repoInfo && (
+            <>
               <BranchSelector />
               <button
                 type="button"
@@ -59,9 +63,18 @@ function App() {
               >
                 {activity === reloadActivityLabel ? <Spinner className="h-4 w-4" /> : '↻'}
               </button>
-            </div>
-          </>
-        )}
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            title="How to use GitGo (F1)"
+            aria-label="Help"
+            className="rounded-md border border-gray-700 px-2.5 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+          >
+            ?
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 overflow-hidden">
@@ -76,6 +89,7 @@ function App() {
       </main>
 
       <StatusBar />
+      <HelpDialog />
     </div>
   )
 }

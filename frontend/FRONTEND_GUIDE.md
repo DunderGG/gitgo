@@ -219,6 +219,14 @@ Current behavior:
 - provides Apply and Cancel actions
 - Escape cancels the dialog; Ctrl+Z is blocked while it is open
 
+### src/components/HelpDialog.tsx
+
+The in-app help, opened with the ? button in the header or F1 (store: isHelpOpen / setHelpOpen).
+
+- walks through selecting commits, editing them, and reviewing, applying and undoing a rewrite
+- lists every keyboard shortcut and the safety rules
+- Escape, F1, the × button or a click outside closes it; Ctrl+Z is blocked while it is open
+
 ### src/components/BranchSelector.tsx
 
 Branch dropdown in the header.
@@ -249,6 +257,7 @@ App-wide keyboard shortcuts, registered once from App.tsx:
 - F5 / Ctrl+R: reload the repository from disk (instead of reloading the page)
 - Ctrl+Z (Cmd+Z on macOS): undo the last rewrite; ignored while typing in a field so normal text undo still works
 - Escape: close the edit panel by clearing the selection, and return focus to the commit row
+- F1: open the help dialog (skipped while the confirm dialog is open)
 
 ## Wails binding files you will see
 

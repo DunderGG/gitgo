@@ -408,6 +408,16 @@ Behaviour:
 
 ---
 
+#### `frontend/src/components/HelpDialog.tsx`
+
+A modal with usage instructions, opened with the **?** button in the header (shown on every screen) or `F1`. Its open state is the store's `isHelpOpen`, so the shortcut hook and the header button share it. Wails v2 only supports one native window, so the help is a modal overlay rather than a separate window.
+
+- Static content: a numbered walkthrough (open a repository, pushed vs unpushed, edit one commit, shift several dates, review and apply, undo), the keyboard shortcut table, and a "Good to know" list of safety rules.
+- Closes on `Escape`, `F1`, the **×** button or a click on the backdrop; like `ConfirmDialog`, a capture-phase listener also swallows `Ctrl+Z` while it is open.
+- Focuses its close button on open and restores the previous focus on close.
+
+---
+
 #### `frontend/src/components/StatusBar.tsx`
 
 A persistent footer bar rendered on every screen. Reads three independent slices from the Zustand store:
@@ -436,8 +446,9 @@ Registers the app-wide keyboard shortcuts on `window`; called once from `App.tsx
 | `F5` / `Ctrl+R` / `Cmd+R` | Calls `reloadRepository()` when a repo is open. Always intercepted, because in the Wails webview these keys would otherwise reload the page and lose all UI state. |
 | `Ctrl+Z` / `Cmd+Z` | Calls `undoLastOperation()`. Ignored when the key event comes from an `input`, `textarea`, `select` or editable element, so the browser's own text undo keeps working there. |
 | `Escape` | When a commit is selected: clears the selection (closing the edit panel and discarding unsaved form changes) and moves focus back to that row in `CommitList`. |
+| `F1` | Opens `HelpDialog` (`setHelpOpen(true)`), unless another `aria-modal` dialog is open, where `Escape` would close both. |
 
-Row-level keys (`Enter`, `↑`, `↓`) are handled in `CommitList`, and `ConfirmDialog` takes over `Escape` while it is open. The file also exports `focusCommitRow(hash)`, used by both.
+Row-level keys (`Enter`, `↑`, `↓`) are handled in `CommitList`, and `ConfirmDialog` and `HelpDialog` take over `Escape` while they are open. The file also exports `focusCommitRow(hash)`, used by both.
 
 The component subscribes to three separate store selectors rather than the whole store, so it only re-renders when one of those three values changes.
 
@@ -589,6 +600,8 @@ GitGo/
 │       │   ├── EditPanel.tsx       # (Phase 2)
 │       │   ├── ErrorBoundary.tsx   # (Phase 3)
 │       │   ├── ConfirmDialog.tsx   # (Phase 2)
+│       │   ├── HelpDialog.tsx      # In-app help (? button / F1)
+│       │   ├── Kbd.tsx             # Keyboard key label
 │       │   └── StatusBar.tsx
 │       ├── hooks/
 │       │   └── useKeyboardShortcuts.ts  # (Phase 3)

@@ -220,7 +220,11 @@ export default function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/75 p-4">
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 shadow-2xl"
+      >
         <div className="border-b border-gray-800 px-5 py-4">
           <h2 className="text-lg font-semibold text-gray-100">{title}</h2>
           <p className="mt-1 text-sm text-gray-400">
