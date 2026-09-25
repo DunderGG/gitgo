@@ -73,9 +73,10 @@ interface RepoStore {
   // setRepo call (open, refresh, undo) resets it; EditPanel sets it again
   // after a rewrite.
   canUndo: boolean
-  // True while an undo request is in flight; shared by the Undo button and
-  // the Ctrl+Z shortcut so neither can start a second one.
-  isUndoing: boolean
+  // Label of the git operation currently running (e.g. "Switching branch…"),
+  // or null when idle. StatusBar shows it with a spinner, and controls that
+  // start another git operation are disabled while it is set.
+  activity: string | null
   // Set by the Enter shortcut on a commit row. EditPanel consumes it once the
   // commit has loaded and focuses the first field if the commit is editable.
   pendingEditFocus: boolean
@@ -87,6 +88,7 @@ interface RepoStore {
   requestEditFocus: () => void
   consumeEditFocus: () => void
   setCanUndo: (canUndo: boolean) => void
+  runGitOperation: <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
   undoLastOperation: () => Promise<void>
   setStatus: (message: string) => void
   setError: (error: string | null) => void
@@ -99,7 +101,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   recentRepos: loadRecentRepos(),
   selectedHash: null,
   canUndo: false,
-  isUndoing: false,
+  activity: null,
   pendingEditFocus: false,
   status: '',
   error: null,
@@ -137,28 +139,42 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
 
   setCanUndo: (canUndo) => set({ canUndo }),
 
+  // runGitOperation runs one git operation at a time. While it runs, activity
+  // holds its label; if another operation is already running, the new one is
+  // skipped and undefined is returned. Errors propagate to the caller.
+  runGitOperation: async (label, operation) => {
+    if (get().activity !== null) {
+      return undefined
+    }
+
+    set({ activity: label })
+    try {
+      return await operation()
+    } finally {
+      set({ activity: null })
+    }
+  },
+
   undoLastOperation: async () => {
-    const { repoInfo, canUndo, isUndoing, setRepo } = get()
-    if (!repoInfo || !canUndo || isUndoing) {
+    const { repoInfo, canUndo, runGitOperation, setRepo } = get()
+    if (!repoInfo || !canUndo) {
       return
     }
 
-    set({ isUndoing: true })
-
-    try {
-      const result = await UndoLastOperation()
-      const refreshedCommits = await RefreshLog()
-      // setRepo clears canUndo, which is correct: only one level is kept.
-      setRepo(repoInfo, refreshedCommits)
-      set({ error: null, status: result.message })
-    } catch (err) {
-      // The backend drops the undo record when it can never succeed (e.g. the
-      // branch moved), so ask it whether the button should stay.
-      const stillUndoable = await CanUndo().catch(() => false)
-      set({ error: String(err), canUndo: stillUndoable })
-    } finally {
-      set({ isUndoing: false })
-    }
+    await runGitOperation('Undoing last rewrite…', async () => {
+      try {
+        const result = await UndoLastOperation()
+        const refreshedCommits = await RefreshLog()
+        // setRepo clears canUndo, which is correct: only one level is kept.
+        setRepo(repoInfo, refreshedCommits)
+        set({ error: null, status: result.message })
+      } catch (err) {
+        // The backend drops the undo record when it can never succeed (e.g.
+        // the branch moved), so ask it whether the button should stay.
+        const stillUndoable = await CanUndo().catch(() => false)
+        set({ error: String(err), canUndo: stillUndoable })
+      }
+    })
   },
 
   setStatus: (message) => set({ status: message }),

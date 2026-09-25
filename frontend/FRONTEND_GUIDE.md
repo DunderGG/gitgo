@@ -117,6 +117,7 @@ Actions currently include:
 - removeRecentRepo: remove one path from the recent list
 - selectCommit: set selected row
 - setCanUndo: show or hide the Undo button
+- runGitOperation: run one git operation at a time, setting activity (the label shown with a spinner in StatusBar) while it runs
 - undoLastOperation: undo the last rewrite (used by the Undo button and Ctrl+Z)
 - requestEditFocus / consumeEditFocus: ask EditPanel to focus its form after Enter on a row
 - setStatus: set status message
@@ -133,6 +134,8 @@ It calls generated Wails functions to:
 - open selected repository in backend
 - fetch commit log
 - write results into the Zustand store
+
+While a repository is opening, all buttons are disabled and the clicked one shows a spinner.
 
 It also shows recent repositories as quick-open buttons.
 
@@ -186,6 +189,7 @@ Branch dropdown in the header.
 
 - lists local branches from ListBranches (reloaded when the dropdown gets focus)
 - choosing a branch calls SwitchBranch and GetCommitLog, then setRepo
+- shows a spinner while switching and is disabled while any git operation runs
 - does not check the branch out; edits move only that branch
 
 ### src/components/StatusBar.tsx
@@ -197,7 +201,8 @@ Shows:
 - branch name
 - a "Not checked out" notice when viewing a branch other than the checked-out one
 - no-remote or no-upstream warnings
-- status message or error message
+- a spinner with the running operation's label (opening, switching branch, rewriting, undoing)
+- otherwise the status message or error message
 - successful rewrite messages, including the auto-stash restore notice when applicable
 - an Undo button after a rewrite, which calls UndoLastOperation and reloads the log
 

@@ -1,21 +1,29 @@
 import { OpenRepository, GetCommitLog, SelectDirectory } from '../../wailsjs/go/app/App'
+import { useState } from 'react'
 import { useRepoStore } from '../store/repoStore'
+import Spinner from './Spinner'
 
 function looksLikeMissingPathError(errorText: string): boolean {
   return /does not exist|cannot find|no such file|cannot resolve path/i.test(errorText)
 }
 
 export default function RepoSelector() {
-  const { recentRepos, setRepo, setError, setStatus, removeRecentRepo } = useRepoStore()
+  const { recentRepos, activity, runGitOperation, setRepo, setError, removeRecentRepo } = useRepoStore()
+
+  // Path currently being opened, so its button can show a spinner.
+  const [openingPath, setOpeningPath] = useState<string | null>(null)
+  const isBusy = activity !== null
 
   async function openRepo(path: string) {
-    setStatus('Opening repository…')
     setError(null)
+    setOpeningPath(path)
 
     try {
-      const repoInfo = await OpenRepository(path)
-      const commits = await GetCommitLog()
-      setRepo(repoInfo, commits)
+      await runGitOperation('Opening repository…', async () => {
+        const repoInfo = await OpenRepository(path)
+        const commits = await GetCommitLog()
+        setRepo(repoInfo, commits)
+      })
     } catch (error) {
       const errorText = String(error)
       setError(errorText)
@@ -24,6 +32,8 @@ export default function RepoSelector() {
       if (looksLikeMissingPathError(errorText)) {
         removeRecentRepo(path)
       }
+    } finally {
+      setOpeningPath(null)
     }
   }
 
@@ -52,9 +62,18 @@ export default function RepoSelector() {
       </div>
       <button
         onClick={handleOpen}
-        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
+        disabled={isBusy}
+        className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Open Repository
+        {/* Recent entries show their own spinner; this one covers picker opens. */}
+        {openingPath && !recentRepos.includes(openingPath) ? (
+          <>
+            <Spinner className="h-4 w-4" />
+            Opening…
+          </>
+        ) : (
+          'Open Repository'
+        )}
       </button>
 
       {recentRepos.length === 0 && (
@@ -72,15 +91,18 @@ export default function RepoSelector() {
                 <button
                   type="button"
                   onClick={() => openRepo(path)}
-                  className="flex-1 rounded-md border border-gray-800 bg-gray-800/40 px-3 py-2 text-left text-sm text-gray-300 transition hover:border-indigo-700 hover:bg-gray-800"
+                  disabled={isBusy}
+                  className="flex flex-1 min-w-0 items-center gap-2 rounded-md border border-gray-800 bg-gray-800/40 px-3 py-2 text-left text-sm text-gray-300 transition hover:border-indigo-700 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
                   title={path}
                 >
                   <span className="block truncate">{path}</span>
+                  {openingPath === path && <Spinner className="ml-auto h-3.5 w-3.5 text-indigo-300" />}
                 </button>
                 <button
                   type="button"
                   onClick={() => removeRecentRepo(path)}
-                  className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-400 transition hover:border-gray-500 hover:text-gray-200"
+                  disabled={isBusy}
+                  className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-400 transition hover:border-gray-500 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
                   title="Remove from recent list"
                 >
                   Remove

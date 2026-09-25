@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
 import { GetCommitLog, ListBranches, SwitchBranch } from '../../wailsjs/go/app/App'
 import { useRepoStore } from '../store/repoStore'
+import Spinner from './Spinner'
 
 export default function BranchSelector() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
   const setRepo = useRepoStore((s) => s.setRepo)
   const setStatus = useRepoStore((s) => s.setStatus)
   const setError = useRepoStore((s) => s.setError)
+  const activity = useRepoStore((s) => s.activity)
+  const runGitOperation = useRepoStore((s) => s.runGitOperation)
 
   const [branches, setBranches] = useState<string[]>([])
-  const [isSwitching, setIsSwitching] = useState(false)
+  // Branch being switched to, so the spinner only shows for this control.
+  const [switchingTo, setSwitchingTo] = useState<string | null>(null)
 
   const repoPath = repoInfo?.path
 
@@ -33,21 +37,23 @@ export default function BranchSelector() {
       return
     }
 
-    setIsSwitching(true)
+    setSwitchingTo(branch)
 
     try {
-      const info = await SwitchBranch(branch)
-      const commits = await GetCommitLog()
-      setRepo(info, commits)
-      setStatus(
-        info.isCheckedOut ? `Viewing branch ${info.branch}` : `Viewing branch ${info.branch} (not checked out)`,
-      )
+      await runGitOperation(`Switching to ${branch}…`, async () => {
+        const info = await SwitchBranch(branch)
+        const commits = await GetCommitLog()
+        setRepo(info, commits)
+        setStatus(
+          info.isCheckedOut ? `Viewing branch ${info.branch}` : `Viewing branch ${info.branch} (not checked out)`,
+        )
+      })
     } catch (error) {
       setError(String(error))
       // The branch may have been deleted outside the app; refresh the list.
       loadBranches()
     } finally {
-      setIsSwitching(false)
+      setSwitchingTo(null)
     }
   }
 
@@ -60,13 +66,14 @@ export default function BranchSelector() {
 
   return (
     <label className="flex items-center gap-2 text-sm text-gray-400 shrink-0">
-      <span>Branch</span>
+      {switchingTo ? <Spinner className="h-3.5 w-3.5 text-indigo-300" /> : <span>Branch</span>}
       <select
-        value={repoInfo.branch}
+        // Show the branch being switched to while the switch is in progress.
+        value={switchingTo ?? repoInfo.branch}
         onChange={(e) => handleChange(e.target.value)}
         // Pick up branches created outside the app since the last load.
         onFocus={loadBranches}
-        disabled={isSwitching}
+        disabled={activity !== null}
         className="max-w-56 rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {options.map((branch) => (

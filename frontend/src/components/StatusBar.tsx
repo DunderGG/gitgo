@@ -1,11 +1,12 @@
 import { useRepoStore } from '../store/repoStore'
+import Spinner from './Spinner'
 
 export default function StatusBar() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
   const status = useRepoStore((s) => s.status)
   const error = useRepoStore((s) => s.error)
   const canUndo = useRepoStore((s) => s.canUndo)
-  const isUndoing = useRepoStore((s) => s.isUndoing)
+  const activity = useRepoStore((s) => s.activity)
   const undoLastOperation = useRepoStore((s) => s.undoLastOperation)
 
   return (
@@ -32,7 +33,13 @@ export default function StatusBar() {
         )}
       </div>
       <div className="flex items-center gap-3">
-        {error ? (
+        {/* A running operation takes precedence over the last status or error. */}
+        {activity ? (
+          <span className="flex items-center gap-2 text-indigo-300" role="status">
+            <Spinner />
+            {activity}
+          </span>
+        ) : error ? (
           <span className="text-red-400">{error}</span>
         ) : (
           <span className="text-gray-400">{status}</span>
@@ -41,11 +48,11 @@ export default function StatusBar() {
           <button
             type="button"
             onClick={undoLastOperation}
-            disabled={isUndoing}
+            disabled={activity !== null}
             title="Restore the branch to how it was before the last edit (Ctrl+Z)"
             className="rounded border border-gray-600 px-2 py-0.5 text-gray-200 transition hover:border-gray-500 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isUndoing ? 'Undoing…' : 'Undo'}
+            Undo
           </button>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { GetCommitDetail, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import ConfirmDialog, { ConfirmValues } from './ConfirmDialog'
+import Spinner from './Spinner'
 import { useRepoStore } from '../store/repoStore'
 
 interface EditFormState {
@@ -87,6 +88,8 @@ export default function EditPanel() {
   const setStatus = useRepoStore((s) => s.setStatus)
   const setError = useRepoStore((s) => s.setError)
   const setCanUndo = useRepoStore((s) => s.setCanUndo)
+  const activity = useRepoStore((s) => s.activity)
+  const runGitOperation = useRepoStore((s) => s.runGitOperation)
   const hasUnpushedCommits = useRepoStore((s) => s.commits.some((commit) => commit.isUnpushed))
   const pendingEditFocus = useRepoStore((s) => s.pendingEditFocus)
   const consumeEditFocus = useRepoStore((s) => s.consumeEditFocus)
@@ -196,31 +199,34 @@ export default function EditPanel() {
       return
     }
 
+    const hashToUpdate = selectedHash
     setIsSubmitting(true)
 
     try {
-      const result = await UpdateCommit({
-        hash: selectedHash,
-        message: form.message,
-        authorName: form.authorName,
-        authorEmail: form.authorEmail,
-        date: rfc3339Date,
+      await runGitOperation('Rewriting commit history…', async () => {
+        const result = await UpdateCommit({
+          hash: hashToUpdate,
+          message: form.message,
+          authorName: form.authorName,
+          authorEmail: form.authorEmail,
+          date: rfc3339Date,
+        })
+
+        const refreshedCommits = await RefreshLog()
+        setRepo(repoInfo, refreshedCommits)
+        // The rewrite itself succeeded even when result.success is false (only
+        // the stash pop failed), so it can always be undone at this point.
+        setCanUndo(true)
+
+        if (result.success) {
+          setError(null)
+          setStatus(result.message)
+        } else {
+          setError(result.message)
+        }
+
+        setShowConfirmDialog(false)
       })
-
-      const refreshedCommits = await RefreshLog()
-      setRepo(repoInfo, refreshedCommits)
-      // The rewrite itself succeeded even when result.success is false (only
-      // the stash pop failed), so it can always be undone at this point.
-      setCanUndo(true)
-
-      if (result.success) {
-        setError(null)
-        setStatus(result.message)
-      } else {
-        setError(result.message)
-      }
-
-      setShowConfirmDialog(false)
     } catch (error) {
       setError(String(error))
     } finally {
@@ -257,7 +263,10 @@ export default function EditPanel() {
         )}
 
         {isLoading && (
-          <div className="mt-4 text-sm text-gray-400">Loading commit details…</div>
+          <div className="mt-4 flex items-center gap-2 text-sm text-gray-400" role="status">
+            <Spinner />
+            Loading commit details…
+          </div>
         )}
 
         {loadError && (
@@ -276,7 +285,7 @@ export default function EditPanel() {
           className="mt-5 space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
-            if (!fieldsDisabled && hasChanges) {
+            if (!fieldsDisabled && hasChanges && activity === null) {
               setShowConfirmDialog(true)
             }
           }}
@@ -348,7 +357,7 @@ export default function EditPanel() {
             </button>
             <button
               type="submit"
-              disabled={fieldsDisabled || !hasChanges}
+              disabled={fieldsDisabled || !hasChanges || activity !== null}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Review Changes

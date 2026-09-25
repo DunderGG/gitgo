@@ -295,7 +295,7 @@ The root layout component. Renders a full-height flex column with three vertical
 
 A dropdown in the header listing local branches from `ListBranches()`. The list is loaded when a repository is opened and reloaded whenever the dropdown gains focus, so branches created outside the app show up.
 
-Choosing a branch calls `SwitchBranch(name)` then `GetCommitLog()` and writes both into the store with `setRepo`. The branch is **not** checked out: the log and edits target that branch's ref, and `StatusBar` shows a "Not checked out" notice while `repoInfo.isCheckedOut` is false.
+Choosing a branch calls `SwitchBranch(name)` then `GetCommitLog()` and writes both into the store with `setRepo`. The branch is **not** checked out: the log and edits target that branch's ref, and `StatusBar` shows a "Not checked out" notice while `repoInfo.isCheckedOut` is false. The switch runs inside `runGitOperation`: the dropdown shows the chosen branch with a spinner beside it and is disabled while any git operation is running.
 
 ---
 
@@ -308,7 +308,7 @@ It also renders a "Recent Repositories" list driven by `repoStore.recentRepos` (
 When the button is clicked, `handleOpen` runs the following sequence over the Wails IPC bridge:
 
 1. `SelectDirectory()` — opens the native OS folder picker. Returns empty string if cancelled; bails out immediately.
-2. `setStatus('Opening repository…')` — updates the status bar so the user knows something is happening.
+2. `runGitOperation('Opening repository…', …)` wraps steps 3–5: the status bar shows a spinner with that label, the Open and recent-repository buttons are disabled, and the clicked button shows its own spinner.
 3. `OpenRepository(path)` — validates the path on the Go side, builds `RepoState`, and returns `RepoInfo`.
 4. `GetCommitLog()` — walks the commit log and returns `[]CommitSummary`.
 5. `setRepo(repoInfo, commits)` — writes both into the Zustand store atomically. This triggers the `App.tsx` conditional to switch from `RepoSelector` to `CommitList`.
@@ -347,7 +347,8 @@ Behaviour:
 - With nothing selected, shows a hint: how to select a commit (click, or `↑` / `↓` and `Enter`), or, when the branch has no unpushed commits, that there is nothing to edit.
 - Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke.
 - Tracks the originally loaded values separately from the current form values so it can detect changes, support reset, and feed the confirmation dialog with an explicit before/after comparison.
-- Disables all editable controls while commit details are loading, while a rewrite is being submitted, and for pushed commits (`isUnpushed == false`).
+- Disables all editable controls while commit details are loading (shown with a spinner), while a rewrite is being submitted, and for pushed commits (`isUnpushed == false`). "Review Changes" is also disabled while any other git operation is running.
+- The rewrite (`UpdateCommit` + `RefreshLog`) runs inside `runGitOperation('Rewriting commit history…', …)`; the dialog's Apply button shows a spinner meanwhile.
 - On submit, opens `<ConfirmDialog>` instead of immediately rewriting history.
 - On confirm, calls `UpdateCommit` followed by `RefreshLog`, then writes the refreshed commit list back into the store and clears selection via `setRepo`.
 - Consumes the store's `pendingEditFocus` request (set by `Enter` in `CommitList`): once the selected commit has finished loading it focuses the message field if the commit is editable, and clears the request either way. It tracks the hash whose load finished (`loadedHash`) so it never acts on the previous commit's state right after the selection changes.
@@ -374,11 +375,17 @@ Behaviour:
 A persistent footer bar rendered on every screen. Reads three independent slices from the Zustand store:
 
 - **Left side** — when a repo is open: shows the branch name in indigo, plus a "Not checked out" notice when viewing a branch other than HEAD's. Conditionally appends a yellow "No remote configured" or "No upstream set" notice, driven by `repoInfo.hasRemote` and `repoInfo.hasUpstream`.
-- **Right side** — mutually exclusive: if `error` is non-null, shows it in red; otherwise shows the `status` string in muted grey. This means any error immediately replaces a previous status message.
+- **Right side** — mutually exclusive: while `activity` is set, shows a spinner with the running operation's label; otherwise, if `error` is non-null, shows it in red; otherwise shows the `status` string in muted grey. This means any error immediately replaces a previous status message.
 
 Successful rewrite messages from `UpdateCommit` also surface here. That includes the auto-stash notice (`"commit updated; stashed changes restored"`) returned by the backend when the worktree had to be stashed around the rewrite.
 
-When `canUndo` is true, an **Undo** button appears next to the status text. It calls the store's `undoLastOperation` action, the same one the `Ctrl+Z` shortcut uses, and is disabled while `isUndoing` is true.
+When `canUndo` is true, an **Undo** button appears next to the status text. It calls the store's `undoLastOperation` action, the same one the `Ctrl+Z` shortcut uses, and is disabled while any git operation is running (`activity` is set).
+
+---
+
+#### `frontend/src/components/Spinner.tsx`
+
+A small inline SVG spinner (Tailwind `animate-spin`) that inherits the surrounding text colour. Used by `StatusBar`, `RepoSelector`, `BranchSelector`, `EditPanel`, and `ConfirmDialog`.
 
 ---
 
@@ -410,7 +417,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `recentRepos` | `string[]` | Most-recent repository paths, stored in `localStorage`, deduplicated, and capped to 10 entries. |
 | `selectedHash` | `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
-| `isUndoing` | `boolean` | `true` while `undoLastOperation` is running; prevents a second undo from the button or `Ctrl+Z`. |
+| `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
 | `pendingEditFocus` | `boolean` | Set by `Enter` on a commit row; consumed by `EditPanel` after the commit loads. |
 | `status` | `string` | Most-recent informational message (e.g. `"Opened: /path/to/repo"`). |
 | `error` | `string \| null` | Most-recent error message. Non-null causes `StatusBar` to show it in red. Setting a new error does not clear `repoInfo` — the repo remains open. |
@@ -425,7 +432,8 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `setCanUndo(canUndo)` | Sets `canUndo`. `EditPanel` sets it to `true` after a rewrite. |
 | `undoLastOperation()` | Async. No-op unless `canUndo` and not already undoing. Calls `UndoLastOperation` then `RefreshLog` and writes the log back via `setRepo` (which clears `canUndo`). On failure, shows the error and asks `CanUndo()` whether undo is still possible. |
 | `requestEditFocus()` / `consumeEditFocus()` | Set / clear `pendingEditFocus`. |
-| `setStatus(message)` | Updates `status` without touching anything else. Used for in-progress messages like `"Opening repository…"`. |
+| `setStatus(message)` | Updates `status` without touching anything else. |
+| `runGitOperation(label, operation)` | Async. Runs one git operation at a time: sets `activity` to `label`, awaits `operation`, and clears `activity` afterwards. If another operation is already running it skips the new one and returns `undefined`. Errors propagate to the caller. Used for opening a repository, switching branch, rewriting, and undoing. |
 | `setError(error)` | Sets `error`. Pass `null` to dismiss. |
 | `clearRepo()` | Resets all state (including `selectedHash`) to initial values — returns the app to the `RepoSelector` view. |
 
@@ -475,7 +483,8 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite/auto-stash messages, Undo button after a rewrite |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
-| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `canUndo`, `isUndoing`, `pendingEditFocus`, `status`, `error`; also owns the shared `undoLastOperation` action |
+| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `canUndo`, `activity`, `pendingEditFocus`, `status`, `error`; also owns the shared `runGitOperation` and `undoLastOperation` actions |
+| `Spinner` | *(Phase 3)* Inline loading indicator used wherever a git operation is in progress |
 
 ### Backend
 
@@ -523,6 +532,7 @@ GitGo/
 │       ├── components/
 │       │   ├── BranchSelector.tsx  # (Phase 3)
 │       │   ├── RepoSelector.tsx
+│       │   ├── Spinner.tsx         # (Phase 3)
 │       │   ├── CommitList.tsx
 │       │   ├── EditPanel.tsx       # (Phase 2)
 │       │   ├── ConfirmDialog.tsx   # (Phase 2)

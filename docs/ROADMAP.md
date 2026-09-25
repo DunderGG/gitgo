@@ -121,7 +121,8 @@
   - [x] `↑` / `↓` — move selection between commits
 - [x] Empty state views (no repo open, no unpushed commits, repo with no remote)
   - [x] Also: branch with no upstream, and a clear `ErrNoCommits` for a repository with no commits yet
-- [ ] Loading indicators during git operations
+- [x] Loading indicators during git operations
+  - [x] Shared `activity` state: status-bar spinner, and only one git operation at a time
 - [ ] Error boundary in frontend with user-friendly messages
 - [ ] Application icon and Wails window configuration (title, min size)
 - [x] `CommitList` row selection state (highlight selected commit, drive `EditPanel`)
