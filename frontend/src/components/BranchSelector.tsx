@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { GetCommitLog, ListBranches, SwitchBranch } from '../../wailsjs/go/app/App'
 import { useRepoStore } from '../store/repoStore'
 import Spinner from './Spinner'
@@ -17,20 +17,20 @@ export default function BranchSelector() {
 
   const repoPath = repoInfo?.path
 
-  async function loadBranches() {
+  const loadBranches = useCallback(async () => {
     try {
       setBranches(await ListBranches())
     } catch (error) {
       setError(String(error))
     }
-  }
+  }, [setError])
 
   // Reload the list whenever a different repository is opened.
   useEffect(() => {
     if (repoPath) {
       loadBranches()
     }
-  }, [repoPath])
+  }, [repoPath, loadBranches])
 
   async function handleChange(branch: string) {
     if (!repoInfo || branch === repoInfo.branch) {

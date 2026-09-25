@@ -215,10 +215,11 @@ Found in the follow-up review (2026-09-25):
 
 > Goal: ship a binary users can install.
 
-- [ ] Set up GitHub Actions CI pipeline
-  - [ ] Run Go tests on push
-  - [ ] Run frontend lint + type-check on push
-  - [ ] Fail build if `go vet ./...` reports issues
+- [x] Set up GitHub Actions CI pipeline (`.github/workflows/ci.yml`)
+  - [x] Run Go tests on push and pull requests (Ubuntu + Windows)
+  - [x] Run frontend type-check and production build on push and pull requests
+  - [x] Run frontend lint (ESLint, zero warnings allowed) on push and pull requests
+  - [x] Fail build if `go vet ./...` reports issues
 - [ ] Build pipeline for all three platforms
   - [ ] Windows (`.exe` / NSIS installer via Wails)
   - [ ] macOS (`.app` bundle / `.dmg`)

@@ -38,7 +38,13 @@ Main scripts:
 
 - dev: starts Vite dev server
 - build: type-checks and builds production assets
+- typecheck: type-checks without building
+- lint: runs ESLint (fails on any warning)
 - preview: serves built assets locally
+
+### eslint.config.js
+
+ESLint configuration: the recommended JavaScript and TypeScript rules plus the React hooks and React Refresh rules. The generated wailsjs folder is ignored.
 
 ### tsconfig.json
 

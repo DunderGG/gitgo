@@ -73,7 +73,7 @@ TypeScript is the frontend language. Every file in `frontend/src/` is `.ts` or `
 
 - The auto-generated Wails bindings in `wailsjs/go/app/App.d.ts` and `wailsjs/go/models.ts` provide compile-time type safety across the IPC boundary — a mismatch between a Go return type and how the frontend uses it becomes a type error at build time, not a runtime crash.
 - The Zustand store state shape is typed, preventing silent property-name typos.
-- `tsc --noEmit` can be run in CI to catch type errors independently of the Vite build.
+- CI runs `npm run typecheck` to catch type errors independently of the Vite build.
 
 ---
 
