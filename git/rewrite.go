@@ -45,6 +45,36 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 	return RewriteCommits(state, map[plumbing.Hash]CommitEdit{targetHash: amendEdit(opts)}, opts.MoveBranches)
 }
 
+// ShiftDates moves the author date of each commit in hashes by opts.Shift, in
+// one rewrite (see RewriteCommits). Each commit keeps its own time zone offset,
+// identity and message. The committer date is shifted by the same amount when
+// opts.ShiftCommitter is set, and kept otherwise.
+//
+// Returns ErrCommitNotUnpushed if any commit is not in state.UnpushedHashes.
+func ShiftDates(state *RepoState, hashes []plumbing.Hash, opts ShiftOptions) error {
+	if opts.Shift == 0 {
+		return fmt.Errorf("the date shift is zero")
+	}
+	edits := make(map[plumbing.Hash]CommitEdit, len(hashes))
+	for _, hash := range hashes {
+		edits[hash] = shiftEdit(opts)
+	}
+	return RewriteCommits(state, edits, opts.MoveBranches)
+}
+
+// shiftEdit is the CommitEdit that moves a commit's dates by opts.Shift.
+// time.Time.Add keeps the location, so the offset is unchanged.
+func shiftEdit(opts ShiftOptions) CommitEdit {
+	return func(original *object.Commit) (object.Signature, object.Signature, string) {
+		author, committer := original.Author, original.Committer
+		author.When = author.When.Add(opts.Shift)
+		if opts.ShiftCommitter {
+			committer.When = committer.When.Add(opts.Shift)
+		}
+		return author, committer, original.Message
+	}
+}
+
 // CommitEdit returns the new author, committer and message for original. The
 // tree, parents and other headers are handled by RewriteCommits.
 type CommitEdit func(original *object.Commit) (author, committer object.Signature, message string)

@@ -33,11 +33,8 @@ CD -> wails : UpdateCommit(hash, EditRequest)
 wails -> app : UpdateCommit(hash, req)
 app -> app : Check state.UnpushedHashes[hash]
 
-alt last commit
-    app -> git  : AmendCommit(req)
-else older commit
-    app -> git  : RebaseRewrite(hash, req)
-end
+app -> git  : RebaseRewrite(hash, req)
+note right of git : RewriteCommits rebuilds the\nfirst-parent chain above the commit\n(just the commit itself at the tip)
 
 git  --> app : OperationResult
 app --> wails : OperationResult

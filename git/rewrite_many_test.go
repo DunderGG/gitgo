@@ -143,3 +143,42 @@ func TestRewriteCommits_RejectsNoEdits(test *testing.T) {
 		test.Fatal("expected an error for no edits")
 	}
 }
+
+// TestShiftDates_KeepsOffsetAndOptionallyShiftsCommitter verifies that a
+// shift keeps each commit's own time zone offset, and moves the committer
+// date only when asked.
+func TestShiftDates_KeepsOffsetAndOptionallyShiftsCommitter(test *testing.T) {
+	for _, shiftCommitter := range []bool{false, true} {
+		dir := test.TempDir()
+		gitCmd := initRepo(test, dir)
+		addCommit(test, dir, "first", gitCmd)
+		gitCmd("commit", "--amend", "--no-edit", "--date=2024-01-01T12:00:00+05:30")
+
+		opts := git.ShiftOptions{Shift: -90 * time.Minute, ShiftCommitter: shiftCommitter}
+		if err := git.ShiftDates(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, opts); err != nil {
+			test.Fatalf("git.ShiftDates: %v", err)
+		}
+
+		wantCommitter := testCommitDate.Format(time.RFC3339)
+		if shiftCommitter {
+			wantCommitter = testCommitDate.Add(-90 * time.Minute).Format(time.RFC3339)
+		}
+		want := "2024-01-01T10:30:00+05:30 " + wantCommitter
+		if got := gitOutputFromDir(test, dir, "git", "log", "-1", "--format=%aI %cI"); got != want {
+			test.Errorf("shiftCommitter=%v: author/committer dates = %q, want %q", shiftCommitter, got, want)
+		}
+	}
+}
+
+// TestShiftDates_RejectsZeroShift verifies that a zero shift is an error
+// rather than a rewrite that only changes hashes.
+func TestShiftDates_RejectsZeroShift(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "only", gitCmd)
+
+	err := git.ShiftDates(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, git.ShiftOptions{})
+	if err == nil {
+		test.Fatal("expected an error for a zero shift")
+	}
+}

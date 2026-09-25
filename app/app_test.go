@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -164,7 +165,7 @@ func TestUpdateCommit_MovesBranchesAndUndoRestoresThem(test *testing.T) {
 	local := runGit(test, dir, "rev-parse", "HEAD")
 	runGit(test, dir, "branch", "same-tip")
 
-	refs, err := app.GetAffectedRefs(local)
+	refs, err := app.GetAffectedRefs([]string{local})
 	if err != nil {
 		test.Fatalf("GetAffectedRefs: %v", err)
 	}
@@ -267,6 +268,66 @@ func TestUpdateCommit_RejectsInvalidAuthor(test *testing.T) {
 	req.AuthorName = "Name <with brackets>"
 	if _, err := app.UpdateCommit(req); !errors.Is(err, gitpkg.ErrInvalidIdentity) {
 		test.Fatalf("expected ErrInvalidIdentity, got %v", err)
+	}
+	if got := runGit(test, dir, "rev-parse", "HEAD"); got != head {
+		test.Errorf("HEAD moved from %s to %s", head, got)
+	}
+}
+
+// TestShiftCommitDates_ShiftsAndUndoRestores verifies that several unpushed
+// commits are shifted in one rewrite, keeping their committer dates, and
+// that a single undo restores the original branch tip.
+func TestShiftCommitDates_ShiftsAndUndoRestores(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	commitFile(test, dir, "second")
+	if _, err := app.ReloadRepository(); err != nil {
+		test.Fatalf("ReloadRepository: %v", err)
+	}
+	before := runGit(test, dir, "rev-parse", "HEAD")
+	datesBefore := runGit(test, dir, "log", "-2", "--format=%at %ct")
+
+	result, err := app.ShiftCommitDates(ShiftRequest{
+		Hashes:  []string{before, runGit(test, dir, "rev-parse", "HEAD~1")},
+		Minutes: 90,
+	})
+	if err != nil || !result.Success || result.Message != "2 commits shifted" {
+		test.Fatalf("ShiftCommitDates = %+v, %v", result, err)
+	}
+
+	beforeLines := strings.Split(datesBefore, "\n")
+	afterLines := strings.Split(runGit(test, dir, "log", "-2", "--format=%at %ct"), "\n")
+	for i := range beforeLines {
+		var authorBefore, committerBefore, authorAfter, committerAfter int64
+		fmt.Sscan(beforeLines[i], &authorBefore, &committerBefore)
+		fmt.Sscan(afterLines[i], &authorAfter, &committerAfter)
+		if authorAfter-authorBefore != 90*60 {
+			test.Errorf("commit %d author date moved by %ds, want %ds", i, authorAfter-authorBefore, 90*60)
+		}
+		if committerAfter != committerBefore {
+			test.Errorf("commit %d committer date changed: %d -> %d", i, committerBefore, committerAfter)
+		}
+	}
+
+	if result, err := app.UndoLastOperation(); err != nil || !result.Success {
+		test.Fatalf("UndoLastOperation = %+v, %v", result, err)
+	}
+	if got := runGit(test, dir, "rev-parse", "HEAD"); got != before {
+		test.Errorf("HEAD = %s after undo, want %s", got, before)
+	}
+}
+
+// TestShiftCommitDates_RejectsPushedCommit verifies that including a pushed
+// commit refuses the whole shift.
+func TestShiftCommitDates_RejectsPushedCommit(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	head := runGit(test, dir, "rev-parse", "HEAD")
+
+	_, err := app.ShiftCommitDates(ShiftRequest{
+		Hashes:  []string{head, runGit(test, dir, "rev-parse", "HEAD~1")},
+		Minutes: 60,
+	})
+	if !errors.Is(err, gitpkg.ErrCommitNotUnpushed) {
+		test.Fatalf("expected ErrCommitNotUnpushed, got %v", err)
 	}
 	if got := runGit(test, dir, "rev-parse", "HEAD"); got != head {
 		test.Errorf("HEAD moved from %s to %s", head, got)

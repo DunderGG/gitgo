@@ -239,42 +239,15 @@ func (app *App) RefreshLog() ([]CommitSummary, error) {
 // as they are, staged or not: rewrites only change commit metadata, never file
 // trees, so the index and working tree stay consistent with the moved branch.
 //
-// Under the hood, branch-tip rewrites use AmendCommit (faster, no graph walk) and
-// older commits use RebaseRewrite (first-parent chain rebuild).
+// The commit is rewritten with RebaseRewrite, which rebuilds the first-parent
+// chain above it (just the commit itself when it is the branch tip).
 func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
-	app.mutex.Lock()
-	state := app.repoState
-	app.mutex.Unlock()
-
-	if state == nil {
-		return OperationResult{}, fmt.Errorf("no repository is open; call OpenRepository first")
-	}
-
-	// Re-read the repository before the safety check: the state was computed
-	// when the view was loaded, and commits may have been pushed (or the branch
-	// moved) from a terminal since then. The fresh state is kept so the UI's
-	// next refresh reflects it even when the edit is rejected.
-	state, err := gitpkg.OpenBranch(state.Path, state.Branch)
-	if err != nil {
-		return OperationResult{}, err
-	}
-	app.mutex.Lock()
-	app.repoState = state
-	app.mutex.Unlock()
-
-	// Server-side safety check: refuse to rewrite a pushed commit. This mirrors
-	// the check inside AmendCommit / RebaseRewrite but is done here first so a
-	// rejected edit fails before any other work.
-	commitHash := plumbing.NewHash(req.Hash)
-	if !state.UnpushedHashes[commitHash] {
-		return OperationResult{}, gitpkg.ErrCommitNotUnpushed
-	}
-
 	// Parse the date string supplied by the frontend (RFC 3339 / ISO 8601).
 	// The offset in the string becomes the commit's time zone. An empty date
 	// leaves the zero time, which keeps the original author date.
 	var date time.Time
 	if req.Date != "" {
+		var err error
 		date, err = time.Parse(time.RFC3339, req.Date)
 		if err != nil {
 			return OperationResult{}, fmt.Errorf("invalid date %q: %w", req.Date, err)
@@ -290,9 +263,73 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		SyncCommitterDate: req.SyncCommitterDate,
 		MoveBranches:      req.MoveBranches,
 	}
+	commitHash := plumbing.NewHash(req.Hash)
 
-	// Branch-tip rewrites use AmendCommit (no graph walk needed).
-	// Older commits use RebaseRewrite (rebuilds the full chain above the target).
+	return app.runRewrite([]plumbing.Hash{commitHash}, req.MoveBranches, "commit updated", func(state *gitpkg.RepoState) error {
+		return gitpkg.RebaseRewrite(state, commitHash, opts)
+	})
+}
+
+// ShiftCommitDates moves the author date of each unpushed commit in req by
+// req.Minutes, in a single rewrite that one undo reverts. Each commit keeps
+// its own time zone offset; see UpdateCommit for what else is left alone.
+func (app *App) ShiftCommitDates(req ShiftRequest) (OperationResult, error) {
+	hashes := make([]plumbing.Hash, len(req.Hashes))
+	for i, hash := range req.Hashes {
+		hashes[i] = plumbing.NewHash(hash)
+	}
+	opts := gitpkg.ShiftOptions{
+		Shift:          time.Duration(req.Minutes) * time.Minute,
+		ShiftCommitter: req.ShiftCommitter,
+		MoveBranches:   req.MoveBranches,
+	}
+
+	message := fmt.Sprintf("%d commits shifted", len(hashes))
+	if len(hashes) == 1 {
+		message = "1 commit shifted"
+	}
+	return app.runRewrite(hashes, req.MoveBranches, message, func(state *gitpkg.RepoState) error {
+		return gitpkg.ShiftDates(state, hashes, opts)
+	})
+}
+
+// runRewrite runs a history rewrite of the given commits against a freshly
+// read repository state, then records it for undo and refreshes the stored
+// state. successMessage is returned when everything, including moving
+// moveBranches, succeeded.
+func (app *App) runRewrite(hashes []plumbing.Hash, moveBranches []string, successMessage string, rewrite func(state *gitpkg.RepoState) error) (OperationResult, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return OperationResult{}, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+	if len(hashes) == 0 {
+		return OperationResult{}, fmt.Errorf("no commits selected")
+	}
+
+	// Re-read the repository before the safety check: the state was computed
+	// when the view was loaded, and commits may have been pushed (or the branch
+	// moved) from a terminal since then. The fresh state is kept so the UI's
+	// next refresh reflects it even when the edit is rejected.
+	state, err := gitpkg.OpenBranch(state.Path, state.Branch)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	app.mutex.Lock()
+	app.repoState = state
+	app.mutex.Unlock()
+
+	// Server-side safety check: refuse to rewrite a pushed commit. This mirrors
+	// the check inside the git layer but is done here first so a rejected edit
+	// fails before any other work.
+	for _, hash := range hashes {
+		if !state.UnpushedHashes[hash] {
+			return OperationResult{}, gitpkg.ErrCommitNotUnpushed
+		}
+	}
+
 	branchRefName := plumbing.NewBranchReferenceName(state.Branch)
 	tip, err := state.Repo.Reference(branchRefName, true)
 	if err != nil {
@@ -301,14 +338,9 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 
 	// Note where the other branches point, so the ones the rewrite moves can
 	// be moved back by undo.
-	otherTipsBefore := branchTips(state, req.MoveBranches)
+	otherTipsBefore := branchTips(state, moveBranches)
 
-	var rewriteErr error
-	if tip.Hash() == commitHash {
-		rewriteErr = gitpkg.AmendCommit(state, opts)
-	} else {
-		rewriteErr = gitpkg.RebaseRewrite(state, commitHash, opts)
-	}
+	rewriteErr := rewrite(state)
 
 	// Some requested branches could not be moved, but the edit itself stands:
 	// treat it as a success with a warning.
@@ -344,12 +376,12 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	if refsNotMoved != nil {
 		return OperationResult{Success: false, Message: refsNotMoved.Error()}, nil
 	}
-	return OperationResult{Success: true, Message: "commit updated"}, nil
+	return OperationResult{Success: true, Message: successMessage}, nil
 }
 
 // GetAffectedRefs lists the other branches and tags that an edit of the given
-// commit would leave pointing at old commits, for the confirm dialog.
-func (app *App) GetAffectedRefs(hash string) ([]AffectedRef, error) {
+// commits would leave pointing at old commits, for the confirm dialog.
+func (app *App) GetAffectedRefs(hashes []string) ([]AffectedRef, error) {
 	app.mutex.Lock()
 	state := app.repoState
 	app.mutex.Unlock()
@@ -358,7 +390,11 @@ func (app *App) GetAffectedRefs(hash string) ([]AffectedRef, error) {
 		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
 	}
 
-	refs, err := gitpkg.FindAffectedRefs(state, plumbing.NewHash(hash))
+	targets := make([]plumbing.Hash, len(hashes))
+	for i, hash := range hashes {
+		targets[i] = plumbing.NewHash(hash)
+	}
+	refs, err := gitpkg.FindAffectedRefs(state, targets...)
 	if err != nil {
 		return nil, err
 	}

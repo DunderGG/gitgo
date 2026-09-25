@@ -32,32 +32,36 @@ type AffectedRef struct {
 	Kind AffectedRefKind
 }
 
-// RefsNotMovedError is returned by AmendCommit / RebaseRewrite when the edit
-// itself succeeded but some of the requested branches could not be moved.
+// RefsNotMovedError is returned by RewriteCommits (and the functions built on
+// it) when the rewrite itself succeeded but some of the requested branches
+// could not be moved.
 type RefsNotMovedError struct {
 	Branches []string
 	Err      error
 }
 
 func (err *RefsNotMovedError) Error() string {
-	return fmt.Sprintf("commit updated, but could not move branch %s: %v", strings.Join(err.Branches, ", "), err.Err)
+	return fmt.Sprintf("history rewritten, but could not move branch %s: %v", strings.Join(err.Branches, ", "), err.Err)
 }
 
 func (err *RefsNotMovedError) Unwrap() error { return err.Err }
 
 // FindAffectedRefs returns the local branches and tags, other than
-// state.Branch, that an edit of targetHash would leave pointing at old
+// state.Branch, that an edit of the targets would leave pointing at old
 // commits: everything that points at a commit in the rewritten chain (the
-// first-parent chain from the branch tip down to targetHash), plus local
-// branches whose history contains one of those commits.
+// first-parent chain from the branch tip down to the oldest target), plus
+// local branches whose history contains one of those commits.
 //
 // Results are sorted by kind, then name.
-func FindAffectedRefs(state *RepoState, targetHash plumbing.Hash) ([]AffectedRef, error) {
+func FindAffectedRefs(state *RepoState, targets ...plumbing.Hash) ([]AffectedRef, error) {
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("no commits to check")
+	}
 	tip, err := branchTip(state)
 	if err != nil {
 		return nil, err
 	}
-	chain, err := collectChain(state, tip.Hash(), targetHash)
+	chain, err := collectChain(state, tip.Hash(), targets...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,10 +95,10 @@ func FindAffectedRefs(state *RepoState, targetHash plumbing.Hash) ([]AffectedRef
 	}
 
 	if len(otherTips) > 0 {
-		// Commits below the target are shared with any fork and are never
-		// rewritten, so a branch's walk can stop there.
-		target := chain[len(chain)-1]
-		below, err := reachableFrom(state.Repo, target.ParentHashes, nil)
+		// Commits below the oldest target are shared with any fork and are
+		// never rewritten, so a branch's walk can stop there.
+		oldest := chain[len(chain)-1]
+		below, err := reachableFrom(state.Repo, oldest.ParentHashes, nil)
 		if err != nil {
 			return nil, fmt.Errorf("walking history: %w", err)
 		}

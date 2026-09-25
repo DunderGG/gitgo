@@ -26,6 +26,19 @@ type AmendOptions struct {
 	MoveBranches []string
 }
 
+// ShiftOptions describes a date shift applied to several commits (see
+// ShiftDates).
+type ShiftOptions struct {
+	// Shift is added to each commit's author date. It must not be zero.
+	Shift time.Duration
+	// ShiftCommitter also adds Shift to each commit's committer date. When
+	// false the committer dates are kept.
+	ShiftCommitter bool
+	// MoveBranches names other local branches to move along with the
+	// rewrite, as in AmendOptions.
+	MoveBranches []string
+}
+
 // CommitEntry is the git-layer representation of a single commit.
 // The app layer converts this to app.CommitSummary.
 type CommitEntry struct {

@@ -327,7 +327,7 @@ export default function EditPanel() {
       return
     }
     try {
-      setAffectedRefs(await GetAffectedRefs(selectedHash))
+      setAffectedRefs(await GetAffectedRefs([selectedHash]))
     } catch (error) {
       setError(errorText(error))
       return

@@ -103,6 +103,20 @@ type EditRequest struct {
 	MoveBranches []string `json:"moveBranches"`
 }
 
+// ShiftRequest describes a date shift applied to several unpushed commits.
+type ShiftRequest struct {
+	Hashes []string `json:"hashes"`
+	// Minutes is added to each commit's author date; negative moves it
+	// earlier. It must not be zero.
+	Minutes int `json:"minutes"`
+	// ShiftCommitter also shifts each commit's committer date by Minutes.
+	// When false the committer dates are kept.
+	ShiftCommitter bool `json:"shiftCommitter"`
+	// MoveBranches names other local branches (from GetAffectedRefs) to move
+	// to the rewritten commits along with the edited branch.
+	MoveBranches []string `json:"moveBranches"`
+}
+
 // AffectedRef is a branch or tag that an edit would leave pointing at old
 // commits. Kind is "branch" (can be moved with the edit), "forked-branch"
 // (has its own commits on top of a rewritten commit) or "tag" (never moved).
