@@ -245,6 +245,10 @@ export default function HelpDialog() {
                 The committer name and email are always kept; only the author can be changed.
               </li>
               <li>
+                Need a git command GitGo does not offer? Click <Ui>&gt;_</Ui> in the header to open a terminal in the
+                repository folder. Running git there needs git installed; GitGo itself does not.
+              </li>
+              <li>
                 Made changes outside GitGo, for example a new commit in a terminal? Press <Kbd>F5</Kbd> or click{' '}
                 <Ui>↻</Ui> in the header to reload.
               </li>

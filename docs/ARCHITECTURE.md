@@ -182,6 +182,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `ListBranches() ([]string, error)` | Returns the short names of all local branches, sorted alphabetically. |
 | `UndoLastOperation() (OperationResult, error)` | Re-opens the repo and calls `git.ResetBranch` to move the branch from the post-rewrite tip back to the pre-rewrite tip. Only one level of undo is kept. Returns `ErrBranchMoved` (and drops the record) if the branch no longer points at the rewritten tip, e.g. a new commit was made. The worktree is not touched: rewrites only change metadata, so both tips have the same tree. |
 | `CanUndo() bool` | Reports whether `lastRewrite` is set. Used by the frontend to re-sync the Undo button after a failed undo. |
+| `OpenTerminal() error` | *(`app/terminal.go`)* Opens a terminal window in the repository root for running git by hand. Windows: Windows Terminal (`wt.exe -d`), else `cmd.exe` in a new console; macOS: `open -a Terminal`; Linux: `$TERMINAL`, then common emulators. The terminal is detached and outlives GitGo. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
 
@@ -304,7 +305,7 @@ A class component (React has no hook equivalent) that catches errors thrown whil
 
 The root layout component. Renders a full-height flex column with three vertical sections:
 
-- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation).
+- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`. A **?** button that opens `HelpDialog` is shown on every screen.
 - **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
@@ -549,7 +550,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `ShiftCommitDates`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `ShiftCommitDates`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -572,6 +573,7 @@ GitGo/
 │
 ├── app/
 │   ├── app.go               # App struct — bound methods exposed to frontend
+│   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
 │   └── models.go            # DTOs shared across layers
 │
 ├── git/

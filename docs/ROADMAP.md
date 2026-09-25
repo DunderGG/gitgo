@@ -237,6 +237,7 @@ Found in the follow-up review (2026-09-25):
 - [ ] Open commit details in an external tool or terminal command
 - [ ] Export commit metadata or history summaries as text/JSON for sharing
 - [x] In-app help (`HelpDialog`, `?` button in the header or `F1`): walkthrough of single and bulk edits, review and undo, keyboard shortcuts and safety notes
+- [x] Header button that opens a terminal in the repository folder (`OpenTerminal`; Windows Terminal or cmd, Terminal.app, `$TERMINAL` or a common Linux emulator)
 - [x] Add tiny date/time buttons under the date field to add +1 hour, +1 day, current time, etc.
   - [x] `EditPanel` has −1d, −1h, +1h, +1d (shift the wall-clock time, keeping the offset) and Now (current time and this computer's offset)
 - [x] Shift the dates of several selected commits at once (multi-select in `CommitList`, ±1h/±1d in a bulk panel)

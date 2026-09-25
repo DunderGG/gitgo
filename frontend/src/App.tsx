@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { OpenTerminal } from '../wailsjs/go/app/App'
 import { WindowSetTitle } from '../wailsjs/runtime/runtime'
 import BranchSelector from './components/BranchSelector'
 import RepoSelector from './components/RepoSelector'
@@ -27,7 +28,19 @@ function App() {
   const isMultiSelect = useRepoStore((s) => s.selectedHashes.length > 1)
   const reloadRepository = useRepoStore((s) => s.reloadRepository)
   const setHelpOpen = useRepoStore((s) => s.setHelpOpen)
+  const setStatus = useRepoStore((s) => s.setStatus)
+  const setError = useRepoStore((s) => s.setError)
   useKeyboardShortcuts()
+
+  async function openTerminal() {
+    try {
+      await OpenTerminal()
+      setError(null)
+      setStatus('Opened a terminal in the repository folder')
+    } catch (error) {
+      setError(String(error))
+    }
+  }
 
   const title = windowTitle(repoInfo?.path, repoInfo?.branch)
   useEffect(() => {
@@ -62,6 +75,15 @@ function App() {
                 className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {activity === reloadActivityLabel ? <Spinner className="h-4 w-4" /> : '↻'}
+              </button>
+              <button
+                type="button"
+                onClick={openTerminal}
+                title="Open a terminal in the repository folder"
+                aria-label="Open terminal"
+                className="rounded-md border border-gray-700 px-2 py-1 font-mono text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+              >
+                &gt;_
               </button>
             </>
           )}

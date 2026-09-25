@@ -22,6 +22,7 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - **Preview before applying:** every change is shown old-vs-new in a confirmation dialog
 - **One-step undo:** revert the last rewrite with `Ctrl+Z`
 - **Work on any branch:** view and edit other local branches without checking them out
+- **Terminal shortcut:** open a terminal in the repository folder from the header when you need to run a git command by hand
 - **In-app help:** a walkthrough of editing and applying changes, every keyboard shortcut and the safety rules, behind the `?` button or `F1`
 - **Leaves your work alone:** uncommitted changes (staged or not) and the stash are never touched
 

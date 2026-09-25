@@ -100,7 +100,7 @@ Global stylesheet. Right now it only imports Tailwind base layers.
 
 Top-level layout and routing-by-state:
 
-- Header with app title, currently opened repo path, BranchSelector, and a ↻ reload button
+- Header with app title, currently opened repo path, BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), and a ? help button
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
@@ -278,6 +278,7 @@ Methods currently exposed include:
 - ListBranches
 - UndoLastOperation
 - CanUndo
+- OpenTerminal
 
 ### wailsjs/go/app/App.js
 
