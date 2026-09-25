@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { GetCommitDetail, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import ConfirmDialog, { ConfirmValues } from './ConfirmDialog'
 import { useRepoStore } from '../store/repoStore'
@@ -79,7 +79,14 @@ export default function EditPanel() {
   const setStatus = useRepoStore((s) => s.setStatus)
   const setError = useRepoStore((s) => s.setError)
   const setCanUndo = useRepoStore((s) => s.setCanUndo)
+  const pendingEditFocus = useRepoStore((s) => s.pendingEditFocus)
+  const consumeEditFocus = useRepoStore((s) => s.consumeEditFocus)
 
+  const messageRef = useRef<HTMLTextAreaElement>(null)
+  // Hash whose detail request has finished (successfully or not). Compared
+  // with selectedHash so the focus effect never acts on the previous commit's
+  // state in the render right after the selection changes.
+  const [loadedHash, setLoadedHash] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -97,6 +104,7 @@ export default function EditPanel() {
     let isActive = true
 
     if (!selectedHash) {
+      setLoadedHash(null)
       setIsLoading(false)
       setLoadError(null)
       setIsUnpushed(false)
@@ -139,6 +147,7 @@ export default function EditPanel() {
       } finally {
         if (isActive) {
           setIsLoading(false)
+          setLoadedHash(hashToLoad)
         }
       }
     }
@@ -151,6 +160,19 @@ export default function EditPanel() {
   }, [selectedHash])
 
   const fieldsDisabled = !selectedHash || isLoading || isSubmitting || !isUnpushed
+
+  // Handle the Enter shortcut from CommitList: once the selected commit has
+  // loaded, focus the message field if it is editable. The request is consumed
+  // either way so a later click does not steal focus unexpectedly.
+  useEffect(() => {
+    if (!pendingEditFocus || isLoading || !selectedHash || loadedHash !== selectedHash) {
+      return
+    }
+    consumeEditFocus()
+    if (!fieldsDisabled && !loadError) {
+      messageRef.current?.focus()
+    }
+  }, [pendingEditFocus, isLoading, selectedHash, loadedHash, fieldsDisabled, loadError, consumeEditFocus])
   const hasChanges = originalForm !== null && !formsEqual(form, originalForm)
 
   async function handleConfirmApply() {
@@ -248,6 +270,7 @@ export default function EditPanel() {
               Message
             </label>
             <textarea
+              ref={messageRef}
               value={form.message}
               onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
               disabled={fieldsDisabled}

@@ -1,5 +1,3 @@
-import { useState } from 'react'
-import { CanUndo, RefreshLog, UndoLastOperation } from '../../wailsjs/go/app/App'
 import { useRepoStore } from '../store/repoStore'
 
 export default function StatusBar() {
@@ -7,36 +5,8 @@ export default function StatusBar() {
   const status = useRepoStore((s) => s.status)
   const error = useRepoStore((s) => s.error)
   const canUndo = useRepoStore((s) => s.canUndo)
-  const setRepo = useRepoStore((s) => s.setRepo)
-  const setStatus = useRepoStore((s) => s.setStatus)
-  const setError = useRepoStore((s) => s.setError)
-  const setCanUndo = useRepoStore((s) => s.setCanUndo)
-
-  const [isUndoing, setIsUndoing] = useState(false)
-
-  async function handleUndo() {
-    if (!repoInfo || isUndoing) {
-      return
-    }
-
-    setIsUndoing(true)
-
-    try {
-      const result = await UndoLastOperation()
-      const refreshedCommits = await RefreshLog()
-      // setRepo clears canUndo, which is correct: only one level is kept.
-      setRepo(repoInfo, refreshedCommits)
-      setError(null)
-      setStatus(result.message)
-    } catch (err) {
-      setError(String(err))
-      // The backend drops the undo record when it can never succeed (e.g. the
-      // branch moved), so ask it whether the button should stay.
-      setCanUndo(await CanUndo().catch(() => false))
-    } finally {
-      setIsUndoing(false)
-    }
-  }
+  const isUndoing = useRepoStore((s) => s.isUndoing)
+  const undoLastOperation = useRepoStore((s) => s.undoLastOperation)
 
   return (
     <footer className="flex items-center justify-between px-4 py-1.5 bg-gray-800 border-t border-gray-700 text-xs shrink-0">
@@ -70,9 +40,9 @@ export default function StatusBar() {
         {repoInfo && canUndo && (
           <button
             type="button"
-            onClick={handleUndo}
+            onClick={undoLastOperation}
             disabled={isUndoing}
-            title="Restore the branch to how it was before the last edit"
+            title="Restore the branch to how it was before the last edit (Ctrl+Z)"
             className="rounded border border-gray-600 px-2 py-0.5 text-gray-200 transition hover:border-gray-500 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isUndoing ? 'Undoing…' : 'Undo'}

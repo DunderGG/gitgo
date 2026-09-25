@@ -116,6 +116,9 @@ Actions currently include:
 - setRepo: save repo info and commit list
 - removeRecentRepo: remove one path from the recent list
 - selectCommit: set selected row
+- setCanUndo: show or hide the Undo button
+- undoLastOperation: undo the last rewrite (used by the Undo button and Ctrl+Z)
+- requestEditFocus / consumeEditFocus: ask EditPanel to focus its form after Enter on a row
 - setStatus: set status message
 - setError: set error message
 - clearRepo: reset store to initial state
@@ -147,6 +150,8 @@ Current behavior:
 - unpushed commits use an indigo dot
 - pushed commits use a gray dot and reduced opacity
 - rows are selectable and highlight when selected
+- Enter on a row selects it and focuses the edit form (editable commits only)
+- Up / Down arrows move the selection between rows
 
 ### src/components/EditPanel.tsx
 
@@ -169,6 +174,7 @@ Current behavior:
 - shows current values and new values side-by-side
 - highlights changed values
 - provides Apply and Cancel actions
+- Escape cancels the dialog; Ctrl+Z is blocked while it is open
 
 ### src/components/BranchSelector.tsx
 
@@ -190,6 +196,13 @@ Shows:
 - status message or error message
 - successful rewrite messages, including the auto-stash restore notice when applicable
 - an Undo button after a rewrite, which calls UndoLastOperation and reloads the log
+
+### src/hooks/useKeyboardShortcuts.ts
+
+App-wide keyboard shortcuts, registered once from App.tsx:
+
+- Ctrl+Z (Cmd+Z on macOS): undo the last rewrite; ignored while typing in a field so normal text undo still works
+- Escape: close the edit panel by clearing the selection, and return focus to the commit row
 
 ## Wails binding files you will see
 

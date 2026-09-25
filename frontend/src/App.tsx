@@ -3,10 +3,12 @@ import RepoSelector from './components/RepoSelector'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useRepoStore } from './store/repoStore'
 
 function App() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
+  useKeyboardShortcuts()
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-gray-100">

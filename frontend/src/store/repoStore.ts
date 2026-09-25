@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { CanUndo, RefreshLog, UndoLastOperation } from '../../wailsjs/go/app/App'
 
 const recentReposStorageKey = 'gitgo.recentRepos'
 const maxRecentRepos = 10
@@ -72,23 +73,34 @@ interface RepoStore {
   // setRepo call (open, refresh, undo) resets it; EditPanel sets it again
   // after a rewrite.
   canUndo: boolean
+  // True while an undo request is in flight; shared by the Undo button and
+  // the Ctrl+Z shortcut so neither can start a second one.
+  isUndoing: boolean
+  // Set by the Enter shortcut on a commit row. EditPanel consumes it once the
+  // commit has loaded and focuses the first field if the commit is editable.
+  pendingEditFocus: boolean
   status: string
   error: string | null
   setRepo: (info: RepoInfo, commits: CommitSummary[]) => void
   removeRecentRepo: (path: string) => void
   selectCommit: (hash: string | null) => void
+  requestEditFocus: () => void
+  consumeEditFocus: () => void
   setCanUndo: (canUndo: boolean) => void
+  undoLastOperation: () => Promise<void>
   setStatus: (message: string) => void
   setError: (error: string | null) => void
   clearRepo: () => void
 }
 
-export const useRepoStore = create<RepoStore>((set) => ({
+export const useRepoStore = create<RepoStore>((set, get) => ({
   repoInfo: null,
   commits: [],
   recentRepos: loadRecentRepos(),
   selectedHash: null,
   canUndo: false,
+  isUndoing: false,
+  pendingEditFocus: false,
   status: '',
   error: null,
 
@@ -119,7 +131,35 @@ export const useRepoStore = create<RepoStore>((set) => ({
 
   selectCommit: (hash) => set({ selectedHash: hash }),
 
+  requestEditFocus: () => set({ pendingEditFocus: true }),
+
+  consumeEditFocus: () => set({ pendingEditFocus: false }),
+
   setCanUndo: (canUndo) => set({ canUndo }),
+
+  undoLastOperation: async () => {
+    const { repoInfo, canUndo, isUndoing, setRepo } = get()
+    if (!repoInfo || !canUndo || isUndoing) {
+      return
+    }
+
+    set({ isUndoing: true })
+
+    try {
+      const result = await UndoLastOperation()
+      const refreshedCommits = await RefreshLog()
+      // setRepo clears canUndo, which is correct: only one level is kept.
+      setRepo(repoInfo, refreshedCommits)
+      set({ error: null, status: result.message })
+    } catch (err) {
+      // The backend drops the undo record when it can never succeed (e.g. the
+      // branch moved), so ask it whether the button should stay.
+      const stillUndoable = await CanUndo().catch(() => false)
+      set({ error: String(err), canUndo: stillUndoable })
+    } finally {
+      set({ isUndoing: false })
+    }
+  },
 
   setStatus: (message) => set({ status: message }),
 

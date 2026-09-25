@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+
 interface ConfirmDialogProps {
   isOpen: boolean
   isSubmitting: boolean
@@ -62,6 +64,34 @@ export default function ConfirmDialog({
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
+  // While open, the dialog owns Escape (cancel) and blocks Ctrl+Z so the
+  // app-wide shortcuts cannot clear the selection or undo behind the modal.
+  // The listener runs in the capture phase so it fires before the app-wide
+  // window listener, and stops the event from reaching it.
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const isUndoShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z'
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!isSubmitting) {
+          onCancel()
+        }
+      } else if (isUndoShortcut) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [isOpen, isSubmitting, onCancel])
+
   if (!isOpen) {
     return null
   }

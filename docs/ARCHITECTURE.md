@@ -325,7 +325,8 @@ Structure:
 
 `CommitRow` renders one commit. Visual treatment:
 - Unpushed commits render at full opacity with an indigo dot. Pushed commits render at 60% opacity with a grey dot, communicating they are read-only.
-- Rows are selectable (`onClick` and `Enter` key). The selected row is highlighted with a darker indigo background and left border.
+- Rows are selectable by click. The selected row is highlighted with a darker indigo background and left border. Each row carries a `data-commit-hash` attribute so keyboard code can focus it.
+- Keyboard: `Enter` selects the focused row and calls `requestEditFocus()` so `EditPanel` focuses its message field once the commit has loaded (editable commits only). `↑` / `↓` move the selection and focus to the previous / next row.
 - The 7-character short hash is monospaced and `select-all` so users can copy it.
 - The commit message truncates with Tailwind `truncate` and the full message is in a `title` attribute on hover.
 - The date is localised via `toLocaleDateString` rather than shown as a raw ISO string.
@@ -343,6 +344,7 @@ Behaviour:
 - Disables all editable controls while commit details are loading, while a rewrite is being submitted, and for pushed commits (`isUnpushed == false`).
 - On submit, opens `<ConfirmDialog>` instead of immediately rewriting history.
 - On confirm, calls `UpdateCommit` followed by `RefreshLog`, then writes the refreshed commit list back into the store and clears selection via `setRepo`.
+- Consumes the store's `pendingEditFocus` request (set by `Enter` in `CommitList`): once the selected commit has finished loading it focuses the message field if the commit is editable, and clears the request either way. It tracks the hash whose load finished (`loadedHash`) so it never acts on the previous commit's state right after the selection changes.
 
 The panel intentionally owns transient UI state (loading, local form values, dialog visibility, submit-in-progress) while long-lived application state remains in `repoStore.ts`.
 
@@ -357,6 +359,7 @@ Behaviour:
 - Shows a side-by-side comparison for message, date/time, author name, and author email.
 - Highlights changed values visually so the user can quickly verify what will be rewritten.
 - Exposes `Cancel` and `Apply` actions; `Apply` is disabled while a rewrite request is already in flight.
+- While open, a capture-phase `keydown` listener on `window` makes `Escape` cancel the dialog (unless a rewrite is in flight) and swallows `Ctrl+Z`, stopping both from reaching the app-wide shortcuts.
 
 ---
 
@@ -369,7 +372,20 @@ A persistent footer bar rendered on every screen. Reads three independent slices
 
 Successful rewrite messages from `UpdateCommit` also surface here. That includes the auto-stash notice (`"commit updated; stashed changes restored"`) returned by the backend when the worktree had to be stashed around the rewrite.
 
-When `canUndo` is true, an **Undo** button appears next to the status text. It calls `UndoLastOperation` followed by `RefreshLog`, then writes the refreshed log back via `setRepo` (which clears `canUndo`). If the undo fails, the error is shown and `CanUndo()` is queried to decide whether the button stays.
+When `canUndo` is true, an **Undo** button appears next to the status text. It calls the store's `undoLastOperation` action, the same one the `Ctrl+Z` shortcut uses, and is disabled while `isUndoing` is true.
+
+---
+
+#### `frontend/src/hooks/useKeyboardShortcuts.ts`
+
+Registers the app-wide keyboard shortcuts on `window`; called once from `App.tsx`.
+
+| Shortcut | Effect |
+|---|---|
+| `Ctrl+Z` / `Cmd+Z` | Calls `undoLastOperation()`. Ignored when the key event comes from an `input`, `textarea`, `select` or editable element, so the browser's own text undo keeps working there. |
+| `Escape` | When a commit is selected: clears the selection (closing the edit panel and discarding unsaved form changes) and moves focus back to that row in `CommitList`. |
+
+Row-level keys (`Enter`, `↑`, `↓`) are handled in `CommitList`, and `ConfirmDialog` takes over `Escape` while it is open. The file also exports `focusCommitRow(hash)`, used by both.
 
 The component subscribes to three separate store selectors rather than the whole store, so it only re-renders when one of those three values changes.
 
@@ -388,6 +404,8 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `recentRepos` | `string[]` | Most-recent repository paths, stored in `localStorage`, deduplicated, and capped to 10 entries. |
 | `selectedHash` | `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
+| `isUndoing` | `boolean` | `true` while `undoLastOperation` is running; prevents a second undo from the button or `Ctrl+Z`. |
+| `pendingEditFocus` | `boolean` | Set by `Enter` on a commit row; consumed by `EditPanel` after the commit loads. |
 | `status` | `string` | Most-recent informational message (e.g. `"Opened: /path/to/repo"`). |
 | `error` | `string \| null` | Most-recent error message. Non-null causes `StatusBar` to show it in red. Setting a new error does not clear `repoInfo` — the repo remains open. |
 
@@ -399,6 +417,8 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `removeRecentRepo(path)` | Removes one path from the recent list and persists the updated list to `localStorage`. |
 | `selectCommit(hash)` | Sets `selectedHash` when a commit row is clicked or keyboard-selected. |
 | `setCanUndo(canUndo)` | Sets `canUndo`. `EditPanel` sets it to `true` after a rewrite. |
+| `undoLastOperation()` | Async. No-op unless `canUndo` and not already undoing. Calls `UndoLastOperation` then `RefreshLog` and writes the log back via `setRepo` (which clears `canUndo`). On failure, shows the error and asks `CanUndo()` whether undo is still possible. |
+| `requestEditFocus()` / `consumeEditFocus()` | Set / clear `pendingEditFocus`. |
 | `setStatus(message)` | Updates `status` without touching anything else. Used for in-progress messages like `"Opening repository…"`. |
 | `setError(error)` | Sets `error`. Pass `null` to dismiss. |
 | `clearRepo()` | Resets all state (including `selectedHash`) to initial values — returns the app to the `RepoSelector` view. |
@@ -444,11 +464,12 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `App.tsx` | Root layout; switches between `RepoSelector` and the repo workspace (`CommitList` + `EditPanel`) based on store state |
 | `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo`; also renders and manages quick-open recent repositories |
 | `BranchSelector` | *(Phase 3)* Header dropdown of local branches; switches the viewed/edited branch via `SwitchBranch` without checking it out |
-| `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state |
+| `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state; `Enter` / arrow-key navigation |
+| `useKeyboardShortcuts` | *(Phase 3)* App-wide `Ctrl+Z` (undo) and `Escape` (close edit panel) shortcuts |
 | `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite/auto-stash messages, Undo button after a rewrite |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
-| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `canUndo`, `status`, `error` |
+| `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `canUndo`, `isUndoing`, `pendingEditFocus`, `status`, `error`; also owns the shared `undoLastOperation` action |
 
 ### Backend
 
@@ -500,6 +521,8 @@ GitGo/
 │       │   ├── EditPanel.tsx       # (Phase 2)
 │       │   ├── ConfirmDialog.tsx   # (Phase 2)
 │       │   └── StatusBar.tsx
+│       ├── hooks/
+│       │   └── useKeyboardShortcuts.ts  # (Phase 3)
 │       ├── store/
 │       │   └── repoStore.ts        # Zustand store
 │       └── wailsjs/                # Auto-generated by Wails (gitignored)

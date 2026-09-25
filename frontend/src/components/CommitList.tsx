@@ -1,12 +1,15 @@
+import type { KeyboardEvent } from 'react'
+import { focusCommitRow } from '../hooks/useKeyboardShortcuts'
 import { useRepoStore, CommitSummary } from '../store/repoStore'
 
 interface CommitRowProps {
   commit: CommitSummary
   isSelected: boolean
   onSelect: () => void
+  onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void
 }
 
-function CommitRow({ commit, isSelected, onSelect }: CommitRowProps) {
+function CommitRow({ commit, isSelected, onSelect, onKeyDown }: CommitRowProps) {
   const date = new Date(commit.date)
   const formattedDate = date.toLocaleDateString(undefined, {
     year: 'numeric',
@@ -20,8 +23,9 @@ function CommitRow({ commit, isSelected, onSelect }: CommitRowProps) {
       // EditPanel will disable editing for pushed commits.
       role="button"
       tabIndex={0}
+      data-commit-hash={commit.hash}
       onClick={onSelect}
-      onKeyDown={(e) => e.key === 'Enter' && onSelect()}
+      onKeyDown={onKeyDown}
       className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-800 cursor-pointer transition-colors ${
         isSelected
           ? 'bg-indigo-950/60 border-l-2 border-l-indigo-500'
@@ -63,6 +67,26 @@ export default function CommitList() {
   const commits = useRepoStore((s) => s.commits)
   const selectedHash = useRepoStore((s) => s.selectedHash)
   const selectCommit = useRepoStore((s) => s.selectCommit)
+  const requestEditFocus = useRepoStore((s) => s.requestEditFocus)
+
+  // Enter opens the commit in EditPanel (focusing its first field when the
+  // commit is editable); the arrow keys move the selection between rows.
+  function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>, index: number) {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      selectCommit(commits[index].hash)
+      requestEditFocus()
+      return
+    }
+
+    const offset = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
+    const next = commits[index + offset]
+    if (offset !== 0 && next) {
+      event.preventDefault()
+      selectCommit(next.hash)
+      focusCommitRow(next.hash)
+    }
+  }
 
   if (commits.length === 0) {
     return (
@@ -99,12 +123,13 @@ export default function CommitList() {
 
       {/* Scrollable commit rows */}
       <div className="flex-1 overflow-y-auto">
-        {commits.map((commit) => (
+        {commits.map((commit, index) => (
           <CommitRow
             key={commit.hash}
             commit={commit}
             isSelected={commit.hash === selectedHash}
             onSelect={() => selectCommit(commit.hash)}
+            onKeyDown={(event) => handleRowKeyDown(event, index)}
           />
         ))}
       </div>

@@ -114,10 +114,11 @@
   - [x] List local branches
   - [x] Switch view to selected branch's log
   - [x] Edit unpushed commits on the selected branch without checking it out (working tree untouched)
-- [ ] Keyboard shortcuts
-  - [ ] `Ctrl+Z` — undo last operation
-  - [ ] `Enter` on selected commit — open edit panel
-  - [ ] `Escape` — close edit panel / dialog
+- [x] Keyboard shortcuts
+  - [x] `Ctrl+Z` — undo last operation
+  - [x] `Enter` on selected commit — open edit panel
+  - [x] `Escape` — close edit panel / dialog
+  - [x] `↑` / `↓` — move selection between commits
 - [ ] Empty state views (no repo open, no unpushed commits, repo with no remote)
 - [ ] Loading indicators during git operations
 - [ ] Error boundary in frontend with user-friendly messages
