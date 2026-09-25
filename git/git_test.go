@@ -117,7 +117,18 @@ func TestOpen_ValidRepo(test *testing.T) {
 	if repoState.Branch != "main" {
 		test.Errorf("Branch = %q, want %q", repoState.Branch, "main")
 	}
-	if filepath.Clean(repoState.Path) != filepath.Clean(dir) {
+	// Resolve both sides before comparing: on Windows the temp dir may be an
+	// 8.3 short path (e.g. RUNNER~1 on GitHub runners) while go-git reports
+	// the long form, and EvalSymlinks normalises both to the same path.
+	gotPath, err := filepath.EvalSymlinks(repoState.Path)
+	if err != nil {
+		test.Fatalf("EvalSymlinks(%q): %v", repoState.Path, err)
+	}
+	wantPath, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		test.Fatalf("EvalSymlinks(%q): %v", dir, err)
+	}
+	if gotPath != wantPath {
 		test.Errorf("Path = %q, want %q", repoState.Path, dir)
 	}
 }
