@@ -204,6 +204,10 @@ Found in the follow-up review (2026-09-25):
   - [ ] Reset to pre-commit state, open diff view, let user stage partial changes
 - [ ] **Edit commit file tree** *(stretch goal)*
   - [ ] Add / remove files from an unpushed commit
+- [ ] **Reword several messages in one view**: a list of the selected commits' messages edited side by side and applied in one rewrite, like the reword step of `git rebase -i` (as in lazygit and Sublime Merge)
+- [ ] **Undo last commit**: remove the newest unpushed commit and keep its changes staged, like `git reset --soft HEAD~1` (GitHub Desktop's "Undo" button)
+- [ ] **Apply fixup commits**: fold `fixup!` / `squash!` commits into their targets, like `git rebase -i --autosquash`
+- [ ] **Move commits to another branch**: take unpushed commits off this branch and put them on a new or existing one, for commits made on the wrong branch (as in Fork and GitKraken)
 
 ---
 
@@ -222,22 +226,28 @@ Found in the follow-up review (2026-09-25):
 - [ ] Code-sign macOS binary
 - [ ] Version number injected at build time via `ldflags`
 - [ ] GitHub Releases with attached platform binaries
+- [ ] Include prerequisites with the app
 
 ---
 
 ## Future Improvements
 
-> Possible improvements we have found but not yet implemented.
+> Possible improvements we have found but not yet implemented, grouped by the part of the app they touch.
 
-### Small polish
+### Commit editing
 
-- [ ] Copy actions for commit metadata (full hash, short hash, author name, author email)
-- [ ] Ahead-of-remote details in the status area (for example: exact number of commits ahead)
-- [ ] Persistent app preferences (window size, warning visibility, default UI behavior)
-- [ ] Open commit details in an external tool or terminal command
-- [ ] Export commit metadata or history summaries as text/JSON for sharing
-- [x] In-app help (`HelpDialog`, `?` button in the header or `F1`): walkthrough of single and bulk edits, review and undo, keyboard shortcuts and safety notes
-- [x] Header button that opens a terminal in the repository folder (`OpenTerminal`; Windows Terminal or cmd, Terminal.app, `$TERMINAL` or a common Linux emulator)
+Editing commit metadata in `EditPanel` and `BulkDatePanel`.
+
+- [ ] **Use my identity** button by the author fields in `EditPanel`, filling in `user.name` / `user.email` from the Git config (the lookup already exists for reflog entries in `git/reflog.go`). The most common reason to change an author is a commit made with the wrong identity
+- [ ] **Set author on several commits** in `BulkDatePanel`, next to the date shift, with the same Use my identity button, so a batch of wrongly attributed commits is fixed in one rewrite
+- [ ] **Spread dates evenly** in `BulkDatePanel`: set a first and last date and space the selected commits between them, for backdating a series without making every commit share the same shift
+- [ ] **Keep dates within a time window**: move the selected commits' times into a daily window (for example 09:00–17:00), keeping their order and days (like `git-redate` and similar scripts)
+- [ ] **Change time zone, keeping the moment**: convert the selected commits' dates to another offset (for example "my time zone") without changing the actual point in time, unlike the offset menu in `EditPanel`, which keeps the wall-clock time
+- [ ] **Edit the committer**: an option to set the committer name and email too, or to reset them to the author, since a wrong identity usually affects both. Today the committer is always kept
+- [ ] **Apply `.mailmap`**: rewrite the author (and committer) of the selected commits from the repository's `.mailmap`, like `git filter-repo --use-mailmap`
+- [ ] **Find and replace in messages** across the selected commits, with a preview per commit (like `git filter-repo --replace-message`), for example to fix a misspelled ticket number
+- [ ] **Trailers**: add or remove `Co-authored-by:` and `Signed-off-by:` lines on one or several commits, with co-authors picked from the repository's authors (GitHub Desktop has a co-author picker)
+- [ ] **Message guides**: a ruler at 50 characters for the subject and 72 for the body, and a warning when the second line is not blank (as in Sublime Merge and Tower)
 - [x] Add tiny date/time buttons under the date field to add +1 hour, +1 day, current time, etc.
   - [x] `EditPanel` has −1d, −1h, +1h, +1d (shift the wall-clock time, keeping the offset) and Now (current time and this computer's offset)
 - [x] Shift the dates of several selected commits at once (multi-select in `CommitList`, ±1h/±1d in a bulk panel)
@@ -245,17 +255,25 @@ Found in the follow-up review (2026-09-25):
   - [x] `ShiftCommitDates` bound method (relative shift per commit, keeping each commit's offset; optionally shift committer dates) and `GetAffectedRefs` for several commits (`TestShiftDates_*`, `TestShiftCommitDates_*`)
   - [x] Multi-select in `CommitList` (Ctrl/Shift-click, Shift+↑/↓; unpushed commits only) and `BulkDatePanel` with a per-commit preview in `ConfirmDialog` (now a generic frame; `CommitComparison` holds the single-commit rows)
 
-### Buttons and quick actions
+### Commit list and selection
 
-- [ ] **Close / switch repository** button in the header. Once a repository is open there is no way back to the start screen and its recent list; `clearRepo` exists in the store but only `ErrorBoundary` calls it
-- [ ] **Open folder** button next to the terminal button, showing the repository in Explorer / Finder / the Linux file manager
-- [ ] **Use my identity** button by the author fields in `EditPanel`, filling in `user.name` / `user.email` from the Git config (the lookup already exists for reflog entries in `git/reflog.go`). The most common reason to change an author is a commit made with the wrong identity
-- [ ] **Set author on several commits** in `BulkDatePanel`, next to the date shift, with the same Use my identity button, so a batch of wrongly attributed commits is fixed in one rewrite
+Finding, selecting and inspecting commits in `CommitList`.
+
 - [ ] **Select all unpushed** (button above `CommitList` and `Ctrl+A`), as the starting point for a bulk shift or author fix
-- [ ] **Redo** after an undo (`Ctrl+Shift+Z` / `Ctrl+Y` and a button in the status bar), by keeping the undone tip the way `lastRewrite` keeps the pre-rewrite one
-- [ ] **Spread dates evenly** in `BulkDatePanel`: set a first and last date and space the selected commits between them, for backdating a series without making every commit share the same shift
+- [ ] Commit search and filtering by message, author, date, or hash
+- [ ] Side-by-side commit comparison view
+- [ ] Copy actions for commit metadata (full hash, short hash, author name, author email)
+- [ ] **Load more commits**: the list stops at 100 commits (`defaultLogDepth` in `git/log.go`); load the next page when scrolling to the end, or show a "Load more" row
+- [ ] **Branch and tag labels** on the rows they point to, as every Git GUI does, so it is clear which other refs an edit will affect before opening `ConfirmDialog`
+- [ ] **Commit graph**: draw the branch and merge lines next to the list (as in Fork, GitKraken and `git log --graph`), making merge commits and where the pushed part starts easier to see
+- [ ] **Changed files list** (names and +/− line counts, read-only) in the commit details. This is much lighter than the file diffs that are out of scope, and helps confirm the right commit is selected
+- [ ] **Relative dates** ("3 hours ago") as an option, with the full date and offset in a tooltip
+- [ ] **Flag odd commits** in the list: author date later than the commit above it, committer different from the author, or a date in the future
+- [ ] **Right-click menu** on commit rows with Edit, Copy hash and, later, Squash / Drop / Reword (every desktop Git client has one)
 
-### Larger additions
+### Safety and recovery
+
+Protecting history and getting back to an earlier state.
 
 - [ ] **Backups**: save the branch's history before an edit and restore it later, persistently and with multiple steps, unlike the one in-memory `Ctrl+Z` step. Design: [BACKUPS.md](BACKUPS.md)
   - [ ] `git/backup.go`: create, list, delete and restore backup refs under `refs/gitgo/backups/` (never pushed, kept by `git gc`)
@@ -264,14 +282,47 @@ Found in the follow-up review (2026-09-25):
   - [ ] **Back up before applying** checkbox in `ConfirmDialog` (on by default), keeping the last ~20 automatic backups per branch
   - [ ] Back up every branch an edit moves, so a restore brings them all back
   - [ ] Optional: export a backup to a `git bundle` file
-
-- [ ] Show a preview of the Git command that will actually be run
-- [ ] Commit search and filtering by message, author, date, or hash
-- [ ] Side-by-side commit comparison view
-- [ ] Include prerequisites with the app
+- [ ] **Redo** after an undo (`Ctrl+Shift+Z` / `Ctrl+Y` and a button in the status bar), by keeping the undone tip the way `lastRewrite` keeps the pre-rewrite one
 - [ ] Handle signed commits: an edit silently drops the GPG/SSH signature of the edited commit and of every commit rebuilt above it (a copied signature would no longer verify)
   - [x] Warn in `ConfirmDialog` when any commit that will be rebuilt is signed (`FindSignedCommits` / `GetSignedCommits`, which also detect `gpgsig-sha256`, which go-git does not parse; `TestFindSignedCommits_*`)
   - [ ] Optionally re-sign rebuilt commits when `commit.gpgSign` is set (like `git rebase` does), via the native `git` / `gpg` binaries
+- [ ] Show a preview of the Git command that will actually be run
+- [ ] **Stale remote warning**: pushed/unpushed detection uses the local remote-tracking branches, which are only as fresh as the last `git fetch`. Show when the last fetch happened (from the time `FETCH_HEAD` was last written) and warn when it is old, without GitGo fetching itself
+- [ ] **Protected branches** setting: never allow edits on chosen branches (for example `main`), even when unpushed
+
+### Repository and branch status
+
+Opening repositories and showing their state in the header and `StatusBar`.
+
+- [ ] **Close / switch repository** button in the header. Once a repository is open there is no way back to the start screen and its recent list; `clearRepo` exists in the store but only `ErrorBoundary` calls it
+- [ ] Ahead-of-remote details in the status area (for example: exact number of commits ahead)
+- [ ] **Open a repository from the command line** (`gitgo <path>`), so it can be started from a terminal or used as an external tool in an editor
+- [ ] **Drag and drop** a folder onto the window to open it (as in GitHub Desktop)
+- [ ] **Watch the repository** for changes made outside GitGo and offer to reload, instead of relying on `F5`
+- [ ] **Worktrees**: list the repository's linked worktrees (`git worktree`) and open them, noting which branch each has checked out
+
+### External tools and export
+
+Handing the repository or its data to other programs.
+
+- [ ] **Open folder** button next to the terminal button, showing the repository in Explorer / Finder / the Linux file manager
+- [ ] Open commit details in an external tool or terminal command
+- [ ] Export commit metadata or history summaries as text/JSON for sharing
+- [ ] **Open in editor** button, opening the repository in the user's editor (VS Code, or the one set in `core.editor` / an app preference)
+- [ ] **View on GitHub / GitLab / Bitbucket** for pushed commits, building the commit URL from the remote URL
+- [ ] **Export as patches**: save the selected commits as `.patch` files, like `git format-patch`
+- [x] Header button that opens a terminal in the repository folder (`OpenTerminal`; Windows Terminal or cmd, Terminal.app, `$TERMINAL` or a common Linux emulator)
+
+### App settings and help
+
+- [ ] Persistent app preferences (window size, warning visibility, default UI behavior)
+- [ ] **Command palette** (`Ctrl+Shift+P`) listing every action with its shortcut, as in Sublime Merge and GitKraken
+- [ ] **Light theme** and following the system theme; the app is dark only today (`windows.Dark` in `main.go`, dark Tailwind classes throughout)
+- [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens
+- [ ] **First-run tour** highlighting the commit list, the edit panel and the Undo button, reusing the `HelpDialog` content
+- [ ] **Update check** against GitHub Releases, once Phase 6 publishes binaries
+- [ ] **Translations**: move UI strings into one place so the app can be localised
+- [x] In-app help (`HelpDialog`, `?` button in the header or `F1`): walkthrough of single and bulk edits, review and undo, keyboard shortcuts and safety notes
 
 ---
 
