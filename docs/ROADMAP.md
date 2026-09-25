@@ -146,7 +146,39 @@
 
 ---
 
-## Phase 5 — Distribution
+## Phase 5 — Correctness & Safety Hardening
+
+> Goal: fix the known issues found in the 2026-09-25 review so the app is safe to use on real repositories.
+> Until the blocker below is fixed, only use GitGo on branches that are strictly ahead of their upstream (linear history), and create a backup branch first.
+
+- [ ] **Unpushed detection is wrong when history has diverged or contains merges** *(blocker)*
+  - `computeUnpushed` in `git/repo.go` walks the log from HEAD and stops when it hits the upstream tip. If the upstream tip is not an ancestor of HEAD (remote moved ahead after a fetch, or local branch is behind), it is never found and **every** commit — including pushed ones — is marked unpushed and editable.
+  - After a `git pull` that creates a merge commit, the depth-first walk follows the first (local) parent down past the merge base before reaching the upstream tip, so older pushed commits are also marked unpushed.
+  - [ ] Compute unpushed as "reachable from HEAD but not reachable from the upstream tip" (equivalent to `git rev-list HEAD ^@{u}`)
+  - [ ] Consider also excluding commits reachable from any `refs/remotes/*` ref, so branches without an upstream don't expose commits already pushed on other branches
+  - [ ] Tests: diverged branch (local + remote each have new commits), branch behind upstream, merge commit from `git pull`
+- [ ] **Edits silently reset seconds and time zone**
+  - `EditPanel` uses a `datetime-local` input (minute precision) and sends `toISOString()` (UTC), so any edit — even message-only — changes the seconds to `:00` and the commit's offset to `+0000`
+  - [ ] Preserve seconds (add a seconds field or `step="1"`)
+  - [ ] Preserve the original time zone offset (send the date with its original offset, or let the user choose one)
+  - [ ] Only send the date when it was actually changed
+- [ ] **Committer identity is always overwritten by the author**
+  - `AmendCommit` / `RebaseRewrite` set `Committer = Author`, so a message-only edit also replaces the committer name, email, and date
+  - [ ] Decide on the intended behaviour (keep original committer, or set committer date to now like `git commit --amend`) and optionally expose committer date in the UI
+- [ ] **Rewrites leave no reflog entry**
+  - go-git's `SetReference` does not write to the reflog, so `git reflog` cannot be used to recover the pre-rewrite tip
+  - [ ] Write a reflog entry for the branch and HEAD on every rewrite (or create a backup ref such as `refs/gitgo/backup/<branch>`)
+  - Related: the Phase 3 undo feature
+- [ ] **Pushed/unpushed state can go stale**
+  - `UnpushedHashes` is computed when the repo is opened; pushing from a terminal while the app is open leaves those commits editable
+  - [ ] Re-open / re-validate repo state at the start of `UpdateCommit` before the safety check
+- [ ] **Other refs are not updated after a rewrite**
+  - Tags or other local branches pointing at a rewritten commit keep pointing at the old commit
+  - [ ] Detect such refs and either warn the user or offer to move them
+
+---
+
+## Phase 6 — Distribution
 
 > Goal: ship a binary users can install.
 

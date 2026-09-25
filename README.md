@@ -29,7 +29,12 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - Squash, reorder, and drop unpushed commits
 - Split commit *(stretch goal)*
 
-**Phase 5 (planned) — Distribution**
+**Phase 5 (planned) — Correctness & Safety Hardening**
+- Fix unpushed-commit detection for diverged and merged histories
+- Preserve seconds, time zone, and committer on edits
+- Recoverable rewrites (reflog / backup refs)
+
+**Phase 6 (planned) — Distribution**
 - GitHub Actions CI pipeline
 - Signed, installable binaries for Windows, macOS, and Linux
 
