@@ -68,7 +68,12 @@ type CommitDetail struct {
 	AuthorName  string `json:"authorName"`
 	AuthorEmail string `json:"authorEmail"`
 	Date        string `json:"date"`
-	IsUnpushed  bool   `json:"isUnpushed"`
+	// Committer fields are read-only in the edit panel; rewrites keep them
+	// unless the committer date is synced to the author date.
+	CommitterName  string `json:"committerName"`
+	CommitterEmail string `json:"committerEmail"`
+	CommitterDate  string `json:"committerDate"`
+	IsUnpushed     bool   `json:"isUnpushed"`
 }
 
 // EditRequest describes the desired change to a commit's metadata.
@@ -81,6 +86,9 @@ type EditRequest struct {
 	// Date is the new author date as RFC 3339 with the desired offset, or
 	// empty to keep the original author date.
 	Date string `json:"date"`
+	// SyncCommitterDate sets the committer date to the (new) author date. When
+	// false the original committer date is kept.
+	SyncCommitterDate bool `json:"syncCommitterDate"`
 }
 
 // OperationResult is returned by all mutating bound methods to convey

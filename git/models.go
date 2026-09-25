@@ -16,6 +16,10 @@ type AmendOptions struct {
 	// Date is the new author date, including its time zone offset. The zero
 	// value keeps the commit's original author date unchanged.
 	Date time.Time
+	// SyncCommitterDate sets the committer date to the new author date. The
+	// committer name and email are always kept, and so is the committer date
+	// when this is false.
+	SyncCommitterDate bool
 }
 
 // CommitEntry is the git-layer representation of a single commit.

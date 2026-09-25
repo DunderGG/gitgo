@@ -15,6 +15,7 @@ export interface ConfirmValues {
   authorName: string
   authorEmail: string
   dateText: string
+  committerDateText: string
 }
 
 interface CompareRowProps {
@@ -109,7 +110,12 @@ export default function ConfirmDialog({
 
         <div className="space-y-4 p-5">
           <CompareRow label="Message" before={before.message} after={after.message} multiline />
-          <CompareRow label="Date & Time" before={before.dateText} after={after.dateText} />
+          <CompareRow label="Author Date" before={before.dateText} after={after.dateText} />
+          <CompareRow
+            label="Committer Date"
+            before={before.committerDateText}
+            after={after.committerDateText}
+          />
           <CompareRow label="Author Name" before={before.authorName} after={after.authorName} />
           <CompareRow label="Author Email" before={before.authorEmail} after={after.authorEmail} />
         </div>

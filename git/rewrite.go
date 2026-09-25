@@ -10,8 +10,8 @@ import (
 )
 
 // AmendCommit rewrites the tip commit of state.Branch with the values in opts,
-// keeping the existing file tree and parent chain intact. It is equivalent to
-// `git commit --amend --reset-author`.
+// keeping the existing file tree and parent chain intact. The committer is
+// kept (see editedSignatures).
 //
 // The branch does not need to be checked out; only its ref is moved.
 //
@@ -33,17 +33,15 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 		return fmt.Errorf("loading HEAD commit: %w", err)
 	}
 
-	// object.Signature is go-git's combined author/committer identity.
-	// Setting Committer == Author mirrors what `git commit --amend --reset-author` does.
-	sig := editedSignature(headCommit, opts)
+	author, committer := editedSignatures(headCommit, opts)
 
 	// Build the replacement commit. TreeHash is the root tree object (the
 	// directory snapshot) — we keep it unchanged because we're only editing
 	// metadata, not file contents. ParentHashes preserves the commit's
 	// position in the graph.
 	newCommit := &object.Commit{
-		Author:       sig,
-		Committer:    sig,
+		Author:       author,
+		Committer:    committer,
 		Message:      opts.Message,
 		TreeHash:     headCommit.TreeHash,
 		ParentHashes: headCommit.ParentHashes,
@@ -115,15 +113,13 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 
 		var rebuilt *object.Commit
 		if original.Hash == targetHash {
-			// This is the commit the user wants to edit. Replace its author,
-			// committer and message with the values from opts while keeping the
+			// This is the commit the user wants to edit. Replace its author
+			// and message with the values from opts while keeping the
 			// original tree (file snapshot) and the (possibly remapped) parents.
-			// Setting Committer == Author is the same behaviour as
-			// `git commit --amend --reset-author`.
-			sig := editedSignature(original, opts)
+			author, committer := editedSignatures(original, opts)
 			rebuilt = &object.Commit{
-				Author:       sig,
-				Committer:    sig,
+				Author:       author,
+				Committer:    committer,
 				Message:      opts.Message,
 				TreeHash:     original.TreeHash,
 				ParentHashes: newParents,
@@ -163,19 +159,30 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 	return nil
 }
 
-// editedSignature builds the new author signature for original from opts.
+// editedSignatures builds the new author and committer signatures for
+// original from opts.
+//
 // A zero opts.Date keeps the original author date, including its time zone
 // offset, so edits that do not touch the date leave it byte-for-byte intact.
-func editedSignature(original *object.Commit, opts AmendOptions) object.Signature {
+//
+// The original committer name, email and date are always kept, except that
+// opts.SyncCommitterDate replaces the committer date with the new author date.
+func editedSignatures(original *object.Commit, opts AmendOptions) (author, committer object.Signature) {
 	when := opts.Date
 	if when.IsZero() {
 		when = original.Author.When
 	}
-	return object.Signature{
+	author = object.Signature{
 		Name:  opts.AuthorName,
 		Email: opts.AuthorEmail,
 		When:  when,
 	}
+
+	committer = original.Committer
+	if opts.SyncCommitterDate {
+		committer.When = when
+	}
+	return author, committer
 }
 
 // storeCommit encodes commit and writes it to the object store, returning the

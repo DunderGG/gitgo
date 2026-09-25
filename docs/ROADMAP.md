@@ -153,9 +153,10 @@
   - [x] Preserve seconds (`step="1"` on the date input)
   - [x] Preserve the original time zone offset: the date is shown and edited in the commit's own offset, with a selector to change it
   - [x] Only send the date when it was actually changed (an empty date keeps the original author date in `AmendCommit` / `RebaseRewrite`)
-- [ ] **Committer identity is always overwritten by the author**
+- [x] **Committer identity is always overwritten by the author**
   - `AmendCommit` / `RebaseRewrite` set `Committer = Author`, so a message-only edit also replaces the committer name, email, and date
-  - [ ] Decide on the intended behaviour (keep original committer, or set committer date to now like `git commit --amend`) and optionally expose committer date in the UI
+  - [x] Decided: keep the original committer name, email, and date; an "Also set committer date" checkbox in `EditPanel` sets the committer date to the author date (checked by default when the two dates already match)
+  - [x] Show the committer (read-only) in `EditPanel` and the committer date in `ConfirmDialog`
 - [ ] **Rewrites leave no reflog entry**
   - go-git's `SetReference` does not write to the reflog, so `git reflog` cannot be used to recover the pre-rewrite tip
   - [ ] Write a reflog entry for the branch and HEAD on every rewrite (or create a backup ref such as `refs/gitgo/backup/<branch>`)

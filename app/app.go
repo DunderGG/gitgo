@@ -193,8 +193,11 @@ func (app *App) GetCommitDetail(hash string) (CommitDetail, error) {
 		Message:     commit.Message,
 		AuthorName:  commit.Author.Name,
 		AuthorEmail: commit.Author.Email,
-		Date:        commit.Author.When.Format("2006-01-02T15:04:05Z07:00"),
-		IsUnpushed:  state.UnpushedHashes[commitHash],
+		Date:           commit.Author.When.Format("2006-01-02T15:04:05Z07:00"),
+		CommitterName:  commit.Committer.Name,
+		CommitterEmail: commit.Committer.Email,
+		CommitterDate:  commit.Committer.When.Format("2006-01-02T15:04:05Z07:00"),
+		IsUnpushed:     state.UnpushedHashes[commitHash],
 	}, nil
 }
 
@@ -270,6 +273,8 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		AuthorName:  req.AuthorName,
 		AuthorEmail: req.AuthorEmail,
 		Date:        date,
+
+		SyncCommitterDate: req.SyncCommitterDate,
 	}
 
 	// Check for dirty working tree. If dirty we must stash before rewriting so

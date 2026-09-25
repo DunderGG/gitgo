@@ -278,6 +278,109 @@ func TestRebaseRewrite_ZeroDateKeepsOriginal(test *testing.T) {
 	}
 }
 
+// committerISO returns "name <email> date" for the committer of rev, with the
+// date exactly as git stores it.
+func committerISO(test *testing.T, dir, rev string) string {
+	test.Helper()
+	return gitOutputFromDir(test, dir, "git", "log", "-1", "--format=%cn <%ce> %cI", rev)
+}
+
+// newAuthorOpts returns options that change every author field, so tests can
+// check that none of the changes leak into the committer.
+func newAuthorOpts(test *testing.T) git.AmendOptions {
+	test.Helper()
+	newDate, err := time.Parse(time.RFC3339, "2025-06-15T10:20:37+05:30")
+	if err != nil {
+		test.Fatalf("time.Parse: %v", err)
+	}
+	opts := baseAmendOpts()
+	opts.Message = "edited\n"
+	opts.AuthorName = "New Author"
+	opts.AuthorEmail = "new@example.com"
+	opts.Date = newDate
+	return opts
+}
+
+// TestAmendCommit_KeepsCommitter verifies that editing the author leaves the
+// committer name, email and date unchanged.
+func TestAmendCommit_KeepsCommitter(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original commit", gitCmd)
+	want := committerISO(test, dir, "HEAD")
+
+	mustAmend(test, mustOpen(test, dir), newAuthorOpts(test))
+
+	if got := committerISO(test, dir, "HEAD"); got != want {
+		test.Errorf("committer = %q, want %q", got, want)
+	}
+}
+
+// TestAmendCommit_SyncCommitterDate verifies that SyncCommitterDate sets the
+// committer date to the new author date but keeps the committer identity.
+func TestAmendCommit_SyncCommitterDate(test *testing.T) {
+	const want = "Test Author <test@example.com> 2025-06-15T10:20:37+05:30"
+
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original commit", gitCmd)
+
+	opts := newAuthorOpts(test)
+	opts.SyncCommitterDate = true
+	mustAmend(test, mustOpen(test, dir), opts)
+
+	if got := committerISO(test, dir, "HEAD"); got != want {
+		test.Errorf("committer = %q, want %q", got, want)
+	}
+}
+
+// TestRebaseRewrite_KeepsCommitter verifies that rewriting an older commit
+// keeps the committer of both the target and the commit above it.
+func TestRebaseRewrite_KeepsCommitter(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+	addCommit(test, dir, "third", gitCmd)
+	wantTarget := committerISO(test, dir, "HEAD~1")
+	wantHead := committerISO(test, dir, "HEAD")
+
+	targetHash := plumbing.NewHash(gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~1"))
+	mustRebaseRewrite(test, mustOpen(test, dir), targetHash, newAuthorOpts(test))
+
+	if got := committerISO(test, dir, "HEAD~1"); got != wantTarget {
+		test.Errorf("target committer = %q, want %q", got, wantTarget)
+	}
+	if got := committerISO(test, dir, "HEAD"); got != wantHead {
+		test.Errorf("HEAD committer = %q, want %q", got, wantHead)
+	}
+}
+
+// TestRebaseRewrite_SyncCommitterDate verifies that SyncCommitterDate only
+// changes the committer date of the target commit.
+func TestRebaseRewrite_SyncCommitterDate(test *testing.T) {
+	const wantTarget = "Test Author <test@example.com> 2025-06-15T10:20:37+05:30"
+
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+	addCommit(test, dir, "third", gitCmd)
+	wantHead := committerISO(test, dir, "HEAD")
+
+	targetHash := plumbing.NewHash(gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~1"))
+	opts := newAuthorOpts(test)
+	opts.SyncCommitterDate = true
+	mustRebaseRewrite(test, mustOpen(test, dir), targetHash, opts)
+
+	if got := committerISO(test, dir, "HEAD~1"); got != wantTarget {
+		test.Errorf("target committer = %q, want %q", got, wantTarget)
+	}
+	if got := committerISO(test, dir, "HEAD"); got != wantHead {
+		test.Errorf("HEAD committer = %q, want %q", got, wantHead)
+	}
+}
+
 // TestRebaseRewrite_KeepsNewerCommitContent verifies that the commit above the
 // target retains its original file tree after the chain is rebuilt.
 func TestRebaseRewrite_KeepsNewerCommitContent(test *testing.T) {

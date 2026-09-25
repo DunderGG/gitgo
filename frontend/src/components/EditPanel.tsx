@@ -14,6 +14,17 @@ interface EditFormState {
   dateLocal: string
   // Time zone offset of the commit date: +HH:MM or -HH:MM
   offset: string
+  // Also set the committer date to the author date. The committer name and
+  // email are always kept.
+  syncCommitterDate: boolean
+}
+
+// Read-only committer of the loaded commit, with its date split like the form.
+interface CommitterInfo {
+  name: string
+  email: string
+  dateLocal: string
+  offset: string
 }
 
 const EMPTY_FORM: EditFormState = {
@@ -22,6 +33,7 @@ const EMPTY_FORM: EditFormState = {
   authorEmail: '',
   dateLocal: '',
   offset: '+00:00',
+  syncCommitterDate: false,
 }
 
 // UTC offsets in use around the world. The commit's original offset is added
@@ -74,16 +86,16 @@ function localOffsetAt(dateLocal: string): string | null {
   return formatOffset(-date.getTimezoneOffset())
 }
 
-function toPreviewDateText(form: EditFormState): string {
-  if (!form.dateLocal) {
+function toPreviewDateText({ dateLocal, offset }: { dateLocal: string; offset: string }): string {
+  if (!dateLocal) {
     return ''
   }
 
   // Parse the wall-clock time as UTC and format it in UTC so the browser's own
   // time zone does not shift it; the commit's offset is shown separately.
-  const date = new Date(`${form.dateLocal}Z`)
+  const date = new Date(`${dateLocal}Z`)
   if (Number.isNaN(date.getTime())) {
-    return `${form.dateLocal} (UTC${form.offset})`
+    return `${dateLocal} (UTC${offset})`
   }
 
   const wallClock = date.toLocaleString(undefined, {
@@ -95,7 +107,7 @@ function toPreviewDateText(form: EditFormState): string {
     minute: '2-digit',
     second: '2-digit',
   })
-  return `${wallClock} (UTC${form.offset})`
+  return `${wallClock} (UTC${offset})`
 }
 
 function formsEqual(left: EditFormState, right: EditFormState): boolean {
@@ -104,16 +116,18 @@ function formsEqual(left: EditFormState, right: EditFormState): boolean {
     left.authorName === right.authorName &&
     left.authorEmail === right.authorEmail &&
     left.dateLocal === right.dateLocal &&
-    left.offset === right.offset
+    left.offset === right.offset &&
+    left.syncCommitterDate === right.syncCommitterDate
   )
 }
 
-function formToConfirmValues(form: EditFormState): ConfirmValues {
+function formToConfirmValues(form: EditFormState, committer: CommitterInfo): ConfirmValues {
   return {
     message: form.message,
     authorName: form.authorName,
     authorEmail: form.authorEmail,
     dateText: toPreviewDateText(form),
+    committerDateText: toPreviewDateText(form.syncCommitterDate ? form : committer),
   }
 }
 
@@ -154,6 +168,7 @@ export default function EditPanel() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [originalForm, setOriginalForm] = useState<EditFormState | null>(null)
   const [form, setForm] = useState<EditFormState>(EMPTY_FORM)
+  const [committer, setCommitter] = useState<CommitterInfo | null>(null)
 
   useEffect(() => {
     let isActive = true
@@ -164,6 +179,7 @@ export default function EditPanel() {
       setLoadError(null)
       setShowConfirmDialog(false)
       setOriginalForm(null)
+      setCommitter(null)
       setForm(EMPTY_FORM)
       return () => {
         isActive = false
@@ -189,7 +205,15 @@ export default function EditPanel() {
           authorName: detail.authorName,
           authorEmail: detail.authorEmail,
           ...splitRfc3339(detail.date),
+          // Keep the dates together when they already match, which is the
+          // usual case for commits nobody has rebased or amended.
+          syncCommitterDate: detail.committerDate === detail.date,
         }
+        setCommitter({
+          name: detail.committerName,
+          email: detail.committerEmail,
+          ...splitRfc3339(detail.committerDate),
+        })
         setOriginalForm(loadedForm)
         setForm(loadedForm)
       } catch (error) {
@@ -264,6 +288,7 @@ export default function EditPanel() {
           authorName: form.authorName,
           authorEmail: form.authorEmail,
           date: rfc3339Date,
+          syncCommitterDate: form.syncCommitterDate,
         })
 
         const refreshedCommits = await RefreshLog()
@@ -361,7 +386,7 @@ export default function EditPanel() {
 
           <div>
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">
-              Date & Time
+              Author Date
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
               <input
@@ -389,6 +414,24 @@ export default function EditPanel() {
                 ))}
               </select>
             </div>
+            <label className="mt-2 flex items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                checked={form.syncCommitterDate}
+                onChange={(e) =>
+                  setForm((current) => ({ ...current, syncCommitterDate: e.target.checked }))
+                }
+                disabled={fieldsDisabled}
+                className="accent-indigo-500 disabled:cursor-not-allowed"
+              />
+              Also set committer date
+            </label>
+            {committer && (
+              <p className="mt-1 break-words text-xs text-gray-500">
+                Committer: {committer.name} &lt;{committer.email}&gt;,{' '}
+                {toPreviewDateText(form.syncCommitterDate ? form : committer)}
+              </p>
+            )}
           </div>
 
           <div>
@@ -440,12 +483,14 @@ export default function EditPanel() {
         </div>
       </aside>
 
-      {originalForm && (
+      {originalForm && committer && (
         <ConfirmDialog
           isOpen={showConfirmDialog}
           isSubmitting={isSubmitting}
-          before={formToConfirmValues(originalForm)}
-          after={formToConfirmValues(form)}
+          // "Current" always shows the stored committer date, whatever the
+          // checkbox started as.
+          before={formToConfirmValues({ ...originalForm, syncCommitterDate: false }, committer)}
+          after={formToConfirmValues(form, committer)}
           onCancel={() => setShowConfirmDialog(false)}
           onConfirm={handleConfirmApply}
         />
