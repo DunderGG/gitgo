@@ -248,6 +248,18 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		return OperationResult{}, fmt.Errorf("no repository is open; call OpenRepository first")
 	}
 
+	// Re-read the repository before the safety check: the state was computed
+	// when the view was loaded, and commits may have been pushed (or the branch
+	// moved) from a terminal since then. The fresh state is kept so the UI's
+	// next refresh reflects it even when the edit is rejected.
+	state, err := gitpkg.OpenBranch(state.Path, state.Branch)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	app.mutex.Lock()
+	app.repoState = state
+	app.mutex.Unlock()
+
 	// Server-side safety check: refuse to rewrite a pushed commit. This mirrors
 	// the check inside AmendCommit / RebaseRewrite but is done here first so we
 	// never stash the worktree for an operation that is going to be rejected.
@@ -260,7 +272,6 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	// The offset in the string becomes the commit's time zone. An empty date
 	// leaves the zero time, which keeps the original author date.
 	var date time.Time
-	var err error
 	if req.Date != "" {
 		date, err = time.Parse(time.RFC3339, req.Date)
 		if err != nil {
@@ -385,15 +396,19 @@ func (app *App) UndoLastOperation() (OperationResult, error) {
 		return OperationResult{}, fmt.Errorf("there is no operation to undo")
 	}
 
-	// Re-open the repository so the checks run against the current on-disk
-	// state (in-progress operations, detached HEAD, current branch tip).
-	state, err := gitpkg.Open(record.RepoPath)
-	if err != nil {
-		return OperationResult{}, err
+	// Re-open the rewritten branch so the checks run against the current
+	// on-disk state (in-progress operations, detached HEAD, branch tip, and
+	// which commits have been pushed since the rewrite).
+	state, err := gitpkg.OpenBranch(record.RepoPath, record.Branch.Short())
+	if errors.Is(err, gitpkg.ErrBranchNotFound) {
+		// The branch was deleted; treat it like any other move.
+		err = gitpkg.ErrBranchMoved
 	}
-
-	if err := gitpkg.ResetBranch(state, record.Branch, record.AfterHash, record.BeforeHash); err != nil {
-		if errors.Is(err, gitpkg.ErrBranchMoved) {
+	if err == nil {
+		err = gitpkg.ResetBranch(state, record.Branch, record.AfterHash, record.BeforeHash)
+	}
+	if err != nil {
+		if errors.Is(err, gitpkg.ErrBranchMoved) || errors.Is(err, gitpkg.ErrUndoPushed) {
 			// The record can never become valid again, so drop it.
 			app.mutex.Lock()
 			app.lastRewrite = nil

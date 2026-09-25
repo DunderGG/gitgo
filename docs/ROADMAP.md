@@ -163,9 +163,10 @@
   - [x] Undo is recorded too (`gitgo: undo edit`), and every branch move is now a compare-and-swap that fails if the branch changed on disk
   - [x] Honour `core.logAllRefUpdates=false` (only append to existing reflogs)
   - Related: the Phase 3 undo feature
-- [ ] **Pushed/unpushed state can go stale**
+- [x] **Pushed/unpushed state can go stale**
   - `UnpushedHashes` is computed when the repo is opened; pushing from a terminal while the app is open leaves those commits editable
-  - [ ] Re-open / re-validate repo state at the start of `UpdateCommit` before the safety check
+  - [x] Re-open / re-validate repo state at the start of `UpdateCommit` before the safety check; the edit panel then shows the commit as pushed
+  - [x] Undo is refused (`ErrUndoPushed`) when any commit it would discard has been pushed since the edit
 - [ ] **Other refs are not updated after a rewrite**
   - Tags or other local branches pointing at a rewritten commit keep pointing at the old commit
   - [ ] Detect such refs and either warn the user or offer to move them

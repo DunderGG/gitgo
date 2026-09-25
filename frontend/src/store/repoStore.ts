@@ -219,8 +219,11 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
         // The backend drops the undo record when it can never succeed (e.g.
         // the branch moved), so ask it whether the button should stay.
         const stillUndoable = await CanUndo().catch(() => false)
+        // Undo can fail because the history changed outside GitGo (a commit
+        // or a push), so show the current state of the log.
+        const commits = await RefreshLog().catch(() => null)
         get().setError(errorText(err))
-        set({ canUndo: stillUndoable })
+        set(commits ? { canUndo: stillUndoable, commits } : { canUndo: stillUndoable })
       }
     })
   },

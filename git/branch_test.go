@@ -162,7 +162,7 @@ func TestResetBranch_NonCheckedOutBranch(test *testing.T) {
 	mustAmend(test, mustOpenBranch(test, dir, "feature"), opts)
 	afterHash := plumbing.NewHash(gitOutputFromDir(test, dir, "git", "rev-parse", "feature"))
 
-	err := git.ResetBranch(mustOpen(test, dir), plumbing.NewBranchReferenceName("feature"), afterHash, beforeHash)
+	err := git.ResetBranch(mustOpenBranch(test, dir, "feature"), plumbing.NewBranchReferenceName("feature"), afterHash, beforeHash)
 	if err != nil {
 		test.Fatalf("git.ResetBranch: %v", err)
 	}

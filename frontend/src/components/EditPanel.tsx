@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { GetCommitDetail, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
+import { GetCommitDetail, GetCommitLog, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import ConfirmDialog, { ConfirmValues } from './ConfirmDialog'
 import Spinner from './Spinner'
 import { errorText, friendlyError } from '../errors'
@@ -282,14 +282,29 @@ export default function EditPanel() {
 
     try {
       await runGitOperation('Rewriting commit history…', async () => {
-        const result = await UpdateCommit({
-          hash: hashToUpdate,
-          message: form.message,
-          authorName: form.authorName,
-          authorEmail: form.authorEmail,
-          date: rfc3339Date,
-          syncCommitterDate: form.syncCommitterDate,
-        })
+        let result
+        try {
+          result = await UpdateCommit({
+            hash: hashToUpdate,
+            message: form.message,
+            authorName: form.authorName,
+            authorEmail: form.authorEmail,
+            date: rfc3339Date,
+            syncCommitterDate: form.syncCommitterDate,
+          })
+        } catch (error) {
+          // The backend re-reads the repository before editing. When the
+          // commit turns out to have been pushed in the meantime, show the
+          // fresh pushed/unpushed state so the panel becomes read-only.
+          if (/already been pushed/i.test(errorText(error))) {
+            const commits = await GetCommitLog().catch(() => null)
+            if (commits) {
+              useRepoStore.setState({ commits })
+            }
+            setShowConfirmDialog(false)
+          }
+          throw error
+        }
 
         const refreshedCommits = await RefreshLog()
         setRepo(repoInfo, refreshedCommits)

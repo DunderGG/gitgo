@@ -24,6 +24,10 @@ var ErrOperationInProgress = errors.New("a git operation is already in progress;
 // rewrite that is being undone.
 var ErrBranchMoved = errors.New("the branch has changed since the last rewrite; undo is no longer available")
 
+// ErrUndoPushed is returned by ResetBranch when commits created by the rewrite
+// have been pushed since, so undoing it would rewrite published history.
+var ErrUndoPushed = errors.New("the edited commits have been pushed since; undo is no longer available")
+
 // ErrBranchChanged is returned when a branch no longer points where it did
 // when the operation started, e.g. a commit was made from a terminal while a
 // rewrite was running. The branch is left untouched.
