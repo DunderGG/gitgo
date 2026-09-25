@@ -119,7 +119,8 @@
   - [x] `Enter` on selected commit — open edit panel
   - [x] `Escape` — close edit panel / dialog
   - [x] `↑` / `↓` — move selection between commits
-- [ ] Empty state views (no repo open, no unpushed commits, repo with no remote)
+- [x] Empty state views (no repo open, no unpushed commits, repo with no remote)
+  - [x] Also: branch with no upstream, and a clear `ErrNoCommits` for a repository with no commits yet
 - [ ] Loading indicators during git operations
 - [ ] Error boundary in frontend with user-friendly messages
 - [ ] Application icon and Wails window configuration (title, min size)

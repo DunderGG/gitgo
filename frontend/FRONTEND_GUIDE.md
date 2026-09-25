@@ -139,6 +139,7 @@ It also shows recent repositories as quick-open buttons.
 - The list is persisted in localStorage.
 - It stores up to 10 unique paths (most recent first).
 - If a quick-open fails because the folder no longer exists, the stale entry is removed.
+- When there are no recent repositories, a hint says opened ones will appear there.
 
 ### src/components/CommitList.tsx
 
@@ -152,6 +153,8 @@ Current behavior:
 - rows are selectable and highlight when selected
 - Enter on a row selects it and focuses the edit form (editable commits only)
 - Up / Down arrows move the selection between rows
+- a banner above the rows explains when the repo has no remote, the branch has no upstream (every commit counts as unpushed), or every commit is already pushed
+- shows "This branch has no commits yet." when the log is empty
 
 ### src/components/EditPanel.tsx
 
@@ -160,6 +163,7 @@ Edit form for the currently selected commit.
 Current behavior:
 
 - loads full commit metadata from GetCommitDetail when a row is selected
+- with nothing selected, shows how to select a commit, or that there is nothing to edit when every commit is pushed
 - keeps local form state for message, date/time, author name, and author email
 - disables fields for pushed commits
 - opens ConfirmDialog before applying a rewrite

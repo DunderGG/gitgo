@@ -37,13 +37,17 @@ export default function RepoSelector() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-6">
-      <div className="text-center">
+    <div className="flex flex-col items-center justify-center h-full gap-6 px-4">
+      <div className="text-center max-w-md">
         <h2 className="text-2xl font-semibold text-gray-200 mb-2">
           Open a Repository
         </h2>
         <p className="text-gray-400 text-sm">
           Select a local Git repository folder to get started.
+        </p>
+        <p className="mt-2 text-gray-500 text-xs">
+          GitGo lets you edit the message, date, and author of commits you have not pushed yet.
+          Pushed commits are shown read-only.
         </p>
       </div>
       <button
@@ -52,6 +56,10 @@ export default function RepoSelector() {
       >
         Open Repository
       </button>
+
+      {recentRepos.length === 0 && (
+        <p className="text-xs text-gray-600">Repositories you open will be listed here for quick access.</p>
+      )}
 
       {recentRepos.length > 0 && (
         <div className="w-full max-w-3xl rounded-lg border border-gray-800 bg-gray-900/70 p-4">

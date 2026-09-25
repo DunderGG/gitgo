@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from 'react'
 import { focusCommitRow } from '../hooks/useKeyboardShortcuts'
-import { useRepoStore, CommitSummary } from '../store/repoStore'
+import { useRepoStore, CommitSummary, RepoInfo } from '../store/repoStore'
 
 interface CommitRowProps {
   commit: CommitSummary
@@ -63,7 +63,41 @@ function CommitRow({ commit, isSelected, onSelect, onKeyDown }: CommitRowProps) 
   )
 }
 
+type NoticeTone = 'info' | 'warning' | 'muted'
+
+const noticeToneClassName: Record<NoticeTone, string> = {
+  info: 'border-sky-900/60 bg-sky-950/30 text-sky-300',
+  warning: 'border-yellow-900/60 bg-yellow-950/30 text-yellow-300',
+  muted: 'border-gray-800 bg-gray-900 text-gray-400',
+}
+
+// listNotice explains situations where the pushed / unpushed split may be
+// surprising: with no remote or upstream every commit counts as unpushed, and
+// with everything pushed there is nothing to edit.
+function listNotice(repoInfo: RepoInfo, unpushedCount: number): { tone: NoticeTone; text: string } | null {
+  if (!repoInfo.hasRemote) {
+    return {
+      tone: 'info',
+      text: 'This repository has no remote, so every commit is treated as unpushed and can be edited.',
+    }
+  }
+  if (!repoInfo.hasUpstream) {
+    return {
+      tone: 'warning',
+      text: `Branch ${repoInfo.branch} has no upstream, so every commit is treated as unpushed. If you pushed these commits under another branch name, avoid editing them.`,
+    }
+  }
+  if (unpushedCount === 0) {
+    return {
+      tone: 'muted',
+      text: `Every commit on ${repoInfo.branch} has been pushed, so there is nothing to edit. New local commits will show up here as editable.`,
+    }
+  }
+  return null
+}
+
 export default function CommitList() {
+  const repoInfo = useRepoStore((s) => s.repoInfo)
   const commits = useRepoStore((s) => s.commits)
   const selectedHash = useRepoStore((s) => s.selectedHash)
   const selectCommit = useRepoStore((s) => s.selectCommit)
@@ -91,12 +125,13 @@ export default function CommitList() {
   if (commits.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-        No commits found.
+        This branch has no commits yet.
       </div>
     )
   }
 
   const unpushedCount = commits.filter((c) => c.isUnpushed).length
+  const notice = repoInfo ? listNotice(repoInfo, unpushedCount) : null
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -120,6 +155,12 @@ export default function CommitList() {
           {commits.length - unpushedCount} pushed
         </span>
       </div>
+
+      {notice && (
+        <div className={`px-4 py-2 border-b text-xs shrink-0 ${noticeToneClassName[notice.tone]}`}>
+          {notice.text}
+        </div>
+      )}
 
       {/* Scrollable commit rows */}
       <div className="flex-1 overflow-y-auto">

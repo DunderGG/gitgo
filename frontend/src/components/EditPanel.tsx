@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { GetCommitDetail, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import ConfirmDialog, { ConfirmValues } from './ConfirmDialog'
 import { useRepoStore } from '../store/repoStore'
@@ -72,6 +72,14 @@ function formToConfirmValues(form: EditFormState): ConfirmValues {
   }
 }
 
+function Kbd({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="rounded border border-gray-700 bg-gray-800 px-1 font-mono text-[11px] text-gray-300">
+      {children}
+    </kbd>
+  )
+}
+
 export default function EditPanel() {
   const selectedHash = useRepoStore((s) => s.selectedHash)
   const repoInfo = useRepoStore((s) => s.repoInfo)
@@ -79,6 +87,7 @@ export default function EditPanel() {
   const setStatus = useRepoStore((s) => s.setStatus)
   const setError = useRepoStore((s) => s.setError)
   const setCanUndo = useRepoStore((s) => s.setCanUndo)
+  const hasUnpushedCommits = useRepoStore((s) => s.commits.some((commit) => commit.isUnpushed))
   const pendingEditFocus = useRepoStore((s) => s.pendingEditFocus)
   const consumeEditFocus = useRepoStore((s) => s.consumeEditFocus)
 
@@ -230,7 +239,14 @@ export default function EditPanel() {
 
         {!selectedHash && (
           <div className="mt-5 rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-500">
-            No commit selected yet.
+            {hasUnpushedCommits ? (
+              <>
+                No commit selected yet. Click a commit, or use <Kbd>↑</Kbd> <Kbd>↓</Kbd> and{' '}
+                <Kbd>Enter</Kbd>.
+              </>
+            ) : (
+              'There are no unpushed commits on this branch. Pushed commits can be viewed but not edited.'
+            )}
           </div>
         )}
 

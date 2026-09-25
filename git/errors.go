@@ -27,3 +27,7 @@ var ErrBranchMoved = errors.New("the branch has changed since the last rewrite; 
 // ErrBranchNotFound is returned by OpenBranch when the requested local branch
 // does not exist.
 var ErrBranchNotFound = errors.New("branch not found")
+
+// ErrNoCommits is returned when the repository has no commits yet (e.g. right
+// after `git init`), so there is no branch history to show.
+var ErrNoCommits = errors.New("this repository has no commits yet; make a first commit before using GitGo")

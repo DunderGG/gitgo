@@ -131,6 +131,18 @@ func TestOpen_NonRepo(test *testing.T) {
 	}
 }
 
+// TestOpen_NoCommits verifies that a freshly initialised repository without
+// any commits is reported with ErrNoCommits.
+func TestOpen_NoCommits(test *testing.T) {
+	dir := test.TempDir()
+	initRepo(test, dir)
+
+	_, err := git.Open(dir)
+	if !errors.Is(err, git.ErrNoCommits) {
+		test.Fatalf("expected ErrNoCommits, got %v", err)
+	}
+}
+
 // TestOpen_DetachedHead verifies that a detached HEAD is detected and reported.
 func TestOpen_DetachedHead(test *testing.T) {
 	dir := test.TempDir()

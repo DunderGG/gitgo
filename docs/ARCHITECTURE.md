@@ -205,6 +205,8 @@ The repository-opening layer. Exposes two sentinel errors and one public functio
 
 **`ErrOperationInProgress`** — returned when git has left a sentinel file or directory indicating an unfinished operation. Editing history during an in-progress merge or rebase would corrupt the repository.
 
+**`ErrNoCommits`** — returned when HEAD points at a branch with no commits yet (a fresh `git init`), instead of go-git's raw "reference not found" error.
+
 **`RepoState`** — the struct threaded through every subsequent git operation. It holds:
 - The raw `*gogit.Repository` handle for all go-git calls.
 - The resolved working-tree root path (go-git walks up from a subdirectory if needed; this captures the real root).
@@ -249,6 +251,7 @@ Tests are grouped into two areas:
 **`Open` tests:**
 - `TestOpen_ValidRepo` — happy path; checks branch name and path.
 - `TestOpen_NonRepo` — empty directory returns an error.
+- `TestOpen_NoCommits` — freshly initialised repo with no commits; verifies `ErrNoCommits`.
 - `TestOpen_DetachedHead` — checks out a commit hash directly; verifies `ErrDetachedHead`.
 - `TestOpen_MergeInProgress` — writes a fake `MERGE_HEAD`; verifies `ErrOperationInProgress`.
 - `TestOpen_RebaseInProgress` — creates a fake `rebase-merge/` directory; verifies `ErrOperationInProgress`.
@@ -298,9 +301,9 @@ Choosing a branch calls `SwitchBranch(name)` then `GetCommitLog()` and writes bo
 
 #### `frontend/src/components/RepoSelector.tsx`
 
-The empty-state view shown before any repository is loaded. Contains a centred card with a heading, subtext, and an "Open Repository" button.
+The empty-state view shown before any repository is loaded. Contains a centred card with a heading, subtext, a one-line explanation of what GitGo does (edit unpushed commits; pushed commits are read-only), and an "Open Repository" button.
 
-It also renders a "Recent Repositories" list driven by `repoStore.recentRepos` (persisted in `localStorage`). Each entry can be quick-opened, and entries can be removed manually.
+It also renders a "Recent Repositories" list driven by `repoStore.recentRepos` (persisted in `localStorage`). Each entry can be quick-opened, and entries can be removed manually. When the list is empty, a hint says opened repositories will appear there.
 
 When the button is clicked, `handleOpen` runs the following sequence over the Wails IPC bridge:
 
@@ -321,6 +324,8 @@ The main view after a repository is opened. Reads `commits` from the Zustand sto
 Structure:
 - **Column headers** — a fixed header row with labels for hash, message, author, and date.
 - **Legend** — a summary row showing the count of unpushed (indigo dot) vs pushed (grey dot) commits.
+- **Notice banner** (optional, from `listNotice`) — explains a surprising pushed/unpushed split. At most one shows, in this priority order: no remote (info: every commit counts as unpushed), no upstream (warning: every commit counts as unpushed, avoid editing commits pushed under another name), or no unpushed commits (muted: nothing to edit).
+- **Empty branch** — when `commits` is empty, the list is replaced by "This branch has no commits yet."
 - **Scrollable commit rows** — each rendered by the internal `CommitRow` component.
 
 `CommitRow` renders one commit. Visual treatment:
@@ -339,6 +344,7 @@ Structure:
 The edit workspace for the currently selected commit. Reads `selectedHash` from the Zustand store and lazily fetches full commit metadata with `GetCommitDetail(hash)` whenever the selection changes.
 
 Behaviour:
+- With nothing selected, shows a hint: how to select a commit (click, or `↑` / `↓` and `Enter`), or, when the branch has no unpushed commits, that there is nothing to edit.
 - Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke.
 - Tracks the originally loaded values separately from the current form values so it can detect changes, support reset, and feed the confirmation dialog with an explicit before/after comparison.
 - Disables all editable controls while commit details are loading, while a rewrite is being submitted, and for pushed commits (`isUnpushed == false`).
@@ -592,7 +598,9 @@ The following conditions must be detected at the start of any operation and retu
 
 | Condition | Detection | Behaviour |
 |---|---|---|
-| No remote configured | `git.Repository.Remotes()` returns empty | Mark all commits as unpushed; disable upstream-based detection |
-| Branch has no upstream set | `git.Branch.Remote` is empty | Same as above; surface a notice in `StatusBar` |
+| No remote configured | `git.Repository.Remotes()` returns empty | Mark all commits as unpushed; disable upstream-based detection; explain it in a banner above `CommitList` |
+| Branch has no upstream set | `git.Branch.Remote` is empty | Same as above; surface a notice in `StatusBar` and a warning banner above `CommitList` |
+| No unpushed commits | Every commit in the log has `isUnpushed == false` | Banner above `CommitList` and a hint in `EditPanel` that there is nothing to edit |
+| Repository has no commits | `git.Repository.Head()` returns `plumbing.ErrReferenceNotFound` | Return `ErrNoCommits`; show the error and stay on `RepoSelector` |
 | Detached HEAD state | `git.Repository.Head()` returns a non-branch ref | Show error; disable all editing |
 | In-progress git operation | Check for `.git/MERGE_HEAD`, `.git/CHERRY_PICK_HEAD`, `.git/REVERT_HEAD`, `.git/BISECT_LOG`; check for `rebase-merge/` and `rebase-apply/` directories | Block all rewrites; show descriptive error message |

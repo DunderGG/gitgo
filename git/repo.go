@@ -52,6 +52,10 @@ func OpenBranch(path string, branch string) (*RepoState, error) {
 
 	// Resolve HEAD.
 	head, err := repo.Head()
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		// HEAD points at a branch that has no commits yet (fresh `git init`).
+		return nil, ErrNoCommits
+	}
 	if err != nil {
 		return nil, fmt.Errorf("cannot read HEAD: %w", err)
 	}
