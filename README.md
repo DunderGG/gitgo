@@ -141,6 +141,7 @@ gitgo/
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design overview and a breakdown of every file
 - [docs/ROADMAP.md](docs/ROADMAP.md): completed phases, planned work and future ideas
+- [docs/BACKUPS.md](docs/BACKUPS.md): design proposal for saving and restoring backups of a branch's history
 - [frontend/FRONTEND_GUIDE.md](frontend/FRONTEND_GUIDE.md): a beginner-friendly walkthrough of the TypeScript/React code
 
 ---

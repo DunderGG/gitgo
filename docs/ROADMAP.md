@@ -257,6 +257,14 @@ Found in the follow-up review (2026-09-25):
 
 ### Larger additions
 
+- [ ] **Backups**: save the branch's history before an edit and restore it later, persistently and with multiple steps, unlike the one in-memory `Ctrl+Z` step. Design: [BACKUPS.md](BACKUPS.md)
+  - [ ] `git/backup.go`: create, list, delete and restore backup refs under `refs/gitgo/backups/` (never pushed, kept by `git gc`)
+  - [ ] Bound methods `CreateBackup`, `ListBackups`, `RestoreBackup`, `DeleteBackup`
+  - [ ] **Back up** button in the header and a **Backups** list with Restore and Delete (this replaces the reflog-based history panel idea)
+  - [ ] **Back up before applying** checkbox in `ConfirmDialog` (on by default), keeping the last ~20 automatic backups per branch
+  - [ ] Back up every branch an edit moves, so a restore brings them all back
+  - [ ] Optional: export a backup to a `git bundle` file
+
 - [ ] Show a preview of the Git command that will actually be run
 - [ ] Commit search and filtering by message, author, date, or hash
 - [ ] Side-by-side commit comparison view
