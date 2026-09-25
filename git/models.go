@@ -51,8 +51,9 @@ type RepoState struct {
 	// HasUpstream is true when the current branch has a remote tracking branch.
 	HasUpstream bool
 
-	// UnpushedHashes is the set of commit hashes that are strictly above the
-	// remote tracking tip (i.e. safe to edit). All commits are considered
-	// unpushed when there is no upstream.
+	// UnpushedHashes is the set of commit hashes reachable from the branch tip
+	// but not from its upstream or any other remote-tracking ref (i.e. safe to
+	// edit). All commits are considered unpushed when there are no
+	// remote-tracking refs.
 	UnpushedHashes map[plumbing.Hash]bool
 }

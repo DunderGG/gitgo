@@ -27,14 +27,14 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - Empty states, loading indicators, and friendly error messages
 - Reload the repository from disk
 
-**Phase 4 (planned) — Advanced Operations**
-- Squash, reorder, and drop unpushed commits
-- Split commit *(stretch goal)*
-
-**Phase 5 (planned) — Correctness & Safety Hardening**
+**Phase 4 (planned) — Correctness & Safety Hardening**
 - Fix unpushed-commit detection for diverged and merged histories
 - Preserve seconds, time zone, and committer on edits
 - Recoverable rewrites (reflog / backup refs)
+
+**Phase 5 (planned) — Advanced Operations**
+- Squash, reorder, and drop unpushed commits
+- Split commit *(stretch goal)*
 
 **Phase 6 (planned) — Distribution**
 - GitHub Actions CI pipeline
@@ -150,7 +150,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full design overview and 
 
 ## Status
 
-**Phases 1–3 complete.** You can open a repository, browse and switch branches, and edit the message, date, and author of unpushed commits with a preview and one-step undo. Phase 5 (correctness and safety hardening) fixes known issues found in review — until then, see the caution in [docs/ROADMAP.md](docs/ROADMAP.md) before using GitGo on real repositories.
+**Phases 1–3 complete.** You can open a repository, browse and switch branches, and edit the message, date, and author of unpushed commits with a preview and one-step undo. Phase 4 (correctness and safety hardening) fixes known issues found in review — until then, see the caution in [docs/ROADMAP.md](docs/ROADMAP.md) before using GitGo on real repositories.
 
 ---
 

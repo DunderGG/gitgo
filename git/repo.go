@@ -203,37 +203,94 @@ func resolveUpstream(repo *gogit.Repository, branchName string) (hasRemote bool,
 	return hasRemote, true, trackingRef.Hash(), nil
 }
 
-// computeUnpushed walks commits reachable from headHash and returns those that
-// are NOT reachable from upstreamHash (i.e. they are strictly above the
-// upstream tip). When upstreamHash is the zero value (no upstream), all
-// commits in the log up to the default depth are considered unpushed.
-func computeUnpushed(repo *gogit.Repository, headHash plumbing.Hash, upstreamHash plumbing.Hash) (map[plumbing.Hash]bool, error) {
-	unpushed := make(map[plumbing.Hash]bool)
-
-	// Walk the log from HEAD. We stop as soon as we encounter the upstream tip
-	// because every commit reachable from there is already on the remote.
-	logIter, err := repo.Log(&gogit.LogOptions{From: headHash})
+// computeUnpushed returns the commits reachable from tipHash that are NOT
+// reachable from upstreamHash or from any remote-tracking ref
+// (refs/remotes/*) — the equivalent of `git rev-list <tip> ^@{u} --not --remotes`.
+//
+// Excluding every remote-tracking ref, not just the upstream, keeps commits
+// that were pushed on another branch read-only even when this branch has no
+// upstream. When there are no remote-tracking refs at all, every commit
+// reachable from tipHash is considered unpushed.
+//
+// The remote side is walked completely rather than cut short with a
+// commit-date heuristic (as git does): clock skew or identical timestamps
+// could otherwise mark a pushed commit as unpushed, which is the unsafe
+// direction.
+func computeUnpushed(repo *gogit.Repository, tipHash plumbing.Hash, upstreamHash plumbing.Hash) (map[plumbing.Hash]bool, error) {
+	excludeTips, err := remoteTrackingTips(repo)
 	if err != nil {
-		return nil, fmt.Errorf("opening log: %w", err)
+		return nil, err
 	}
-	defer logIter.Close()
-
-	for {
-		commit, iterErr := logIter.Next()
-		if iterErr != nil {
-			break // io.EOF is the normal exit; any other error also terminates
-		}
-		if !upstreamHash.IsZero() && commit.Hash == upstreamHash {
-			// This commit is the upstream tip — it and everything below it
-			// have already been pushed, so we stop here.
-			break
-		}
-		// upstreamHash.IsZero() means there is no remote tracking branch, so
-		// every commit is treated as unpushed (safe to edit).
-		unpushed[commit.Hash] = true
+	if !upstreamHash.IsZero() {
+		excludeTips = append(excludeTips, upstreamHash)
 	}
 
+	pushed, err := reachableFrom(repo, excludeTips, nil)
+	if err != nil {
+		return nil, fmt.Errorf("walking remote history: %w", err)
+	}
+
+	// Walk from the tip, stopping at pushed commits: everything below a pushed
+	// commit is pushed too.
+	unpushed, err := reachableFrom(repo, []plumbing.Hash{tipHash}, pushed)
+	if err != nil {
+		return nil, fmt.Errorf("walking branch history: %w", err)
+	}
 	return unpushed, nil
+}
+
+// remoteTrackingTips returns the commit hashes that refs/remotes/* point at.
+// Symbolic refs such as refs/remotes/origin/HEAD are skipped because they
+// resolve to a branch that is already listed.
+func remoteTrackingTips(repo *gogit.Repository) ([]plumbing.Hash, error) {
+	refs, err := repo.References()
+	if err != nil {
+		return nil, fmt.Errorf("listing references: %w", err)
+	}
+	defer refs.Close()
+
+	var tips []plumbing.Hash
+	err = refs.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Name().IsRemote() && ref.Type() == plumbing.HashReference {
+			tips = append(tips, ref.Hash())
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing references: %w", err)
+	}
+	return tips, nil
+}
+
+// reachableFrom returns every commit reachable from starts, following all
+// parents. Commits in stop (and therefore their ancestors) are not visited.
+// Start hashes that do not name a commit (e.g. a remote ref pointing at a
+// tag or a missing object in a shallow clone) are skipped.
+func reachableFrom(repo *gogit.Repository, starts []plumbing.Hash, stop map[plumbing.Hash]bool) (map[plumbing.Hash]bool, error) {
+	seen := make(map[plumbing.Hash]bool)
+	pending := make([]plumbing.Hash, 0, len(starts))
+	pending = append(pending, starts...)
+
+	for len(pending) > 0 {
+		hash := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if seen[hash] || stop[hash] {
+			continue
+		}
+
+		commit, err := repo.CommitObject(hash)
+		if errors.Is(err, plumbing.ErrObjectNotFound) {
+			// Shallow clones have no objects below the shallow boundary.
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("loading commit %s: %w", hash, err)
+		}
+
+		seen[hash] = true
+		pending = append(pending, commit.ParentHashes...)
+	}
+	return seen, nil
 }
 
 // fileExists returns true when path exists (file or directory).

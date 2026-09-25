@@ -136,37 +136,18 @@
 
 ---
 
-## Phase 4 — Advanced Operations
-
-> Goal: cover more complex history editing workflows safely.
-
-- [ ] **Squash commits**
-  - [ ] Select multiple contiguous unpushed commits
-  - [ ] Combine into one with a merged or custom message
-- [ ] **Reorder commits**
-  - [ ] Drag-and-drop reordering in `CommitList` for unpushed commits
-  - [ ] Detect and surface reorder conflicts
-- [ ] **Drop commit**
-  - [ ] Remove an unpushed commit from history entirely
-  - [ ] Confirmation dialog with strong warning
-- [ ] **Split commit** *(stretch goal)*
-  - [ ] Reset to pre-commit state, open diff view, let user stage partial changes
-- [ ] **Edit commit file tree** *(stretch goal)*
-  - [ ] Add / remove files from an unpushed commit
-
----
-
-## Phase 5 — Correctness & Safety Hardening
+## Phase 4 — Correctness & Safety Hardening
 
 > Goal: fix the known issues found in the 2026-09-25 review so the app is safe to use on real repositories.
-> Until the blocker below is fixed, only use GitGo on branches that are strictly ahead of their upstream (linear history), and create a backup branch first.
+> Until the remaining items are fixed, create a backup branch before rewriting.
 
-- [ ] **Unpushed detection is wrong when history has diverged or contains merges** *(blocker)*
+- [x] **Unpushed detection is wrong when history has diverged or contains merges** *(blocker)*
   - `computeUnpushed` in `git/repo.go` walks the log from HEAD and stops when it hits the upstream tip. If the upstream tip is not an ancestor of HEAD (remote moved ahead after a fetch, or local branch is behind), it is never found and **every** commit — including pushed ones — is marked unpushed and editable.
   - After a `git pull` that creates a merge commit, the depth-first walk follows the first (local) parent down past the merge base before reaching the upstream tip, so older pushed commits are also marked unpushed.
-  - [ ] Compute unpushed as "reachable from HEAD but not reachable from the upstream tip" (equivalent to `git rev-list HEAD ^@{u}`)
-  - [ ] Consider also excluding commits reachable from any `refs/remotes/*` ref, so branches without an upstream don't expose commits already pushed on other branches
-  - [ ] Tests: diverged branch (local + remote each have new commits), branch behind upstream, merge commit from `git pull`
+  - [x] Compute unpushed as "reachable from HEAD but not reachable from the upstream tip" (equivalent to `git rev-list HEAD ^@{u}`)
+  - [x] Also exclude commits reachable from any `refs/remotes/*` ref, so branches without an upstream don't expose commits already pushed on other branches
+  - [x] Tests: diverged branch (local + remote each have new commits), branch behind upstream, merge commit from `git pull`, no-upstream branch with pushed history, up-to-date branch
+     - Note: the remote history is walked completely (no commit-date cut-off) so clock skew can never mark a pushed commit editable; this may be slow on very large repositories
 - [ ] **Edits silently reset seconds and time zone**
   - `EditPanel` uses a `datetime-local` input (minute precision) and sends `toISOString()` (UTC), so any edit — even message-only — changes the seconds to `:00` and the commit's offset to `+0000`
   - [ ] Preserve seconds (add a seconds field or `step="1"`)
@@ -185,6 +166,26 @@
 - [ ] **Other refs are not updated after a rewrite**
   - Tags or other local branches pointing at a rewritten commit keep pointing at the old commit
   - [ ] Detect such refs and either warn the user or offer to move them
+
+---
+
+## Phase 5 — Advanced Operations
+
+> Goal: cover more complex history editing workflows safely.
+
+- [ ] **Squash commits**
+  - [ ] Select multiple contiguous unpushed commits
+  - [ ] Combine into one with a merged or custom message
+- [ ] **Reorder commits**
+  - [ ] Drag-and-drop reordering in `CommitList` for unpushed commits
+  - [ ] Detect and surface reorder conflicts
+- [ ] **Drop commit**
+  - [ ] Remove an unpushed commit from history entirely
+  - [ ] Confirmation dialog with strong warning
+- [ ] **Split commit** *(stretch goal)*
+  - [ ] Reset to pre-commit state, open diff view, let user stage partial changes
+- [ ] **Edit commit file tree** *(stretch goal)*
+  - [ ] Add / remove files from an unpushed commit
 
 ---
 
