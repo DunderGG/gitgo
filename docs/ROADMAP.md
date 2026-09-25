@@ -110,9 +110,10 @@
   - [x] Record pre-rewrite HEAD ref in memory
   - [x] Expose `App.UndoLastOperation()` binding
   - [x] Show "Undo" button in `StatusBar` after each successful edit
-- [ ] Branch selector
-  - [ ] List local branches
-  - [ ] Switch view to selected branch's log
+- [x] Branch selector
+  - [x] List local branches
+  - [x] Switch view to selected branch's log
+  - [x] Edit unpushed commits on the selected branch without checking it out (working tree untouched)
 - [ ] Keyboard shortcuts
   - [ ] `Ctrl+Z` — undo last operation
   - [ ] `Enter` on selected commit — open edit panel

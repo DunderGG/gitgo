@@ -1,3 +1,4 @@
+import BranchSelector from './components/BranchSelector'
 import RepoSelector from './components/RepoSelector'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
@@ -12,9 +13,14 @@ function App() {
       <header className="flex items-center px-4 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
         <h1 className="text-lg font-semibold text-white tracking-tight">GitGo</h1>
         {repoInfo && (
-          <span className="ml-4 text-sm text-gray-400 truncate">
-            {repoInfo.path}
-          </span>
+          <>
+            <span className="ml-4 text-sm text-gray-400 truncate">
+              {repoInfo.path}
+            </span>
+            <div className="ml-auto pl-4">
+              <BranchSelector />
+            </div>
+          </>
         )}
       </header>
 

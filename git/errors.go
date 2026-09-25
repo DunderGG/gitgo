@@ -23,3 +23,7 @@ var ErrOperationInProgress = errors.New("a git operation is already in progress;
 // matches the expected hash, e.g. because a new commit was made after the
 // rewrite that is being undone.
 var ErrBranchMoved = errors.New("the branch has changed since the last rewrite; undo is no longer available")
+
+// ErrBranchNotFound is returned by OpenBranch when the requested local branch
+// does not exist.
+var ErrBranchNotFound = errors.New("branch not found")

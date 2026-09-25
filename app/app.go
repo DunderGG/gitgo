@@ -49,12 +49,60 @@ func (app *App) OpenRepository(path string) (RepoInfo, error) {
 	app.lastRewrite = nil
 	app.mutex.Unlock()
 
+	return repoInfoFromState(state), nil
+}
+
+// SwitchBranch changes the branch the app operates on to the local branch
+// with the given short name. It does not check the branch out: the working
+// tree and HEAD are untouched, and later edits move only that branch's ref.
+// OpenRepository must be called before this method.
+func (app *App) SwitchBranch(branch string) (RepoInfo, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return RepoInfo{}, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	newState, err := gitpkg.OpenBranch(state.Path, branch)
+	if err != nil {
+		return RepoInfo{}, err
+	}
+
+	// The frontend drops its Undo button on every view change, so drop the
+	// backend record too to keep the two in sync.
+	app.mutex.Lock()
+	app.repoState = newState
+	app.lastRewrite = nil
+	app.mutex.Unlock()
+
+	return repoInfoFromState(newState), nil
+}
+
+// ListBranches returns the short names of all local branches in the open
+// repository, sorted alphabetically.
+func (app *App) ListBranches() ([]string, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	return gitpkg.ListBranches(state)
+}
+
+// repoInfoFromState maps a git.RepoState to the RepoInfo DTO.
+func repoInfoFromState(state *gitpkg.RepoState) RepoInfo {
 	return RepoInfo{
-		Path:        state.Path,
-		Branch:      state.Branch,
-		HasRemote:   state.HasRemote,
-		HasUpstream: state.HasUpstream,
-	}, nil
+		Path:         state.Path,
+		Branch:       state.Branch,
+		IsCheckedOut: state.IsCheckedOut,
+		HasRemote:    state.HasRemote,
+		HasUpstream:  state.HasUpstream,
+	}
 }
 
 // GetCommitLog returns the commit history for the currently open repository.
@@ -120,7 +168,7 @@ func (app *App) GetCommitDetail(hash string) (CommitDetail, error) {
 	}, nil
 }
 
-// RefreshLog re-opens the current repository to pick up any changes (e.g.
+// RefreshLog re-opens the current repository and branch to pick up any changes (e.g.
 // after a commit rewrite) and returns an updated commit list.
 // OpenRepository must be called before this method.
 func (app *App) RefreshLog() ([]CommitSummary, error) {
@@ -132,7 +180,7 @@ func (app *App) RefreshLog() ([]CommitSummary, error) {
 		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
 	}
 
-	newState, err := gitpkg.Open(state.Path)
+	newState, err := gitpkg.OpenBranch(state.Path, state.Branch)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +201,10 @@ func (app *App) RefreshLog() ([]CommitSummary, error) {
 // commit. If the working tree is dirty, changes are automatically stashed
 // before the rewrite and restored afterwards.
 //
-// Under the hood, HEAD rewrites use AmendCommit (faster, no graph walk) and
+// The rewrite targets the branch selected via OpenRepository / SwitchBranch,
+// which does not have to be checked out; auto-stash only applies when it is.
+//
+// Under the hood, branch-tip rewrites use AmendCommit (faster, no graph walk) and
 // older commits use RebaseRewrite (first-parent chain rebuild).
 func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	app.mutex.Lock()
@@ -187,9 +238,14 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 
 	// Check for dirty working tree. If dirty we must stash before rewriting so
 	// that uncommitted changes are not lost or corrupted by the graph rebuild.
-	isDirty, err := gitpkg.IsDirty(state)
-	if err != nil {
-		return OperationResult{}, fmt.Errorf("checking working tree: %w", err)
+	// A branch that is not checked out has no relation to the working tree, so
+	// it is rewritten without looking at (or stashing) the worktree.
+	isDirty := false
+	if state.IsCheckedOut {
+		isDirty, err = gitpkg.IsDirty(state)
+		if err != nil {
+			return OperationResult{}, fmt.Errorf("checking working tree: %w", err)
+		}
 	}
 
 	var gitBin string
@@ -207,11 +263,12 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		stashed = true
 	}
 
-	// HEAD rewrites use AmendCommit (no graph walk needed).
+	// Branch-tip rewrites use AmendCommit (no graph walk needed).
 	// Older commits use RebaseRewrite (rebuilds the full chain above the target).
-	head, err := state.Repo.Head()
+	branchRefName := plumbing.NewBranchReferenceName(state.Branch)
+	tip, err := state.Repo.Reference(branchRefName, true)
 	if err != nil {
-		return OperationResult{}, fmt.Errorf("reading HEAD: %w", err)
+		return OperationResult{}, fmt.Errorf("reading branch %s: %w", state.Branch, err)
 	}
 
 	// rewriteErr captures errors from either rewrite method; we want to report
@@ -219,7 +276,7 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	// stash pop failed (leaving the user with a stash that they may not notice
 	// if we report it as part of the rewrite error).
 	var rewriteErr error
-	if head.Hash() == commitHash {
+	if tip.Hash() == commitHash {
 		rewriteErr = gitpkg.AmendCommit(state, opts)
 	} else {
 		rewriteErr = gitpkg.RebaseRewrite(state, commitHash, opts)
@@ -229,13 +286,13 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	// This happens before the stash pop so the record exists even when the
 	// pop fails, since the rewrite itself still succeeded.
 	if rewriteErr == nil {
-		if newHead, headErr := state.Repo.Head(); headErr == nil {
+		if newTip, tipErr := state.Repo.Reference(branchRefName, true); tipErr == nil {
 			app.mutex.Lock()
 			app.lastRewrite = &rewriteRecord{
 				RepoPath:   state.Path,
-				Branch:     head.Name(),
-				BeforeHash: head.Hash(),
-				AfterHash:  newHead.Hash(),
+				Branch:     branchRefName,
+				BeforeHash: tip.Hash(),
+				AfterHash:  newTip.Hash(),
 			}
 			app.mutex.Unlock()
 		}
@@ -260,7 +317,7 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 
 	// Refresh the stored RepoState so subsequent calls (GetCommitLog,
 	// GetCommitDetail, etc.) see the new HEAD. Not fatal if it fails.
-	if newState, refreshErr := gitpkg.Open(state.Path); refreshErr == nil {
+	if newState, refreshErr := gitpkg.OpenBranch(state.Path, state.Branch); refreshErr == nil {
 		app.mutex.Lock()
 		app.repoState = newState
 		app.mutex.Unlock()
@@ -277,7 +334,7 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 // level of undo is kept; the record is cleared once it has been used.
 //
 // Undo is refused (ErrBranchMoved) when the branch has changed since the
-// rewrite, e.g. a new commit was made or another branch was checked out.
+// rewrite, e.g. a new commit was made or the branch was deleted.
 func (app *App) UndoLastOperation() (OperationResult, error) {
 	app.mutex.Lock()
 	record := app.lastRewrite
@@ -310,7 +367,7 @@ func (app *App) UndoLastOperation() (OperationResult, error) {
 
 	// Refresh the stored RepoState so subsequent calls see the restored HEAD.
 	// Not fatal if it fails.
-	if newState, refreshErr := gitpkg.Open(record.RepoPath); refreshErr == nil {
+	if newState, refreshErr := gitpkg.OpenBranch(record.RepoPath, record.Branch.Short()); refreshErr == nil {
 		app.mutex.Lock()
 		app.repoState = newState
 		app.mutex.Unlock()

@@ -9,16 +9,18 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-// AmendCommit rewrites the HEAD commit with the values in opts, keeping the
-// existing file tree and parent chain intact. It is equivalent to
+// AmendCommit rewrites the tip commit of state.Branch with the values in opts,
+// keeping the existing file tree and parent chain intact. It is equivalent to
 // `git commit --amend --reset-author`.
 //
-// Returns ErrCommitNotUnpushed if the HEAD commit is not in
+// The branch does not need to be checked out; only its ref is moved.
+//
+// Returns ErrCommitNotUnpushed if the tip commit is not in
 // state.UnpushedHashes — pushed commits must not be rewritten.
 func AmendCommit(state *RepoState, opts AmendOptions) error {
-	head, err := state.Repo.Head()
+	head, err := branchTip(state)
 	if err != nil {
-		return fmt.Errorf("reading HEAD: %w", err)
+		return err
 	}
 
 	headHash := head.Hash()
@@ -56,9 +58,9 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 		return fmt.Errorf("storing amended commit: %w", err)
 	}
 
-	// HEAD is a symbolic ref pointing at refs/heads/<branch>. We update the
-	// branch ref directly rather than HEAD itself, which is the correct way to
-	// move a branch tip in git's object model.
+	// head is the branch ref (refs/heads/<branch>). When the branch is checked
+	// out, HEAD is a symbolic ref to it, so moving the branch ref also moves
+	// HEAD — the correct way to move a branch tip in git's object model.
 	newRef := plumbing.NewHashReference(head.Name(), newHash)
 	if err := state.Repo.Storer.SetReference(newRef); err != nil {
 		return fmt.Errorf("updating branch ref: %w", err)
@@ -68,7 +70,8 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 }
 
 // RebaseRewrite rewrites a single unpushed commit anywhere in history by
-// rebuilding the first-parent chain from the target commit up to HEAD.
+// rebuilding the first-parent chain from the target commit up to the tip of
+// state.Branch. The branch does not need to be checked out.
 // Commits above the target are rebuilt with the same tree and metadata but
 // updated parent hashes; only the target receives the values in opts.
 //
@@ -81,9 +84,9 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 		return ErrCommitNotUnpushed
 	}
 
-	head, err := state.Repo.Head()
+	head, err := branchTip(state)
 	if err != nil {
-		return fmt.Errorf("reading HEAD: %w", err)
+		return err
 	}
 	headHash := head.Hash()
 

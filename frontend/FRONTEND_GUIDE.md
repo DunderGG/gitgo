@@ -92,7 +92,7 @@ Global stylesheet. Right now it only imports Tailwind base layers.
 
 Top-level layout and routing-by-state:
 
-- Header with app title and currently opened repo path
+- Header with app title, currently opened repo path, and BranchSelector
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
@@ -170,6 +170,14 @@ Current behavior:
 - highlights changed values
 - provides Apply and Cancel actions
 
+### src/components/BranchSelector.tsx
+
+Branch dropdown in the header.
+
+- lists local branches from ListBranches (reloaded when the dropdown gets focus)
+- choosing a branch calls SwitchBranch and GetCommitLog, then setRepo
+- does not check the branch out; edits move only that branch
+
 ### src/components/StatusBar.tsx
 
 Bottom status area.
@@ -177,6 +185,7 @@ Bottom status area.
 Shows:
 
 - branch name
+- a "Not checked out" notice when viewing a branch other than the checked-out one
 - no-remote or no-upstream warnings
 - status message or error message
 - successful rewrite messages, including the auto-stash restore notice when applicable
@@ -196,6 +205,8 @@ Methods currently exposed include:
 - GetCommitDetail
 - RefreshLog
 - UpdateCommit
+- SwitchBranch
+- ListBranches
 - UndoLastOperation
 - CanUndo
 

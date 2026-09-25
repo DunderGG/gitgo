@@ -37,8 +37,13 @@ type RepoState struct {
 	// Path is the absolute path to the repository root (the working tree).
 	Path string
 
-	// Branch is the name of the currently checked-out branch.
+	// Branch is the short name of the branch this state targets. Log, rewrite
+	// and undo operate on this branch's ref, not on HEAD.
 	Branch string
+
+	// IsCheckedOut is true when Branch is the branch HEAD points at. Only then
+	// can a rewrite interact with the working tree (auto-stash).
+	IsCheckedOut bool
 
 	// HasRemote is true when at least one remote is configured.
 	HasRemote bool

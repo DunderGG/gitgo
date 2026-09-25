@@ -10,7 +10,8 @@ import (
 
 const defaultLogDepth = 100
 
-// Log walks the commit history from HEAD and returns up to limit entries.
+// Log walks the commit history from the tip of state.Branch and returns up to
+// limit entries.
 // Each entry is annotated with IsUnpushed based on the precomputed set in
 // state.UnpushedHashes. If limit is <= 0 the defaultLogDepth is used.
 func Log(state *RepoState, limit int) ([]CommitEntry, error) {
@@ -18,9 +19,9 @@ func Log(state *RepoState, limit int) ([]CommitEntry, error) {
 		limit = defaultLogDepth
 	}
 
-	head, err := state.Repo.Head()
+	head, err := branchTip(state)
 	if err != nil {
-		return nil, fmt.Errorf("reading HEAD: %w", err)
+		return nil, err
 	}
 
 	logIter, err := state.Repo.Log(&gogit.LogOptions{From: head.Hash()})

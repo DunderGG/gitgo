@@ -46,6 +46,8 @@ function withRecentRepo(paths: string[], path: string): string[] {
 export interface RepoInfo {
   path: string
   branch: string
+  // False when viewing a branch other than the checked-out one.
+  isCheckedOut: boolean
   hasRemote: boolean
   hasUpstream: boolean
 }

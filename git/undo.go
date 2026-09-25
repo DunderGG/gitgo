@@ -1,25 +1,29 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
-// ResetBranch moves the checked-out branch from expectedTip back to
-// targetHash. It is used to undo a rewrite: rewrites only change commit
-// metadata, never file trees, so moving the ref leaves the index and working
-// tree consistent without touching them.
+// ResetBranch moves branch from expectedTip back to targetHash. It is used to
+// undo a rewrite: rewrites only change commit metadata, never file trees, so
+// moving the ref leaves the index and working tree consistent without touching
+// them, whether or not the branch is checked out.
 //
 // The update is a compare-and-swap: if the branch no longer points at
-// expectedTip (a new commit was made, or the branch was switched), nothing is
+// expectedTip (a new commit was made, or the branch was deleted), nothing is
 // changed and ErrBranchMoved is returned.
 func ResetBranch(state *RepoState, branch plumbing.ReferenceName, expectedTip, targetHash plumbing.Hash) error {
-	head, err := state.Repo.Head()
-	if err != nil {
-		return fmt.Errorf("reading HEAD: %w", err)
+	current, err := state.Repo.Reference(branch, true)
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return ErrBranchMoved
 	}
-	if head.Name() != branch || head.Hash() != expectedTip {
+	if err != nil {
+		return fmt.Errorf("reading branch %s: %w", branch.Short(), err)
+	}
+	if current.Hash() != expectedTip {
 		return ErrBranchMoved
 	}
 

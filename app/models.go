@@ -42,10 +42,11 @@ type rewriteRecord struct {
 // RepoInfo holds high-level information about the currently opened repository.
 // This is returned by OpenRepository and used to populate the repository info panel.
 type RepoInfo struct {
-	Path        string `json:"path"`
-	Branch      string `json:"branch"`
-	HasRemote   bool   `json:"hasRemote"`
-	HasUpstream bool   `json:"hasUpstream"`
+	Path         string `json:"path"`
+	Branch       string `json:"branch"`
+	IsCheckedOut bool   `json:"isCheckedOut"`
+	HasRemote    bool   `json:"hasRemote"`
+	HasUpstream  bool   `json:"hasUpstream"`
 }
 
 // CommitSummary is a lightweight representation of a commit for the commit list.

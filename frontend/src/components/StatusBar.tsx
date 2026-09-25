@@ -44,6 +44,14 @@ export default function StatusBar() {
         {repoInfo && (
           <>
             <span className="text-indigo-400 font-medium">{repoInfo.branch}</span>
+            {!repoInfo.isCheckedOut && (
+              <span
+                className="text-sky-400"
+                title="Edits move this branch only; your working tree is not touched"
+              >
+                Not checked out
+              </span>
+            )}
             {!repoInfo.hasRemote && (
               <span className="text-yellow-400">No remote configured</span>
             )}

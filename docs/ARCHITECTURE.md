@@ -173,7 +173,9 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetCommitLog() ([]CommitSummary, error)` | Reads `repoState` under the mutex; returns an error if no repo is open. Calls `git.Log(state, 0)` to walk up to 100 commits, then maps each `git.CommitEntry` to a `CommitSummary` DTO — including formatting the author date as an RFC 3339 string so the frontend can parse it with `new Date()`. |
 | `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, unpushed flag) for the edit UI. |
 | `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
-| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit. Performs server-side unpushed safety check, optional auto-stash/unstash when the worktree is dirty, dispatches to `AmendCommit` (HEAD) or `RebaseRewrite` (older commit), records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state. |
+| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit. Performs server-side unpushed safety check, optional auto-stash/unstash when the worktree is dirty (only when the target branch is checked out), dispatches to `AmendCommit` (branch tip) or `RebaseRewrite` (older commit), records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state. |
+| `SwitchBranch(branch string) (RepoInfo, error)` | Calls `git.OpenBranch(path, branch)` to target another local branch **without checking it out**: HEAD and the working tree are untouched, and later edits move only that branch's ref. Replaces `repoState`, clears `lastRewrite`, and returns the new `RepoInfo`. |
+| `ListBranches() ([]string, error)` | Returns the short names of all local branches, sorted alphabetically. |
 | `UndoLastOperation() (OperationResult, error)` | Re-opens the repo and calls `git.ResetBranch` to move the branch from the post-rewrite tip back to the pre-rewrite tip. Only one level of undo is kept. Returns `ErrBranchMoved` (and drops the record) if the branch no longer points at the rewritten tip, e.g. a new commit was made. The worktree is not touched: rewrites only change metadata, so both tips have the same tree. |
 | `CanUndo() bool` | Reports whether `lastRewrite` is set. Used by the frontend to re-sync the Undo button after a failed undo. |
 
@@ -187,7 +189,7 @@ Data transfer types that cross the IPC boundary. All fields carry `json:` tags s
 
 | Type | Purpose |
 |---|---|
-| `RepoInfo` | Returned by `OpenRepository`. Carries the absolute repo path, current branch name, and two boolean flags: `HasRemote` (at least one remote configured) and `HasUpstream` (current branch tracks a remote branch). The frontend uses these flags to decide what to display in `StatusBar`. |
+| `RepoInfo` | Returned by `OpenRepository` and `SwitchBranch`. Carries the absolute repo path, the selected branch name, `IsCheckedOut` (whether that branch is the one HEAD points at), and two boolean flags: `HasRemote` (at least one remote configured) and `HasUpstream` (current branch tracks a remote branch). The frontend uses these flags to decide what to display in `StatusBar`. |
 | `CommitSummary` | One row in the commit list. Contains the full 40-character hash, a 7-character short hash for display, the first line of the commit message, the author name, an RFC 3339 date string, and `IsUnpushed` — the flag the frontend uses for visual distinction and to gate editing. |
 | `CommitDetail` | *(Phase 2)* Full commit metadata for the edit form. Extends `CommitSummary` with `AuthorEmail` so the user can edit it. |
 | `EditRequest` | *(Phase 2)* The payload the frontend sends when the user confirms an edit. Contains the target hash plus all four editable fields: message, author name, author email, and date. |
@@ -206,17 +208,21 @@ The repository-opening layer. Exposes two sentinel errors and one public functio
 **`RepoState`** — the struct threaded through every subsequent git operation. It holds:
 - The raw `*gogit.Repository` handle for all go-git calls.
 - The resolved working-tree root path (go-git walks up from a subdirectory if needed; this captures the real root).
-- The branch name, remote/upstream flags.
+- The target branch name, `IsCheckedOut` (whether HEAD points at it), and remote/upstream flags. Log, rewrite and undo all read this branch's ref (via the internal `branchTip` helper), not HEAD, so a branch can be viewed and edited without checking it out.
 - `UnpushedHashes map[plumbing.Hash]bool` — a set built at open time and reused by both the log layer and (in Phase 2) the rewrite layer to gate edits.
 
-**`Open(path string) (*RepoState, error)`** — the single entry point. Its internal steps in order:
+**`Open(path string) (*RepoState, error)`** — opens the checked-out branch; shorthand for `OpenBranch(path, "")`.
+
+**`ListBranches(state) ([]string, error)`** — short names of all local branches, sorted.
+
+**`OpenBranch(path, branch string) (*RepoState, error)`** — the single entry point. An empty `branch` selects the checked-out branch; an unknown branch returns `ErrBranchNotFound`. Its internal steps in order:
 
 1. `gogit.PlainOpenWithOptions` with `DetectDotGit: true` — accepts a path to any subdirectory within a repo, not just the root.
 2. Resolve the true working-tree root via `worktree.Filesystem.Root()`.
 3. `detectInProgressOperation` — checks for `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG`, `rebase-merge/`, and `rebase-apply/` in `.git/`. Returns `ErrOperationInProgress` if any exist.
-4. Read `HEAD`; reject non-branch refs with `ErrDetachedHead`.
+4. Read `HEAD`; reject non-branch refs with `ErrDetachedHead`. Then resolve the target branch ref (HEAD's branch when `branch` is empty).
 5. `resolveUpstream` — reads the repo's git config, finds the branch's `[branch "name"] remote` and `merge` entries, constructs the `refs/remotes/<remote>/<branch>` ref name, and resolves it to a hash. If no remote or no upstream is configured, returns zero-hash and sets the flags accordingly.
-6. `computeUnpushed` — walks the commit log from `HEAD`; stops when it reaches the upstream tip hash. Every commit encountered before that point is added to the `UnpushedHashes` set. If there is no upstream, all commits in the log are treated as unpushed.
+6. `computeUnpushed` — walks the commit log from the target branch tip; stops when it reaches the upstream tip hash. Every commit encountered before that point is added to the `UnpushedHashes` set. If there is no upstream, all commits in the log are treated as unpushed.
 
 ---
 
@@ -226,7 +232,7 @@ The commit-log layer. Exposes one public type and one public function:
 
 **`CommitEntry`** — the git package's own representation of a commit row. Uses `plumbing.Hash` (a `[20]byte`) for the hash rather than a string, keeping the type system honest at the git layer. The app layer converts this to `app.CommitSummary` with string hashes for JSON serialisation.
 
-**`Log(state *RepoState, limit int) ([]CommitEntry, error)`** — walks the commit graph from `HEAD` using go-git's `repo.Log`. If `limit` is 0 or negative, the default of 100 is used. For each commit:
+**`Log(state *RepoState, limit int) ([]CommitEntry, error)`** — walks the commit graph from the tip of `state.Branch` using go-git's `repo.Log`. If `limit` is 0 or negative, the default of 100 is used. For each commit:
 - Short hash is the first 7 characters of the 40-character hex string.
 - Message is the first line only (via `firstLine`) — multi-line commit messages show only the subject in the list.
 - `IsUnpushed` is a direct lookup into `state.UnpushedHashes` — O(1) per commit.
@@ -274,11 +280,19 @@ The React entry point. Mounts the `<App>` component into `#root` inside `index.h
 
 The root layout component. Renders a full-height flex column with three vertical sections:
 
-- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`.
+- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and a `<BranchSelector>` on the right.
 - **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
 `App.tsx` owns the top-level conditional render. It subscribes to only `repoInfo` from the store to decide which view to show, keeping re-renders minimal.
+
+---
+
+#### `frontend/src/components/BranchSelector.tsx`
+
+A dropdown in the header listing local branches from `ListBranches()`. The list is loaded when a repository is opened and reloaded whenever the dropdown gains focus, so branches created outside the app show up.
+
+Choosing a branch calls `SwitchBranch(name)` then `GetCommitLog()` and writes both into the store with `setRepo`. The branch is **not** checked out: the log and edits target that branch's ref, and `StatusBar` shows a "Not checked out" notice while `repoInfo.isCheckedOut` is false.
 
 ---
 
@@ -350,7 +364,7 @@ Behaviour:
 
 A persistent footer bar rendered on every screen. Reads three independent slices from the Zustand store:
 
-- **Left side** — when a repo is open: shows the branch name in indigo. Conditionally appends a yellow "No remote configured" or "No upstream set" notice, driven by `repoInfo.hasRemote` and `repoInfo.hasUpstream`.
+- **Left side** — when a repo is open: shows the branch name in indigo, plus a "Not checked out" notice when viewing a branch other than HEAD's. Conditionally appends a yellow "No remote configured" or "No upstream set" notice, driven by `repoInfo.hasRemote` and `repoInfo.hasUpstream`.
 - **Right side** — mutually exclusive: if `error` is non-null, shows it in red; otherwise shows the `status` string in muted grey. This means any error immediately replaces a previous status message.
 
 Successful rewrite messages from `UpdateCommit` also surface here. That includes the auto-stash notice (`"commit updated; stashed changes restored"`) returned by the backend when the worktree had to be stashed around the rewrite.
@@ -429,6 +443,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 |---|---|
 | `App.tsx` | Root layout; switches between `RepoSelector` and the repo workspace (`CommitList` + `EditPanel`) based on store state |
 | `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo`; also renders and manages quick-open recent repositories |
+| `BranchSelector` | *(Phase 3)* Header dropdown of local branches; switches the viewed/edited branch via `SwitchBranch` without checking it out |
 | `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state |
 | `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite/auto-stash messages, Undo button after a rewrite |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |
@@ -440,13 +455,14 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `UndoLastOperation`, `CanUndo` |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
-| `git/repo.go` | `Open`: validate path, detect edge cases, build `RepoState` with unpushed set |
+| `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
 | `git/rewrite.go` | *(Phase 2)* `AmendCommit`, `RebaseRewrite`, dirty-worktree detection, and auto-stash helpers |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
+| `git/branch_test.go` | *(Phase 3)* Tests for `ListBranches`, `OpenBranch`, and rewriting/undoing on a branch that is not checked out |
 
 ---
 
@@ -478,6 +494,7 @@ GitGo/
 │       ├── main.tsx
 │       ├── App.tsx
 │       ├── components/
+│       │   ├── BranchSelector.tsx  # (Phase 3)
 │       │   ├── RepoSelector.tsx
 │       │   ├── CommitList.tsx
 │       │   ├── EditPanel.tsx       # (Phase 2)

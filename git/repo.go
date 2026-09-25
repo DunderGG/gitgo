@@ -5,19 +5,32 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
-// Open opens the git repository rooted at path, validates its state, and
-// returns a fully populated RepoState.
+// Open opens the git repository rooted at path for the checked-out branch,
+// validates its state, and returns a fully populated RepoState.
 //
 // Errors are returned for:
 //   - non-repository paths
 //   - detached HEAD
 //   - in-progress git operations (merge, rebase, cherry-pick, bisect)
 func Open(path string) (*RepoState, error) {
+	return OpenBranch(path, "")
+}
+
+// OpenBranch is like Open but targets the local branch with the given short
+// name (e.g. "feature/x") instead of the checked-out branch. An empty branch
+// name selects the checked-out branch. The branch does not need to be checked
+// out; the working tree is never touched.
+//
+// The same validation as Open applies (detached HEAD and in-progress
+// operations are rejected), and ErrBranchNotFound is returned when the branch
+// does not exist.
+func OpenBranch(path string, branch string) (*RepoState, error) {
 	repo, err := gogit.PlainOpenWithOptions(path, &gogit.PlainOpenOptions{
 		DetectDotGit: true,
 	})
@@ -52,7 +65,20 @@ func Open(path string) (*RepoState, error) {
 	if !head.Name().IsBranch() {
 		return nil, ErrDetachedHead
 	}
-	branchName := head.Name().Short()
+	checkedOutBranch := head.Name().Short()
+
+	branchName := branch
+	if branchName == "" {
+		branchName = checkedOutBranch
+	}
+
+	branchRef, err := repo.Reference(plumbing.NewBranchReferenceName(branchName), true)
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return nil, fmt.Errorf("%w: %s", ErrBranchNotFound, branchName)
+		}
+		return nil, fmt.Errorf("reading branch %s: %w", branchName, err)
+	}
 
 	// Determine remote / upstream information.
 	hasRemote, hasUpstream, upstreamHash, err := resolveUpstream(repo, branchName)
@@ -61,7 +87,7 @@ func Open(path string) (*RepoState, error) {
 	}
 
 	// Build the unpushed set.
-	unpushed, err := computeUnpushed(repo, head.Hash(), upstreamHash)
+	unpushed, err := computeUnpushed(repo, branchRef.Hash(), upstreamHash)
 	if err != nil {
 		return nil, fmt.Errorf("computing unpushed commits: %w", err)
 	}
@@ -70,10 +96,44 @@ func Open(path string) (*RepoState, error) {
 		Repo:           repo,
 		Path:           rootPath,
 		Branch:         branchName,
+		IsCheckedOut:   branchName == checkedOutBranch,
 		HasRemote:      hasRemote,
 		HasUpstream:    hasUpstream,
 		UnpushedHashes: unpushed,
 	}, nil
+}
+
+// ListBranches returns the short names of all local branches, sorted
+// alphabetically.
+func ListBranches(state *RepoState) ([]string, error) {
+	iter, err := state.Repo.Branches()
+	if err != nil {
+		return nil, fmt.Errorf("listing branches: %w", err)
+	}
+	defer iter.Close()
+
+	var names []string
+	err = iter.ForEach(func(ref *plumbing.Reference) error {
+		names = append(names, ref.Name().Short())
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing branches: %w", err)
+	}
+
+	sort.Strings(names)
+	return names, nil
+}
+
+// branchTip returns the current reference for the branch the state targets.
+// Rewrite and log code use this instead of HEAD so they work on branches that
+// are not checked out.
+func branchTip(state *RepoState) (*plumbing.Reference, error) {
+	ref, err := state.Repo.Reference(plumbing.NewBranchReferenceName(state.Branch), true)
+	if err != nil {
+		return nil, fmt.Errorf("reading branch %s: %w", state.Branch, err)
+	}
+	return ref, nil
 }
 
 // detectInProgressOperation returns ErrOperationInProgress when any of the
