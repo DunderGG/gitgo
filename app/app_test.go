@@ -155,3 +155,41 @@ func TestUndo_RestoresUnpushedEdit(test *testing.T) {
 		test.Errorf("HEAD = %s, want %s", got, local)
 	}
 }
+
+// TestUpdateCommit_MovesBranchesAndUndoRestoresThem verifies that a branch
+// reported by GetAffectedRefs can be moved with the edit, and that undo moves
+// it back together with the edited branch.
+func TestUpdateCommit_MovesBranchesAndUndoRestoresThem(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	local := runGit(test, dir, "rev-parse", "HEAD")
+	runGit(test, dir, "branch", "same-tip")
+
+	refs, err := app.GetAffectedRefs(local)
+	if err != nil {
+		test.Fatalf("GetAffectedRefs: %v", err)
+	}
+	if len(refs) != 1 || refs[0] != (AffectedRef{Name: "same-tip", Kind: "branch"}) {
+		test.Fatalf("GetAffectedRefs = %+v, want [same-tip branch]", refs)
+	}
+
+	req := editRequest(local)
+	req.MoveBranches = []string{"same-tip"}
+	result, err := app.UpdateCommit(req)
+	if err != nil || !result.Success {
+		test.Fatalf("UpdateCommit = %+v, %v", result, err)
+	}
+	edited := runGit(test, dir, "rev-parse", "main")
+	if got := runGit(test, dir, "rev-parse", "same-tip"); got != edited {
+		test.Errorf("same-tip = %s, want %s", got, edited)
+	}
+
+	result, err = app.UndoLastOperation()
+	if err != nil || !result.Success {
+		test.Fatalf("UndoLastOperation = %+v, %v", result, err)
+	}
+	for _, branch := range []string{"main", "same-tip"} {
+		if got := runGit(test, dir, "rev-parse", branch); got != local {
+			test.Errorf("%s = %s after undo, want %s", branch, got, local)
+		}
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	gitpkg "gitgo/git"
@@ -189,10 +190,10 @@ func (app *App) GetCommitDetail(hash string) (CommitDetail, error) {
 	}
 
 	return CommitDetail{
-		Hash:        commit.Hash.String(),
-		Message:     commit.Message,
-		AuthorName:  commit.Author.Name,
-		AuthorEmail: commit.Author.Email,
+		Hash:           commit.Hash.String(),
+		Message:        commit.Message,
+		AuthorName:     commit.Author.Name,
+		AuthorEmail:    commit.Author.Email,
 		Date:           commit.Author.When.Format("2006-01-02T15:04:05Z07:00"),
 		CommitterName:  commit.Committer.Name,
 		CommitterEmail: commit.Committer.Email,
@@ -286,6 +287,7 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		Date:        date,
 
 		SyncCommitterDate: req.SyncCommitterDate,
+		MoveBranches:      req.MoveBranches,
 	}
 
 	// Check for dirty working tree. If dirty we must stash before rewriting so
@@ -327,11 +329,22 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	// stash pop errors separately since the rewrite may have succeeded but the
 	// stash pop failed (leaving the user with a stash that they may not notice
 	// if we report it as part of the rewrite error).
+	// Note where the other branches point, so the ones the rewrite moves can
+	// be moved back by undo.
+	otherTipsBefore := branchTips(state, req.MoveBranches)
+
 	var rewriteErr error
 	if tip.Hash() == commitHash {
 		rewriteErr = gitpkg.AmendCommit(state, opts)
 	} else {
 		rewriteErr = gitpkg.RebaseRewrite(state, commitHash, opts)
+	}
+
+	// Some requested branches could not be moved, but the edit itself stands:
+	// treat it as a success with a warning.
+	var refsNotMoved *gitpkg.RefsNotMovedError
+	if errors.As(rewriteErr, &refsNotMoved) {
+		rewriteErr = nil
 	}
 
 	// Record the pre- and post-rewrite tips so the operation can be undone.
@@ -341,10 +354,11 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		if newTip, tipErr := state.Repo.Reference(branchRefName, true); tipErr == nil {
 			app.mutex.Lock()
 			app.lastRewrite = &rewriteRecord{
-				RepoPath:   state.Path,
-				Branch:     branchRefName,
-				BeforeHash: tip.Hash(),
-				AfterHash:  newTip.Hash(),
+				RepoPath:      state.Path,
+				Branch:        branchRefName,
+				BeforeHash:    tip.Hash(),
+				AfterHash:     newTip.Hash(),
+				MovedBranches: movedBranches(state, otherTipsBefore),
 			}
 			app.mutex.Unlock()
 		}
@@ -375,10 +389,61 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		app.mutex.Unlock()
 	}
 
+	if refsNotMoved != nil {
+		return OperationResult{Success: false, Message: refsNotMoved.Error()}, nil
+	}
 	if stashed {
 		return OperationResult{Success: true, Message: "commit updated; stashed changes restored"}, nil
 	}
 	return OperationResult{Success: true, Message: "commit updated"}, nil
+}
+
+// GetAffectedRefs lists the other branches and tags that an edit of the given
+// commit would leave pointing at old commits, for the confirm dialog.
+func (app *App) GetAffectedRefs(hash string) ([]AffectedRef, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	refs, err := gitpkg.FindAffectedRefs(state, plumbing.NewHash(hash))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]AffectedRef, 0, len(refs))
+	for _, ref := range refs {
+		result = append(result, AffectedRef{Name: ref.Name, Kind: string(ref.Kind)})
+	}
+	return result, nil
+}
+
+// branchTips returns the current tip of each named local branch that exists.
+func branchTips(state *gitpkg.RepoState, names []string) map[plumbing.ReferenceName]plumbing.Hash {
+	tips := make(map[plumbing.ReferenceName]plumbing.Hash, len(names))
+	for _, name := range names {
+		refName := plumbing.NewBranchReferenceName(name)
+		if ref, err := state.Repo.Reference(refName, true); err == nil {
+			tips[refName] = ref.Hash()
+		}
+	}
+	return tips
+}
+
+// movedBranches compares the branches in before with where they point now and
+// returns the ones that moved.
+func movedBranches(state *gitpkg.RepoState, before map[plumbing.ReferenceName]plumbing.Hash) []movedBranch {
+	var moved []movedBranch
+	for refName, beforeHash := range before {
+		ref, err := state.Repo.Reference(refName, true)
+		if err != nil || ref.Hash() == beforeHash {
+			continue
+		}
+		moved = append(moved, movedBranch{Branch: refName, BeforeHash: beforeHash, AfterHash: ref.Hash()})
+	}
+	return moved
 }
 
 // UndoLastOperation reverts the most recent successful UpdateCommit by moving
@@ -421,6 +486,19 @@ func (app *App) UndoLastOperation() (OperationResult, error) {
 	app.lastRewrite = nil
 	app.mutex.Unlock()
 
+	// Move the branches that were moved along with the edit back as well. The
+	// edited branch is already restored, so failures here are only reported.
+	var notRestored []string
+	for _, moved := range record.MovedBranches {
+		movedState, openErr := gitpkg.OpenBranch(record.RepoPath, moved.Branch.Short())
+		if openErr == nil {
+			openErr = gitpkg.ResetBranch(movedState, moved.Branch, moved.AfterHash, moved.BeforeHash)
+		}
+		if openErr != nil {
+			notRestored = append(notRestored, moved.Branch.Short())
+		}
+	}
+
 	// Refresh the stored RepoState so subsequent calls see the restored HEAD.
 	// Not fatal if it fails.
 	if newState, refreshErr := gitpkg.OpenBranch(record.RepoPath, record.Branch.Short()); refreshErr == nil {
@@ -429,6 +507,12 @@ func (app *App) UndoLastOperation() (OperationResult, error) {
 		app.mutex.Unlock()
 	}
 
+	if len(notRestored) > 0 {
+		return OperationResult{
+			Success: false,
+			Message: "last rewrite undone, but branch " + strings.Join(notRestored, ", ") + " changed since the edit and was not moved back",
+		}, nil
+	}
 	return OperationResult{Success: true, Message: "last rewrite undone"}, nil
 }
 

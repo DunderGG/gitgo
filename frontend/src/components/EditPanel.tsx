@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { GetCommitDetail, GetCommitLog, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
+import { GetAffectedRefs, GetCommitDetail, GetCommitLog, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
+import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog, { ConfirmValues } from './ConfirmDialog'
 import Spinner from './Spinner'
 import { errorText, friendlyError } from '../errors'
@@ -169,6 +170,10 @@ export default function EditPanel() {
   const [originalForm, setOriginalForm] = useState<EditFormState | null>(null)
   const [form, setForm] = useState<EditFormState>(EMPTY_FORM)
   const [committer, setCommitter] = useState<CommitterInfo | null>(null)
+  // Other branches and tags the edit would leave behind, loaded when the
+  // confirm dialog opens.
+  const [affectedRefs, setAffectedRefs] = useState<app.AffectedRef[]>([])
+  const [moveBranches, setMoveBranches] = useState(true)
 
   useEffect(() => {
     let isActive = true
@@ -261,6 +266,20 @@ export default function EditPanel() {
   offsetOptions.sort((left, right) => offsetMinutes(left) - offsetMinutes(right))
   const localOffset = localOffsetAt(form.dateLocal)
 
+  async function openConfirmDialog() {
+    if (!selectedHash) {
+      return
+    }
+    try {
+      setAffectedRefs(await GetAffectedRefs(selectedHash))
+    } catch (error) {
+      setError(errorText(error))
+      return
+    }
+    setMoveBranches(true)
+    setShowConfirmDialog(true)
+  }
+
   async function handleConfirmApply() {
     if (!selectedHash || !repoInfo || !originalForm) {
       return
@@ -291,6 +310,9 @@ export default function EditPanel() {
             authorEmail: form.authorEmail,
             date: rfc3339Date,
             syncCommitterDate: form.syncCommitterDate,
+            moveBranches: moveBranches
+              ? affectedRefs.filter((ref) => ref.kind === 'branch').map((ref) => ref.name)
+              : [],
           })
         } catch (error) {
           // The backend re-reads the repository before editing. When the
@@ -380,7 +402,7 @@ export default function EditPanel() {
           onSubmit={(e) => {
             e.preventDefault()
             if (!fieldsDisabled && hasChanges && activity === null) {
-              setShowConfirmDialog(true)
+              openConfirmDialog()
             }
           }}
         >
@@ -506,6 +528,9 @@ export default function EditPanel() {
           // checkbox started as.
           before={formToConfirmValues({ ...originalForm, syncCommitterDate: false }, committer)}
           after={formToConfirmValues(form, committer)}
+          affectedRefs={affectedRefs}
+          moveBranches={moveBranches}
+          onMoveBranchesChange={setMoveBranches}
           onCancel={() => setShowConfirmDialog(false)}
           onConfirm={handleConfirmApply}
         />

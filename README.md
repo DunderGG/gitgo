@@ -27,10 +27,12 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - Empty states, loading indicators, and friendly error messages
 - Reload the repository from disk
 
-**Phase 4 (planned) — Correctness & Safety Hardening**
-- Fix unpushed-commit detection for diverged and merged histories
-- Preserve seconds, time zone, and committer on edits
-- Recoverable rewrites (reflog / backup refs)
+**Phase 4 (complete) — Correctness & Safety Hardening**
+- Correct unpushed-commit detection for diverged and merged histories
+- Seconds, time zone, and committer preserved on edits
+- Rewrites and undo recorded in the reflog
+- Pushed state re-checked before editing or undoing
+- Other branches pointing at edited commits moved along; tags warned about
 
 **Phase 5 (planned) — Advanced Operations**
 - Squash, reorder, and drop unpushed commits
@@ -150,7 +152,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full design overview and 
 
 ## Status
 
-**Phases 1–3 complete.** You can open a repository, browse and switch branches, and edit the message, date, and author of unpushed commits with a preview and one-step undo. Phase 4 (correctness and safety hardening) fixes known issues found in review — until then, see the caution in [docs/ROADMAP.md](docs/ROADMAP.md) before using GitGo on real repositories.
+**Phases 1–4 complete.** You can open a repository, browse and switch branches, and edit the message, date, and author of unpushed commits with a preview and one-step undo. Every rewrite is recorded in the reflog, so it can also be recovered with `git reflog`.
 
 ---
 

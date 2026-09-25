@@ -1,11 +1,16 @@
 import { useEffect } from 'react'
 import Spinner from './Spinner'
+import type { app } from '../../wailsjs/go/models'
 
 interface ConfirmDialogProps {
   isOpen: boolean
   isSubmitting: boolean
   before: ConfirmValues
   after: ConfirmValues
+  // Other branches and tags the edit affects (see GetAffectedRefs).
+  affectedRefs: app.AffectedRef[]
+  moveBranches: boolean
+  onMoveBranchesChange: (moveBranches: boolean) => void
   onCancel: () => void
   onConfirm: () => void
 }
@@ -58,11 +63,75 @@ function CompareRow({ label, before, after, multiline = false }: CompareRowProps
   )
 }
 
+interface AffectedRefsNoticeProps {
+  refs: app.AffectedRef[]
+  moveBranches: boolean
+  onMoveBranchesChange: (moveBranches: boolean) => void
+  disabled: boolean
+}
+
+function RefNames({ refs }: { refs: app.AffectedRef[] }) {
+  return (
+    <span className="font-mono text-gray-100">
+      {refs.map((ref) => ref.name).join(', ')}
+    </span>
+  )
+}
+
+// Lists the other branches and tags that point at (or build on) a commit the
+// edit rewrites. Branches pointing at a rewritten commit can be moved along,
+// like `git rebase --update-refs`; tags and forked branches are only warned about.
+function AffectedRefsNotice({ refs, moveBranches, onMoveBranchesChange, disabled }: AffectedRefsNoticeProps) {
+  const branches = refs.filter((ref) => ref.kind === 'branch')
+  const forks = refs.filter((ref) => ref.kind === 'forked-branch')
+  const tags = refs.filter((ref) => ref.kind === 'tag')
+  if (refs.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-yellow-900/60 bg-yellow-950/20 p-3 text-sm text-yellow-200">
+      <div className="text-xs font-medium uppercase tracking-wide text-yellow-300/80">Other branches and tags</div>
+      {branches.length > 0 && (
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={moveBranches}
+            onChange={(e) => onMoveBranchesChange(e.target.checked)}
+            disabled={disabled}
+            className="mt-1 accent-indigo-500 disabled:cursor-not-allowed"
+          />
+          <span>
+            Also move <RefNames refs={branches} /> to the edited {branches.length === 1 ? 'commit' : 'commits'}.
+            {!moveBranches && ' Otherwise they keep pointing at the old commits.'}
+          </span>
+        </label>
+      )}
+      {forks.length > 0 && (
+        <p>
+          <RefNames refs={forks} /> {forks.length === 1 ? 'has its' : 'have their'} own commits on top of a rewritten
+          commit and will keep the old version in {forks.length === 1 ? 'its' : 'their'} history. Rebase{' '}
+          {forks.length === 1 ? 'it' : 'them'} yourself if needed.
+        </p>
+      )}
+      {tags.length > 0 && (
+        <p>
+          {tags.length === 1 ? 'Tag' : 'Tags'} <RefNames refs={tags} /> will keep pointing at the old{' '}
+          {tags.length === 1 ? 'commit' : 'commits'}; GitGo never moves tags.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function ConfirmDialog({
   isOpen,
   isSubmitting,
   before,
   after,
+  affectedRefs,
+  moveBranches,
+  onMoveBranchesChange,
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
@@ -118,6 +187,12 @@ export default function ConfirmDialog({
           />
           <CompareRow label="Author Name" before={before.authorName} after={after.authorName} />
           <CompareRow label="Author Email" before={before.authorEmail} after={after.authorEmail} />
+          <AffectedRefsNotice
+            refs={affectedRefs}
+            moveBranches={moveBranches}
+            onMoveBranchesChange={onMoveBranchesChange}
+            disabled={isSubmitting}
+          />
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-gray-800 px-5 py-4">

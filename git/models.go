@@ -20,6 +20,10 @@ type AmendOptions struct {
 	// committer name and email are always kept, and so is the committer date
 	// when this is false.
 	SyncCommitterDate bool
+	// MoveBranches names other local branches to move along with the edit:
+	// each one that points at a rewritten commit is moved to its new copy
+	// (see FindAffectedRefs). Others are ignored.
+	MoveBranches []string
 }
 
 // CommitEntry is the git-layer representation of a single commit.

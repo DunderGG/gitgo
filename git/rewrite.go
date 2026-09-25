@@ -15,6 +15,9 @@ import (
 //
 // The branch does not need to be checked out; only its ref is moved.
 //
+// Branches in opts.MoveBranches are moved along; if any cannot be moved the
+// edit still stands and a *RefsNotMovedError is returned.
+//
 // Returns ErrCommitNotUnpushed if the tip commit is not in
 // state.UnpushedHashes — pushed commits must not be rewritten.
 func AmendCommit(state *RepoState, opts AmendOptions) error {
@@ -55,7 +58,11 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 	// head is the branch ref (refs/heads/<branch>). When the branch is checked
 	// out, HEAD is a symbolic ref to it, so moving the branch ref also moves
 	// HEAD — the correct way to move a branch tip in git's object model.
-	return moveBranch(state, head.Name(), headHash, newHash, reflogEditMessage(headHash))
+	message := reflogEditMessage(headHash)
+	if err := moveBranch(state, head.Name(), headHash, newHash, message); err != nil {
+		return err
+	}
+	return moveOtherBranches(state, opts.MoveBranches, map[plumbing.Hash]plumbing.Hash{headHash: newHash}, message)
 }
 
 // RebaseRewrite rewrites a single unpushed commit anywhere in history by
@@ -66,6 +73,9 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 //
 // Merge commits in the chain are rebuilt with their non-first parents
 // preserved unchanged.
+//
+// Branches in opts.MoveBranches are moved along; if any cannot be moved the
+// edit still stands and a *RefsNotMovedError is returned.
 //
 // Returns ErrCommitNotUnpushed if targetHash is not in state.UnpushedHashes.
 func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions) error {
@@ -143,7 +153,11 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 
 	// Point the branch ref at the rebuilt HEAD. The rebuilt commits are only
 	// new objects until this succeeds, so a failure leaves the branch as it was.
-	return moveBranch(state, head.Name(), headHash, oldToNew[headHash], reflogEditMessage(targetHash))
+	message := reflogEditMessage(targetHash)
+	if err := moveBranch(state, head.Name(), headHash, oldToNew[headHash], message); err != nil {
+		return err
+	}
+	return moveOtherBranches(state, opts.MoveBranches, oldToNew, message)
 }
 
 // reflogEditMessage is the reflog message for an edit of the given commit.

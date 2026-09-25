@@ -136,10 +136,9 @@
 
 ---
 
-## Phase 4 — Correctness & Safety Hardening
+## Phase 4 — Correctness & Safety Hardening ✅
 
 > Goal: fix the known issues found in the 2026-09-25 review so the app is safe to use on real repositories.
-> Until the remaining items are fixed, create a backup branch before rewriting.
 
 - [x] **Unpushed detection is wrong when history has diverged or contains merges** *(blocker)*
   - `computeUnpushed` in `git/repo.go` walks the log from HEAD and stops when it hits the upstream tip. If the upstream tip is not an ancestor of HEAD (remote moved ahead after a fetch, or local branch is behind), it is never found and **every** commit — including pushed ones — is marked unpushed and editable.
@@ -167,9 +166,11 @@
   - `UnpushedHashes` is computed when the repo is opened; pushing from a terminal while the app is open leaves those commits editable
   - [x] Re-open / re-validate repo state at the start of `UpdateCommit` before the safety check; the edit panel then shows the commit as pushed
   - [x] Undo is refused (`ErrUndoPushed`) when any commit it would discard has been pushed since the edit
-- [ ] **Other refs are not updated after a rewrite**
+- [x] **Other refs are not updated after a rewrite**
   - Tags or other local branches pointing at a rewritten commit keep pointing at the old commit
-  - [ ] Detect such refs and either warn the user or offer to move them
+  - [x] Detect such refs (`FindAffectedRefs`) and list them in `ConfirmDialog`
+  - [x] Decided: move local branches that point at a rewritten commit (checkbox, on by default, like `git rebase --update-refs`); undo moves them back
+  - [x] Tags are never moved, only warned about; branches with their own commits on top of a rewritten commit are warned about (they keep the old history)
 
 ---
 

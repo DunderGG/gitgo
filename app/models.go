@@ -31,9 +31,18 @@ type App struct {
 }
 
 // rewriteRecord captures the branch tip before and after a rewrite. Undo moves
-// the branch from AfterHash back to BeforeHash.
+// the branch from AfterHash back to BeforeHash, and does the same for every
+// other branch that was moved along with the edit.
 type rewriteRecord struct {
-	RepoPath   string
+	RepoPath      string
+	Branch        plumbing.ReferenceName
+	BeforeHash    plumbing.Hash
+	AfterHash     plumbing.Hash
+	MovedBranches []movedBranch
+}
+
+// movedBranch is another branch moved by a rewrite (EditRequest.MoveBranches).
+type movedBranch struct {
 	Branch     plumbing.ReferenceName
 	BeforeHash plumbing.Hash
 	AfterHash  plumbing.Hash
@@ -89,6 +98,17 @@ type EditRequest struct {
 	// SyncCommitterDate sets the committer date to the (new) author date. When
 	// false the original committer date is kept.
 	SyncCommitterDate bool `json:"syncCommitterDate"`
+	// MoveBranches names other local branches (from GetAffectedRefs) to move
+	// to the rewritten commits along with the edited branch.
+	MoveBranches []string `json:"moveBranches"`
+}
+
+// AffectedRef is a branch or tag that an edit would leave pointing at old
+// commits. Kind is "branch" (can be moved with the edit), "forked-branch"
+// (has its own commits on top of a rewritten commit) or "tag" (never moved).
+type AffectedRef struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 }
 
 // OperationResult is returned by all mutating bound methods to convey
@@ -99,4 +119,3 @@ type OperationResult struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
-
