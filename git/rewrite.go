@@ -2,9 +2,8 @@ package git
 
 import (
 	"fmt"
-	"os/exec"
+	"strings"
 
-	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -26,6 +25,10 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 		return err
 	}
 
+	if err := validateIdentity(opts); err != nil {
+		return err
+	}
+
 	headHash := head.Hash()
 	if !state.UnpushedHashes[headHash] {
 		return ErrCommitNotUnpushed
@@ -38,17 +41,10 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 
 	author, committer := editedSignatures(headCommit, opts)
 
-	// Build the replacement commit. TreeHash is the root tree object (the
-	// directory snapshot) — we keep it unchanged because we're only editing
-	// metadata, not file contents. ParentHashes preserves the commit's
-	// position in the graph.
-	newCommit := &object.Commit{
-		Author:       author,
-		Committer:    committer,
-		Message:      opts.Message,
-		TreeHash:     headCommit.TreeHash,
-		ParentHashes: headCommit.ParentHashes,
-	}
+	// Build the replacement commit. The tree (the directory snapshot) is kept
+	// unchanged because we're only editing metadata, not file contents, and the
+	// parents keep the commit's position in the graph.
+	newCommit := rebuildCommit(headCommit, author, committer, opts.Message, headCommit.ParentHashes)
 
 	newHash, err := storeCommit(state, newCommit)
 	if err != nil {
@@ -79,6 +75,9 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 //
 // Returns ErrCommitNotUnpushed if targetHash is not in state.UnpushedHashes.
 func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions) error {
+	if err := validateIdentity(opts); err != nil {
+		return err
+	}
 	if !state.UnpushedHashes[targetHash] {
 		return ErrCommitNotUnpushed
 	}
@@ -122,25 +121,13 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 			// and message with the values from opts while keeping the
 			// original tree (file snapshot) and the (possibly remapped) parents.
 			author, committer := editedSignatures(original, opts)
-			rebuilt = &object.Commit{
-				Author:       author,
-				Committer:    committer,
-				Message:      opts.Message,
-				TreeHash:     original.TreeHash,
-				ParentHashes: newParents,
-			}
+			rebuilt = rebuildCommit(original, author, committer, opts.Message, newParents)
 		} else {
 			// This commit is above the target — its content is unchanged, but
 			// its parent pointer may have been remapped, so we must store a new
 			// object. Git hashes include parent hashes, so even an identical
 			// commit with a different parent produces a different hash.
-			rebuilt = &object.Commit{
-				Author:       original.Author,
-				Committer:    original.Committer,
-				Message:      original.Message,
-				TreeHash:     original.TreeHash,
-				ParentHashes: newParents,
-			}
+			rebuilt = rebuildCommit(original, original.Author, original.Committer, original.Message, newParents)
 		}
 
 		// Store the rebuilt commit and record its new hash.
@@ -191,6 +178,47 @@ func editedSignatures(original *object.Commit, opts AmendOptions) (author, commi
 	return author, committer
 }
 
+// rebuildCommit returns a copy of original with the given identities, message
+// and parents. The tree and the headers that describe the commit's content
+// (encoding, an embedded merge tag, other extra headers) are kept.
+//
+// Signatures (gpgsig, gpgsig-sha256) are dropped: they cover the original
+// bytes, so on the rebuilt commit they would no longer verify.
+func rebuildCommit(original *object.Commit, author, committer object.Signature, message string, parents []plumbing.Hash) *object.Commit {
+	var extraHeaders []object.ExtraHeader
+	for _, header := range original.ExtraHeaders {
+		if !strings.HasPrefix(header.Key, "gpgsig") {
+			extraHeaders = append(extraHeaders, header)
+		}
+	}
+	return &object.Commit{
+		Author:       author,
+		Committer:    committer,
+		MergeTag:     original.MergeTag,
+		Message:      message,
+		TreeHash:     original.TreeHash,
+		ParentHashes: parents,
+		Encoding:     original.Encoding,
+		ExtraHeaders: extraHeaders,
+	}
+}
+
+// validateIdentity rejects an author name or email that would produce a
+// malformed commit header, which `git fsck` and many servers refuse on push:
+// an empty name, or angle brackets or line breaks in either field.
+func validateIdentity(opts AmendOptions) error {
+	if strings.TrimSpace(opts.AuthorName) == "" {
+		return fmt.Errorf("%w: the author name is empty", ErrInvalidIdentity)
+	}
+	if strings.ContainsAny(opts.AuthorName, "<>\r\n") {
+		return fmt.Errorf("%w: the author name contains <, > or a line break", ErrInvalidIdentity)
+	}
+	if strings.ContainsAny(opts.AuthorEmail, "<>\r\n") {
+		return fmt.Errorf("%w: the author email contains <, > or a line break", ErrInvalidIdentity)
+	}
+	return nil
+}
+
 // storeCommit encodes commit and writes it to the object store, returning the
 // resulting hash. In git's content-addressable storage, the hash is derived
 // from the serialised object bytes, so two identical commits always produce
@@ -232,67 +260,4 @@ func collectChain(state *RepoState, headHash, targetHash plumbing.Hash) ([]*obje
 		}
 		current = commit.ParentHashes[0]
 	}
-}
-
-// IsDirty reports whether the working tree has any uncommitted changes to
-// tracked files (staged or unstaged). Untracked-only new files are excluded
-// because they are not touched by rewrite operations and cannot be stashed
-// without the -u flag.
-func IsDirty(state *RepoState) (bool, error) {
-	workingTree, err := state.Repo.Worktree()
-	if err != nil {
-		return false, fmt.Errorf("accessing worktree: %w", err)
-	}
-
-	// Status() walks the index and working tree to produce a file-by-file
-	// status map, similar to `git status --porcelain`.
-	status, err := workingTree.Status()
-	if err != nil {
-		return false, fmt.Errorf("reading worktree status: %w", err)
-	}
-
-	for _, fileStatus := range status {
-		// Staging == Untracked && Worktree == Untracked means the file is
-		// brand-new and not tracked by git at all — safe to ignore.
-		if fileStatus.Staging == gogit.Untracked && fileStatus.Worktree == gogit.Untracked {
-			continue
-		}
-		return true, nil
-	}
-	return false, nil
-}
-
-// FindGitBinary returns the absolute path to the native git binary on PATH.
-// Returns ErrNativeGitNotFound when git is not available.
-func FindGitBinary() (string, error) {
-	path, err := exec.LookPath("git")
-	if err != nil {
-		return "", ErrNativeGitNotFound
-	}
-	return path, nil
-}
-
-// AutoStash runs `git stash` in the repository's working tree, saving any
-// uncommitted tracked-file changes so that the rewrite can proceed on a clean
-// tree. gitBin must be the absolute path returned by FindGitBinary.
-func AutoStash(state *RepoState, gitBin string) error {
-	cmd := exec.Command(gitBin, "stash")
-	cmd.Dir = state.Path
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git stash: %w\n%s", err, out)
-	}
-	return nil
-}
-
-// AutoStashPop runs `git stash pop` to restore the changes saved by
-// AutoStash. It is called after the rewrite completes (whether or not the
-// rewrite succeeded) so that the user's work is never left trapped in the
-// stash. gitBin must be the absolute path returned by FindGitBinary.
-func AutoStashPop(state *RepoState, gitBin string) error {
-	cmd := exec.Command(gitBin, "stash", "pop")
-	cmd.Dir = state.Path
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git stash pop: %w\n%s", err, out)
-	}
-	return nil
 }

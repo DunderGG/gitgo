@@ -214,7 +214,7 @@ Shows:
 - no-remote or no-upstream warnings
 - a spinner with the running operation's label (opening, switching branch, rewriting, undoing)
 - otherwise the status message or error message
-- successful rewrite messages, including the auto-stash restore notice when applicable
+- successful rewrite messages, including the warning when some selected branches could not be moved
 - an Undo button after a rewrite, which calls UndoLastOperation and reloads the log
 
 ### src/hooks/useKeyboardShortcuts.ts

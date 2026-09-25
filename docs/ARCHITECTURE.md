@@ -60,7 +60,7 @@ Spawning a `git` subprocess requires `git` to be installed and on the user's `PA
 |---|---|---|
 | Cherry-pick | None | Diff-and-apply approach in `git/rewrite.go` (Phase 2) |
 | Interactive rebase | None | Programmatic commit-graph walk in `git/rewrite.go` (Phase 2) |
-| Stash | None | Shell out to native `git stash` / `git stash pop` if `git` is on `PATH` |
+| Stash | None | Not needed: rewrites only change commit metadata, so the working tree and index are never touched (auto-stash was removed in Phase 4) |
 | Shallow clones | Limited | Not a concern for GitGo's local-repo use case |
 
 The lack of a cherry-pick API is the most significant constraint. Rewriting a commit that is not at HEAD requires walking every commit between the target and HEAD, recomputing each tree from a diff, writing new commit objects, and resetting the branch ref to the new tip. See the Rewrite Strategy section below for details.
@@ -173,7 +173,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetCommitLog() ([]CommitSummary, error)` | Reads `repoState` under the mutex; returns an error if no repo is open. Calls `git.Log(state, 0)` to walk up to 100 commits, then maps each `git.CommitEntry` to a `CommitSummary` DTO — including formatting the author date as an RFC 3339 string so the frontend can parse it with `new Date()`. |
 | `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, unpushed flag) for the edit UI. |
 | `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
-| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit. Performs server-side unpushed safety check, optional auto-stash/unstash when the worktree is dirty (only when the target branch is checked out), dispatches to `AmendCommit` (branch tip) or `RebaseRewrite` (older commit), records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state. |
+| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit. Performs server-side unpushed safety check, dispatches to `AmendCommit` (branch tip) or `RebaseRewrite` (older commit), records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state. |
 | `ReloadRepository() (RepoInfo, error)` | Re-opens the current repository and branch from disk (`git.OpenBranch`) and returns fresh `RepoInfo`, so upstream, remote and checked-out state are re-read too. If the branch no longer exists it falls back to the checked-out branch. Keeps `lastRewrite`; if the branch moved, `UndoLastOperation` reports it. |
 | `SwitchBranch(branch string) (RepoInfo, error)` | Calls `git.OpenBranch(path, branch)` to target another local branch **without checking it out**: HEAD and the working tree are untouched, and later edits move only that branch's ref. Replaces `repoState`, clears `lastRewrite`, and returns the new `RepoInfo`. |
 | `ListBranches() ([]string, error)` | Returns the short names of all local branches, sorted alphabetically. |
@@ -284,7 +284,7 @@ The React entry point. Mounts the `<App>` component, wrapped in `<ErrorBoundary>
 
 Turns raw error text into messages a user can act on. Wails rejects a bound method's promise with the Go error's message, so matching is done on that text.
 
-- `friendlyError(raw)` — checks an ordered list of regex rules (not a git repository, branch not found, no repository open, commit not found, stash failures, invalid date) and returns the first matching friendly message. Unmatched text is tidied: a leading `Error: ` is dropped and the first letter capitalised. The sentinel errors in `git/errors.go` are already written for users and pass through this way.
+- `friendlyError(raw)` — checks an ordered list of regex rules (not a git repository, branch not found, no repository open, commit not found, reflog write failures, invalid date) and returns the first matching friendly message. Unmatched text is tidied: a leading `Error: ` is dropped and the first letter capitalised. The sentinel errors in `git/errors.go` are already written for users and pass through this way.
 - `errorText(error)` — converts any thrown value to its message text.
 
 When adding a new backend error whose raw text is not user-friendly, add a rule here.
@@ -397,7 +397,7 @@ A persistent footer bar rendered on every screen. Reads three independent slices
 - **Left side** — when a repo is open: shows the branch name in indigo, plus a "Not checked out" notice when viewing a branch other than HEAD's. Conditionally appends a yellow "No remote configured" or "No upstream set" notice, driven by `repoInfo.hasRemote` and `repoInfo.hasUpstream`.
 - **Right side** — mutually exclusive: while `activity` is set, shows a spinner with the running operation's label; otherwise, if `error` is non-null, shows it in red; otherwise shows the `status` string in muted grey. This means any error immediately replaces a previous status message. Errors are truncated to fit; the tooltip shows the full message plus the raw `errorDetail`, and a **×** button dismisses the error.
 
-Successful rewrite messages from `UpdateCommit` also surface here. That includes the auto-stash notice (`"commit updated; stashed changes restored"`) returned by the backend when the worktree had to be stashed around the rewrite.
+Successful rewrite messages from `UpdateCommit` also surface here, including the warning returned when some of the other branches selected in `ConfirmDialog` could not be moved.
 
 When `canUndo` is true, an **Undo** button appears next to the status text. It calls the store's `undoLastOperation` action, the same one the `Ctrl+Z` shortcut uses, and is disabled while any git operation is running (`activity` is set).
 
@@ -507,7 +507,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `BranchSelector` | *(Phase 3)* Header dropdown of local branches; switches the viewed/edited branch via `SwitchBranch` without checking it out |
 | `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state; `Enter` / arrow-key navigation |
 | `useKeyboardShortcuts` | *(Phase 3)* App-wide `Ctrl+Z` (undo) and `Escape` (close edit panel) shortcuts |
-| `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite/auto-stash messages, Undo button after a rewrite |
+| `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite messages, Undo button after a rewrite |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
 | `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `canUndo`, `activity`, `pendingEditFocus`, `status`, `error`; also owns the shared `runGitOperation` and `undoLastOperation` actions |
@@ -525,7 +525,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
-| `git/rewrite.go` | *(Phase 2)* `AmendCommit`, `RebaseRewrite`, dirty-worktree detection, and auto-stash helpers |
+| `git/rewrite.go` | *(Phase 2)* `AmendCommit`, `RebaseRewrite`, commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author validation (`validateIdentity`) |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
 | `git/branch_test.go` | *(Phase 3)* Tests for `ListBranches`, `OpenBranch`, and rewriting/undoing on a branch that is not checked out |
 
@@ -622,10 +622,10 @@ All git logic lives in the Go layer. The frontend is strictly a display and inpu
 ### No Force Push
 GitGo only modifies the local working repository. It exposes no push functionality, ensuring nothing changed by the app can affect a remote without a deliberate separate action by the user.
 
-### Auto-Stash
-Before any history-rewrite operation, the backend checks for a dirty working tree. If one exists, it performs a stash, runs the rewrite, and then restores the stash — reporting the stash status to the user in the `StatusBar`.
+### Working Tree Is Never Touched
+Rewrites only change commit metadata (message, author, dates); every rebuilt commit keeps its original file tree. Moving the branch ref therefore leaves the index and working tree consistent, so uncommitted work — staged or not — and the stash are never touched, whether or not the branch is checked out.
 
-> **go-git limitation:** go-git v5 has no stash API. The auto-stash feature must shell out to the native `git` binary (`git stash` / `git stash pop`). This means a working `git` installation on PATH is a runtime dependency for repositories with a dirty working tree. The app should detect whether `git` is available and warn the user if a rewrite is attempted on a dirty tree without it.
+> **History:** earlier versions auto-stashed a dirty worktree with the native `git stash` / `git stash pop`. That was removed: go-git's `Worktree.Status()` ignores `core.fileMode=false`, so on Windows a clean worktree with an executable file looked dirty, the no-op `git stash` was followed by a `git stash pop` that applied and dropped an unrelated stash, and `pop` without `--index` also unstaged staged changes. The native `git` binary is no longer a runtime dependency.
 
 ### Wails Binding Constraints
 All Go methods on the `App` struct that are exposed to the frontend via `wails.Bind` must conform to one of these return signatures:

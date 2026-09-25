@@ -2,9 +2,7 @@ package git_test
 
 import (
 	"errors"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -466,133 +464,53 @@ func TestRebaseRewrite_RejectsPushedCommit(test *testing.T) {
 	}
 }
 
-// TestIsDirty_CleanWorktree verifies that a freshly committed repo is not dirty.
-func TestIsDirty_CleanWorktree(test *testing.T) {
+// TestRebaseRewrite_KeepsEncodingHeader verifies that the `encoding` header is
+// kept on both the edited commit and the rebuilt commit above it, so non-UTF-8
+// messages are still decoded correctly after an edit.
+func TestRebaseRewrite_KeepsEncodingHeader(test *testing.T) {
 	dir := test.TempDir()
 	gitCmd := initRepo(test, dir)
-	addCommit(test, dir, "initial", gitCmd)
+	gitCmd("config", "i18n.commitEncoding", "ISO-8859-1")
+	addCommit(test, dir, "target", gitCmd)
+	addCommit(test, dir, "above", gitCmd)
 
-	repoState := mustOpen(test, dir)
+	targetHash := plumbing.NewHash(gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~1"))
+	mustRebaseRewrite(test, mustOpen(test, dir), targetHash, baseAmendOpts())
 
-	dirty, err := git.IsDirty(repoState)
-	if err != nil {
-		test.Fatalf("IsDirty: %v", err)
-	}
-	if dirty {
-		test.Error("expected clean worktree, IsDirty returned true")
+	for _, rev := range []string{"HEAD", "HEAD~1"} {
+		raw := gitOutputFromDir(test, dir, "git", "cat-file", "-p", rev)
+		if !strings.Contains(raw, "\nencoding ISO-8859-1\n") {
+			test.Errorf("%s lost its encoding header:\n%s", rev, raw)
+		}
 	}
 }
 
-// TestIsDirty_DirtyWorktree verifies that a modified tracked file is detected.
-func TestIsDirty_DirtyWorktree(test *testing.T) {
-	dir := test.TempDir()
-	gitCmd := initRepo(test, dir)
-	addCommit(test, dir, "initial", gitCmd)
-
-	// Modify the tracked file without staging or committing.
-	if err := os.WriteFile(filepath.Join(dir, "initial.txt"), []byte("dirty"), 0o644); err != nil {
-		test.Fatalf("WriteFile: %v", err)
+// TestAmendCommit_RejectsInvalidIdentity verifies that author values that
+// would produce a malformed commit header are refused and nothing changes.
+func TestAmendCommit_RejectsInvalidIdentity(test *testing.T) {
+	cases := map[string]func(*git.AmendOptions){
+		"empty name":       func(opts *git.AmendOptions) { opts.AuthorName = "  " },
+		"bracket in name":  func(opts *git.AmendOptions) { opts.AuthorName = "Evil <x@y>" },
+		"newline in name":  func(opts *git.AmendOptions) { opts.AuthorName = "Two\nLines" },
+		"bracket in email": func(opts *git.AmendOptions) { opts.AuthorEmail = "a>b@example.com" },
+		"newline in email": func(opts *git.AmendOptions) { opts.AuthorEmail = "a@example.com\n" },
 	}
+	for name, mutate := range cases {
+		test.Run(name, func(test *testing.T) {
+			dir := test.TempDir()
+			gitCmd := initRepo(test, dir)
+			addCommit(test, dir, "original commit", gitCmd)
+			before := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD")
 
-	repoState := mustOpen(test, dir)
-
-	dirty, err := git.IsDirty(repoState)
-	if err != nil {
-		test.Fatalf("IsDirty: %v", err)
-	}
-	if !dirty {
-		test.Error("expected dirty worktree, IsDirty returned false")
-	}
-}
-
-// TestAutoStash_StashesDirtyWorktree verifies that after AutoStash the working
-// tree reports clean.
-func TestAutoStash_StashesDirtyWorktree(test *testing.T) {
-	dir := test.TempDir()
-	gitCmd := initRepo(test, dir)
-	addCommit(test, dir, "initial", gitCmd)
-
-	// Make the worktree dirty.
-	if err := os.WriteFile(filepath.Join(dir, "initial.txt"), []byte("dirty"), 0o644); err != nil {
-		test.Fatalf("WriteFile: %v", err)
-	}
-
-	gitBin, err := git.FindGitBinary()
-	if err != nil {
-		test.Fatalf("FindGitBinary: %v", err)
-	}
-
-	repoState := mustOpen(test, dir)
-
-	if err := git.AutoStash(repoState, gitBin); err != nil {
-		test.Fatalf("AutoStash: %v", err)
-	}
-
-	// The worktree should now be clean.
-	dirty, err := git.IsDirty(repoState)
-	if err != nil {
-		test.Fatalf("IsDirty after stash: %v", err)
-	}
-	if dirty {
-		test.Error("expected clean worktree after AutoStash, IsDirty returned true")
-	}
-}
-
-// TestAutoStashPop_RestoresChanges verifies that after AutoStashPop the
-// modified file content is visible again.
-func TestAutoStashPop_RestoresChanges(test *testing.T) {
-	dir := test.TempDir()
-	gitCmd := initRepo(test, dir)
-	addCommit(test, dir, "initial", gitCmd)
-
-	// Make the worktree dirty with a known value.
-	dirtyContent := []byte("dirty content")
-	filePath := filepath.Join(dir, "initial.txt")
-	if err := os.WriteFile(filePath, dirtyContent, 0o644); err != nil {
-		test.Fatalf("WriteFile: %v", err)
-	}
-
-	gitBin, err := git.FindGitBinary()
-	if err != nil {
-		test.Fatalf("FindGitBinary: %v", err)
-	}
-
-	repoState := mustOpen(test, dir)
-
-	if err := git.AutoStash(repoState, gitBin); err != nil {
-		test.Fatalf("AutoStash: %v", err)
-	}
-	if err := git.AutoStashPop(repoState, gitBin); err != nil {
-		test.Fatalf("AutoStashPop: %v", err)
-	}
-
-	// The dirty content should be restored.
-	got, err := os.ReadFile(filePath)
-	if err != nil {
-		test.Fatalf("ReadFile: %v", err)
-	}
-	if string(got) != string(dirtyContent) {
-		test.Errorf("file content = %q, want %q", got, dirtyContent)
-	}
-}
-
-// TestAutoStash_FailsWithBadBinary verifies that AutoStash returns an error
-// when the supplied git binary path does not exist, covering the case where
-// the native git binary cannot be found on PATH.
-func TestAutoStash_FailsWithBadBinary(test *testing.T) {
-	dir := test.TempDir()
-	gitCmd := initRepo(test, dir)
-	addCommit(test, dir, "initial", gitCmd)
-
-	// Make the worktree dirty so the stash attempt is meaningful.
-	if err := os.WriteFile(filepath.Join(dir, "initial.txt"), []byte("dirty"), 0o644); err != nil {
-		test.Fatalf("WriteFile: %v", err)
-	}
-
-	repoState := mustOpen(test, dir)
-
-	err := git.AutoStash(repoState, "/nonexistent/git")
-	if err == nil {
-		test.Fatal("expected error when git binary does not exist, got nil")
+			opts := baseAmendOpts()
+			mutate(&opts)
+			err := git.AmendCommit(mustOpen(test, dir), opts)
+			if !errors.Is(err, git.ErrInvalidIdentity) {
+				test.Fatalf("expected ErrInvalidIdentity, got %v", err)
+			}
+			if after := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD"); after != before {
+				test.Errorf("HEAD moved from %s to %s", before, after)
+			}
+		})
 	}
 }

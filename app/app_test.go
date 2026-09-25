@@ -193,3 +193,82 @@ func TestUpdateCommit_MovesBranchesAndUndoRestoresThem(test *testing.T) {
 		}
 	}
 }
+
+// TestUpdateCommit_KeepsStashWhenWorktreeIsClean verifies that an edit in a
+// clean worktree leaves an existing stash alone. The committed executable file
+// reproduces the Windows case where go-git reported the clean worktree as
+// dirty, which made the old auto-stash run a no-op `git stash` and then pop
+// the user's unrelated stash.
+func TestUpdateCommit_KeepsStashWhenWorktreeIsClean(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\n"), 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+	runGit(test, dir, "add", "run.sh")
+	runGit(test, dir, "update-index", "--chmod=+x", "run.sh")
+	runGit(test, dir, "commit", "-m", "script")
+
+	if err := os.WriteFile(filepath.Join(dir, "base.txt"), []byte("stashed work"), 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+	runGit(test, dir, "stash")
+	stashBefore := runGit(test, dir, "stash", "list")
+
+	head := runGit(test, dir, "rev-parse", "HEAD")
+	if _, err := app.UpdateCommit(editRequest(head)); err != nil {
+		test.Fatalf("UpdateCommit: %v", err)
+	}
+
+	if got := runGit(test, dir, "stash", "list"); got != stashBefore {
+		test.Errorf("stash list = %q, want %q", got, stashBefore)
+	}
+	if got := runGit(test, dir, "status", "--porcelain"); got != "" {
+		test.Errorf("status = %q, want a clean worktree", got)
+	}
+}
+
+// TestUpdateCommit_KeepsStagedAndUnstagedChanges verifies that an edit leaves
+// uncommitted work exactly as it was: staged changes stay staged and unstaged
+// changes stay unstaged. Rewrites only change metadata, so nothing needs to be
+// stashed.
+func TestUpdateCommit_KeepsStagedAndUnstagedChanges(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+
+	if err := os.WriteFile(filepath.Join(dir, "local.txt"), []byte("staged"), 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+	runGit(test, dir, "add", "local.txt")
+	if err := os.WriteFile(filepath.Join(dir, "base.txt"), []byte("unstaged"), 0o644); err != nil {
+		test.Fatalf("WriteFile: %v", err)
+	}
+	statusBefore := runGit(test, dir, "status", "--porcelain")
+
+	head := runGit(test, dir, "rev-parse", "HEAD")
+	if _, err := app.UpdateCommit(editRequest(head)); err != nil {
+		test.Fatalf("UpdateCommit: %v", err)
+	}
+
+	if got := runGit(test, dir, "status", "--porcelain"); got != statusBefore {
+		test.Errorf("status = %q, want %q", got, statusBefore)
+	}
+	if got := runGit(test, dir, "stash", "list"); got != "" {
+		test.Errorf("stash list = %q, want it empty", got)
+	}
+}
+
+// TestUpdateCommit_RejectsInvalidAuthor verifies that the bound method refuses
+// an author that would produce a malformed commit.
+func TestUpdateCommit_RejectsInvalidAuthor(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	head := runGit(test, dir, "rev-parse", "HEAD")
+
+	req := editRequest(head)
+	req.AuthorName = "Name <with brackets>"
+	if _, err := app.UpdateCommit(req); !errors.Is(err, gitpkg.ErrInvalidIdentity) {
+		test.Fatalf("expected ErrInvalidIdentity, got %v", err)
+	}
+	if got := runGit(test, dir, "rev-parse", "HEAD"); got != head {
+		test.Errorf("HEAD moved from %s to %s", head, got)
+	}
+}

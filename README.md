@@ -17,7 +17,7 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 **Phase 2 (complete) — Core Editing**
 - Edit commit message, date, and author metadata
 - Preview every change before it is applied
-- Automatic stash/unstash of uncommitted work around history rewrites
+- Uncommitted work (staged or not) and the stash are left untouched: edits only change commit metadata
 
 **Phase 3 (complete) — UX Polish**
 - Recent repositories list

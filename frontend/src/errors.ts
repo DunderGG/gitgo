@@ -27,22 +27,6 @@ const rules: FriendlyRule[] = [
     message: 'That commit could not be found. The history may have changed outside GitGo; reopen the repository.',
   },
   {
-    // Checked before the generic stash rules: both the rewrite and the pop failed.
-    pattern: /also failed to restore stash/i,
-    message:
-      'The edit failed, and your uncommitted changes are still in the git stash. Run “git stash pop” to restore them.',
-  },
-  {
-    pattern: /stash pop failed/i,
-    message:
-      'The commit was updated, but your uncommitted changes could not be restored automatically. They are still in the git stash; run “git stash pop” to restore them.',
-  },
-  {
-    pattern: /stashing changes/i,
-    message:
-      'GitGo could not stash your uncommitted changes, so nothing was edited. Commit or stash them yourself and try again.',
-  },
-  {
     pattern: /writing reflog/i,
     message:
       'GitGo could not write the reflog in .git/logs, so nothing was changed. Check that the repository folder is writable.',

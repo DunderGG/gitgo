@@ -50,8 +50,8 @@ type RepoState struct {
 	// and undo operate on this branch's ref, not on HEAD.
 	Branch string
 
-	// IsCheckedOut is true when Branch is the branch HEAD points at. Only then
-	// can a rewrite interact with the working tree (auto-stash).
+	// IsCheckedOut is true when Branch is the branch HEAD points at. Rewrites
+	// never touch the working tree either way, since file trees are unchanged.
 	IsCheckedOut bool
 
 	// HasRemote is true when at least one remote is configured.

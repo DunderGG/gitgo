@@ -232,11 +232,12 @@ func (app *App) RefreshLog() ([]CommitSummary, error) {
 }
 
 // UpdateCommit applies the metadata changes in req to the identified unpushed
-// commit. If the working tree is dirty, changes are automatically stashed
-// before the rewrite and restored afterwards.
+// commit.
 //
 // The rewrite targets the branch selected via OpenRepository / SwitchBranch,
-// which does not have to be checked out; auto-stash only applies when it is.
+// which does not have to be checked out. Uncommitted changes are left exactly
+// as they are, staged or not: rewrites only change commit metadata, never file
+// trees, so the index and working tree stay consistent with the moved branch.
 //
 // Under the hood, branch-tip rewrites use AmendCommit (faster, no graph walk) and
 // older commits use RebaseRewrite (first-parent chain rebuild).
@@ -262,8 +263,8 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	app.mutex.Unlock()
 
 	// Server-side safety check: refuse to rewrite a pushed commit. This mirrors
-	// the check inside AmendCommit / RebaseRewrite but is done here first so we
-	// never stash the worktree for an operation that is going to be rejected.
+	// the check inside AmendCommit / RebaseRewrite but is done here first so a
+	// rejected edit fails before any other work.
 	commitHash := plumbing.NewHash(req.Hash)
 	if !state.UnpushedHashes[commitHash] {
 		return OperationResult{}, gitpkg.ErrCommitNotUnpushed
@@ -290,33 +291,6 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		MoveBranches:      req.MoveBranches,
 	}
 
-	// Check for dirty working tree. If dirty we must stash before rewriting so
-	// that uncommitted changes are not lost or corrupted by the graph rebuild.
-	// A branch that is not checked out has no relation to the working tree, so
-	// it is rewritten without looking at (or stashing) the worktree.
-	isDirty := false
-	if state.IsCheckedOut {
-		isDirty, err = gitpkg.IsDirty(state)
-		if err != nil {
-			return OperationResult{}, fmt.Errorf("checking working tree: %w", err)
-		}
-	}
-
-	var gitBin string
-	var stashed bool
-	if isDirty {
-		// FindGitBinary returns ErrNativeGitNotFound when git is not on PATH.
-		// go-git has no stash API, so we cannot proceed without the native binary.
-		gitBin, err = gitpkg.FindGitBinary()
-		if err != nil {
-			return OperationResult{}, err
-		}
-		if err = gitpkg.AutoStash(state, gitBin); err != nil {
-			return OperationResult{}, fmt.Errorf("stashing changes: %w", err)
-		}
-		stashed = true
-	}
-
 	// Branch-tip rewrites use AmendCommit (no graph walk needed).
 	// Older commits use RebaseRewrite (rebuilds the full chain above the target).
 	branchRefName := plumbing.NewBranchReferenceName(state.Branch)
@@ -325,10 +299,6 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		return OperationResult{}, fmt.Errorf("reading branch %s: %w", state.Branch, err)
 	}
 
-	// rewriteErr captures errors from either rewrite method; we want to report
-	// stash pop errors separately since the rewrite may have succeeded but the
-	// stash pop failed (leaving the user with a stash that they may not notice
-	// if we report it as part of the rewrite error).
 	// Note where the other branches point, so the ones the rewrite moves can
 	// be moved back by undo.
 	otherTipsBefore := branchTips(state, req.MoveBranches)
@@ -346,39 +316,21 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	if errors.As(rewriteErr, &refsNotMoved) {
 		rewriteErr = nil
 	}
-
-	// Record the pre- and post-rewrite tips so the operation can be undone.
-	// This happens before the stash pop so the record exists even when the
-	// pop fails, since the rewrite itself still succeeded.
-	if rewriteErr == nil {
-		if newTip, tipErr := state.Repo.Reference(branchRefName, true); tipErr == nil {
-			app.mutex.Lock()
-			app.lastRewrite = &rewriteRecord{
-				RepoPath:      state.Path,
-				Branch:        branchRefName,
-				BeforeHash:    tip.Hash(),
-				AfterHash:     newTip.Hash(),
-				MovedBranches: movedBranches(state, otherTipsBefore),
-			}
-			app.mutex.Unlock()
-		}
-	}
-
-	// Always restore the stash — whether or not the rewrite succeeded — so the
-	// user's in-progress work is never left trapped in the stash.
-	if stashed {
-		if popErr := gitpkg.AutoStashPop(state, gitBin); popErr != nil {
-			if rewriteErr != nil {
-				// Both failed: report the rewrite error; the stash is still there.
-				return OperationResult{}, fmt.Errorf("rewrite failed: %w; also failed to restore stash: %v", rewriteErr, popErr)
-			}
-			// Rewrite succeeded but pop failed: tell the user explicitly.
-			return OperationResult{Success: false, Message: "commit updated but stash pop failed: " + popErr.Error()}, nil
-		}
-	}
-
 	if rewriteErr != nil {
 		return OperationResult{}, rewriteErr
+	}
+
+	// Record the pre- and post-rewrite tips so the operation can be undone.
+	if newTip, tipErr := state.Repo.Reference(branchRefName, true); tipErr == nil {
+		app.mutex.Lock()
+		app.lastRewrite = &rewriteRecord{
+			RepoPath:      state.Path,
+			Branch:        branchRefName,
+			BeforeHash:    tip.Hash(),
+			AfterHash:     newTip.Hash(),
+			MovedBranches: movedBranches(state, otherTipsBefore),
+		}
+		app.mutex.Unlock()
 	}
 
 	// Refresh the stored RepoState so subsequent calls (GetCommitLog,
@@ -391,9 +343,6 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 
 	if refsNotMoved != nil {
 		return OperationResult{Success: false, Message: refsNotMoved.Error()}, nil
-	}
-	if stashed {
-		return OperationResult{Success: true, Message: "commit updated; stashed changes restored"}, nil
 	}
 	return OperationResult{Success: true, Message: "commit updated"}, nil
 }

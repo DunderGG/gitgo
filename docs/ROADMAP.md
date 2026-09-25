@@ -64,8 +64,8 @@
     - [x] Substitute edited metadata at target position
     - [x] Reset branch HEAD ref to new tip
     - [x] Restore original ref on any failure
-  - [x] Detect `git` binary on PATH before auto-stash (go-git has no stash API)
-  - [x] Auto-stash via native `git stash` / `git stash pop` if `git` is available; error clearly if not
+  - [x] ~~Detect `git` binary on PATH before auto-stash (go-git has no stash API)~~ *(auto-stash removed in Phase 4)*
+  - [x] ~~Auto-stash via native `git stash` / `git stash pop` if `git` is available; error clearly if not~~ *(removed in Phase 4: rewrites never touch the working tree)*
 - [x] Bind `App.UpdateCommit(req EditRequest)` to Wails
   - [x] Server-side safety check: reject if commit is not in unpushed set
 - [x] Frontend: `EditPanel` component
@@ -77,7 +77,7 @@
   - [x] Display old vs new values side-by-side before confirming
   - [x] "Apply" and "Cancel" actions
 - [x] Frontend: Refresh `CommitList` after a successful edit
-- [x] Show auto-stash notice in `StatusBar` when applicable
+- [x] ~~Show auto-stash notice in `StatusBar` when applicable~~ *(removed with auto-stash in Phase 4)*
 - [x] Write integration tests for `git/rewrite.go` (16 tests, all passing)
   - [x] `TestAmendCommit_UpdatesMessage`
   - [x] `TestAmendCommit_UpdatesAuthor`
@@ -90,11 +90,11 @@
   - [x] `TestRebaseRewrite_PreservesUnchangedParent`
   - [x] `TestRebaseRewrite_TargetIsHead`
   - [x] `TestRebaseRewrite_RejectsPushedCommit`
-  - [x] `TestIsDirty_CleanWorktree`
-  - [x] `TestIsDirty_DirtyWorktree`
-  - [x] `TestAutoStash_StashesDirtyWorktree`
-  - [x] `TestAutoStashPop_RestoresChanges`
-  - [x] `TestAutoStash_FailsWithBadBinary`
+  - [x] ~~`TestIsDirty_CleanWorktree`~~ *(removed with auto-stash)*
+  - [x] ~~`TestIsDirty_DirtyWorktree`~~ *(removed with auto-stash)*
+  - [x] ~~`TestAutoStash_StashesDirtyWorktree`~~ *(removed with auto-stash)*
+  - [x] ~~`TestAutoStashPop_RestoresChanges`~~ *(removed with auto-stash)*
+  - [x] ~~`TestAutoStash_FailsWithBadBinary`~~ *(removed with auto-stash)*
 
 ---
 
@@ -172,6 +172,19 @@
   - [x] Decided: move local branches that point at a rewritten commit (checkbox, on by default, like `git rebase --update-refs`); undo moves them back
   - [x] Tags are never moved, only warned about; branches with their own commits on top of a rewritten commit are warned about (they keep the old history)
 
+Found in the follow-up review (2026-09-25):
+
+- [x] **Auto-stash could pop an unrelated stash and lost staging** *(blocker)*
+  - go-git's `Worktree.Status()` reports a clean Windows worktree as dirty when a tracked file has the executable bit (e.g. `gradlew`, `*.sh` committed from Linux/macOS), because it ignores `core.fileMode=false`. `git stash` then saved nothing, and the following `git stash pop` applied and dropped the user's older, unrelated stash.
+  - Even when a stash was created, `git stash pop` without `--index` turned staged changes into unstaged ones.
+  - [x] Decided: remove auto-stash entirely. Edits only change commit metadata, never file trees, so the index and working tree stay consistent when the branch moves; uncommitted work (staged or not) and the stash are never touched. Removed `IsDirty`, `FindGitBinary`, `AutoStash`, `AutoStashPop` and `ErrNativeGitNotFound`; the native `git` binary is no longer a runtime dependency.
+  - [x] Tests: `TestUpdateCommit_KeepsStashWhenWorktreeIsClean`, `TestUpdateCommit_KeepsStagedAndUnstagedChanges` (both fail against the old auto-stash code)
+- [x] **Rebuilt commits dropped the `encoding`, `mergetag` and other extra headers**
+  - [x] `rebuildCommit` keeps them on the edited commit and on every commit rebuilt above it (`TestRebaseRewrite_KeepsEncodingHeader`); signatures (`gpgsig*`) are still dropped, see Future Improvements
+- [x] **Author name and email were not validated**
+  - An empty name, or `<`, `>` or a line break in the name or email, produced a malformed commit header that `git fsck` and many servers reject on push
+  - [x] `AmendCommit` / `RebaseRewrite` return `ErrInvalidIdentity` (`TestAmendCommit_RejectsInvalidIdentity`, `TestUpdateCommit_RejectsInvalidAuthor`); `EditPanel` shows the same rules inline and disables "Review Changes"
+
 ---
 
 ## Phase 5 — Advanced Operations
@@ -223,6 +236,7 @@
 - [ ] Persistent app preferences (window size, warning visibility, default UI behavior)
 - [ ] Open commit details in an external tool or terminal command
 - [ ] Export commit metadata or history summaries as text/JSON for sharing
+- [ ] Add tiny date/time buttons under the date field to add +1 hour, +1 day, current time, etc.
 
 ### Larger additions
 
@@ -230,6 +244,9 @@
 - [ ] Commit search and filtering by message, author, date, or hash
 - [ ] Side-by-side commit comparison view
 - [ ] Include prerequisites with the app
+- [ ] Handle signed commits: an edit silently drops the GPG/SSH signature of the edited commit and of every commit rebuilt above it (a copied signature would no longer verify)
+  - [ ] Warn in `ConfirmDialog` when any commit that will be rebuilt is signed
+  - [ ] Optionally re-sign rebuilt commits when `commit.gpgSign` is set (like `git rebase` does), via the native `git` / `gpg` binaries
 
 ---
 

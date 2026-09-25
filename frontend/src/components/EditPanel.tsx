@@ -111,6 +111,21 @@ function toPreviewDateText({ dateLocal, offset }: { dateLocal: string; offset: s
   return `${wallClock} (UTC${offset})`
 }
 
+// Mirrors validateIdentity in git/rewrite.go: these values would produce a
+// malformed commit header that `git fsck` and many servers reject on push.
+const IDENTITY_FORBIDDEN = /[<>\r\n]/
+
+function identityErrors(form: EditFormState): { name: string | null; email: string | null } {
+  let name: string | null = null
+  if (!form.authorName.trim()) {
+    name = 'Author name cannot be empty.'
+  } else if (IDENTITY_FORBIDDEN.test(form.authorName)) {
+    name = 'Author name cannot contain < or >.'
+  }
+  const email = IDENTITY_FORBIDDEN.test(form.authorEmail) ? 'Author email cannot contain < or >.' : null
+  return { name, email }
+}
+
 function formsEqual(left: EditFormState, right: EditFormState): boolean {
   return (
     left.message === right.message &&
@@ -256,6 +271,8 @@ export default function EditPanel() {
     }
   }, [pendingEditFocus, isLoading, selectedHash, loadedHash, fieldsDisabled, loadError, consumeEditFocus])
   const hasChanges = originalForm !== null && !formsEqual(form, originalForm)
+  const fieldErrors = identityErrors(form)
+  const isValid = fieldErrors.name === null && fieldErrors.email === null
 
   const offsetOptions = [...COMMON_OFFSETS]
   for (const offset of [originalForm?.offset, form.offset]) {
@@ -331,7 +348,7 @@ export default function EditPanel() {
         const refreshedCommits = await RefreshLog()
         setRepo(repoInfo, refreshedCommits)
         // The rewrite itself succeeded even when result.success is false (only
-        // the stash pop failed), so it can always be undone at this point.
+        // moving some other branches failed), so it can always be undone here.
         setCanUndo(true)
 
         if (result.success) {
@@ -401,7 +418,7 @@ export default function EditPanel() {
           className="mt-5 space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
-            if (!fieldsDisabled && hasChanges && activity === null) {
+            if (!fieldsDisabled && hasChanges && isValid && activity === null) {
               openConfirmDialog()
             }
           }}
@@ -483,6 +500,9 @@ export default function EditPanel() {
               className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Author name"
             />
+            {!fieldsDisabled && fieldErrors.name && (
+              <p className="mt-1 text-xs text-red-300">{fieldErrors.name}</p>
+            )}
           </div>
 
           <div>
@@ -497,6 +517,9 @@ export default function EditPanel() {
               className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="author@example.com"
             />
+            {!fieldsDisabled && fieldErrors.email && (
+              <p className="mt-1 text-xs text-red-300">{fieldErrors.email}</p>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
@@ -510,7 +533,7 @@ export default function EditPanel() {
             </button>
             <button
               type="submit"
-              disabled={fieldsDisabled || !hasChanges || activity !== null}
+              disabled={fieldsDisabled || !hasChanges || !isValid || activity !== null}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Review Changes
