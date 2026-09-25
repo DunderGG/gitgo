@@ -405,6 +405,37 @@ func (app *App) GetAffectedRefs(hashes []string) ([]AffectedRef, error) {
 	return result, nil
 }
 
+// GetSignedCommits lists the signed commits that an edit of the given commits
+// would rebuild and so leave unsigned, for the confirm dialog.
+func (app *App) GetSignedCommits(hashes []string) ([]SignedCommit, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return nil, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	targets := make([]plumbing.Hash, len(hashes))
+	for i, hash := range hashes {
+		targets[i] = plumbing.NewHash(hash)
+	}
+	signed, err := gitpkg.FindSignedCommits(state, targets...)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SignedCommit, 0, len(signed))
+	for _, commit := range signed {
+		result = append(result, SignedCommit{
+			Hash:      commit.Hash.String(),
+			ShortHash: commit.Hash.String()[:7],
+			Subject:   commit.Subject,
+			Edited:    commit.Edited,
+		})
+	}
+	return result, nil
+}
+
 // branchTips returns the current tip of each named local branch that exists.
 func branchTips(state *gitpkg.RepoState, names []string) map[plumbing.ReferenceName]plumbing.Hash {
 	tips := make(map[plumbing.ReferenceName]plumbing.Hash, len(names))

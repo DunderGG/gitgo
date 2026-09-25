@@ -7,9 +7,11 @@
         testdata/test-remote/  — a bare repository simulating a remote server
         testdata/test-repo/    — a working repository with:
                                    3 pushed commits  (already on the fake remote)
-                                   3 unpushed commits (local only, editable in GitGo)
+                                   3 unpushed commits (local only, editable in GitGo);
+                                   the middle one is SSH-signed with a throwaway
+                                   key generated into testdata/test-signing-key
 
-    Re-running this script resets both directories to a clean state.
+    Re-running this script resets both directories (and the key) to a clean state.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -17,10 +19,15 @@ $ErrorActionPreference = "Stop"
 $testDataDir   = Join-Path $PSScriptRoot "testdata"
 $testRepoDir   = Join-Path $testDataDir  "test-repo"
 $testRemoteDir = Join-Path $testDataDir  "test-remote"
+$signingKey    = Join-Path $testDataDir  "test-signing-key"
+$allowedSigners = Join-Path $testDataDir "allowed-signers"
 
 # ── Clean up any previous run ──────────────────────────────────────────────────
 if (Test-Path $testRepoDir)   { Remove-Item $testRepoDir   -Recurse -Force }
 if (Test-Path $testRemoteDir) { Remove-Item $testRemoteDir -Recurse -Force }
+foreach ($file in @($signingKey, "$signingKey.pub", $allowedSigners)) {
+    if (Test-Path $file) { Remove-Item $file -Force }
+}
 
 # ── Create bare remote ─────────────────────────────────────────────────────────
 Write-Host "Creating bare remote  : $testRemoteDir" -ForegroundColor Cyan
@@ -40,19 +47,25 @@ git config core.autocrlf    false
 git remote add origin $testRemoteDir
 
 # Helper function — write a file, stage it, and commit with a fixed date.
+# -Sign signs the commit with the configured signing key.
 function Add-Commit {
     param(
         [string]$CommitMessage,
         [string]$FileName,
         [string]$FileContent,
-        [string]$CommitDate
+        [string]$CommitDate,
+        [switch]$Sign
     )
 
     Set-Content -Path $FileName -Value $FileContent -Encoding UTF8 -NoNewline
     git add $FileName | Out-Null
     $env:GIT_AUTHOR_DATE    = $CommitDate
     $env:GIT_COMMITTER_DATE = $CommitDate
-    git commit -m $CommitMessage --quiet
+    if ($Sign) {
+        git commit -m $CommitMessage --quiet -S
+    } else {
+        git commit -m $CommitMessage --quiet
+    }
 }
 
 # ── Pushed commits (will be on the remote after the push below) ────────────────
@@ -84,6 +97,21 @@ Write-Host "Pushed 3 commits to remote." -ForegroundColor DarkGray
 git config user.name  "Alice Dev"
 git config user.email "alice@example.com"
 
+# SSH signing with a throwaway key, so GitGo's warning about dropped
+# signatures can be tried out. Only commits made with -Sign are signed.
+# `git log --show-signature` verifies them against the allowed-signers file.
+# Windows PowerShell 5.1 drops empty arguments to native programs, so the
+# empty passphrase has to be passed as a quoted "" there.
+$emptyPassphrase = if ($PSVersionTable.PSVersion.Major -ge 7) { "" } else { '""' }
+ssh-keygen -t ed25519 -N $emptyPassphrase -C "alice@example.com" -f $signingKey -q
+if ($LASTEXITCODE -ne 0) { throw "ssh-keygen failed" }
+$publicKey = (Get-Content "$signingKey.pub" -Raw).Trim()
+# Forward slashes: git reads these paths from its config.
+Set-Content -Path $allowedSigners -Value "alice@example.com $publicKey" -Encoding ASCII
+git config gpg.format ssh
+git config user.signingKey ($signingKey -replace '\\', '/')
+git config gpg.ssh.allowedSignersFile ($allowedSigners -replace '\\', '/')
+
 Add-Commit `
     -CommitMessage "Update README: add contributing guide" `
     -FileName      "README.md" `
@@ -94,7 +122,8 @@ Add-Commit `
     -CommitMessage "Refactor: rename entry point function" `
     -FileName      "main.go" `
     -FileContent   "package main`n`nfunc main() {`n`trun()`n}`n`nfunc run() {}`n" `
-    -CommitDate    "2026-05-25T16:45:00"
+    -CommitDate    "2026-05-25T16:45:00" `
+    -Sign
 
 Add-Commit `
     -CommitMessage "Add configuration file" `
@@ -113,5 +142,5 @@ Write-Host "Test repository ready." -ForegroundColor Green
 Write-Host "  Working repo : $testRepoDir"
 Write-Host "  Bare remote  : $testRemoteDir"
 Write-Host ""
-Write-Host "Commit log:" -ForegroundColor Cyan
-git -C $testRepoDir log --oneline
+Write-Host "Commit log (G = good signature):" -ForegroundColor Cyan
+git -C $testRepoDir log --format="%h %G? %s"

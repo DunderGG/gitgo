@@ -176,6 +176,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit via `RebaseRewrite`. Re-reads the repository, performs the server-side unpushed safety check, records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state (shared with `ShiftCommitDates` through `runRewrite`). |
 | `ShiftCommitDates(req ShiftRequest) (OperationResult, error)` | Moves the author date (optionally also the committer date) of several unpushed commits by `req.Minutes` in one `ShiftDates` rewrite, keeping each commit's offset. One undo reverts the whole batch. |
 | `GetAffectedRefs(hashes []string) ([]AffectedRef, error)` | Lists other branches and tags an edit of the given commits would leave behind, for the confirm dialog. |
+| `GetSignedCommits(hashes []string) ([]SignedCommit, error)` | Lists the signed commits an edit of the given commits would rebuild (the edited ones and those above them), which come out unsigned, for the confirm dialog's warning. |
 | `ReloadRepository() (RepoInfo, error)` | Re-opens the current repository and branch from disk (`git.OpenBranch`) and returns fresh `RepoInfo`, so upstream, remote and checked-out state are re-read too. If the branch no longer exists it falls back to the checked-out branch. Keeps `lastRewrite`; if the branch moved, `UndoLastOperation` reports it. |
 | `SwitchBranch(branch string) (RepoInfo, error)` | Calls `git.OpenBranch(path, branch)` to target another local branch **without checking it out**: HEAD and the working tree are untouched, and later edits move only that branch's ref. Replaces `repoState`, clears `lastRewrite`, and returns the new `RepoInfo`. |
 | `ListBranches() ([]string, error)` | Returns the short names of all local branches, sorted alphabetically. |
@@ -398,6 +399,8 @@ A modal confirmation dialog rendered by `EditPanel` and `BulkDatePanel`. Its onl
 
 Behaviour:
 - Renders the comparison it is given as children: `EditPanel` passes `<CommitComparison before after>` (a side-by-side comparison for message, dates, author name, and author email); `BulkDatePanel` passes a table of current and new author dates.
+- Warns when signed commits will lose their signatures (from `GetSignedCommits`), marking each as edited or rebuilt above an edit.
+- Warns when signed commits will lose their signatures (from `GetSignedCommits`), marking each as edited or rebuilt above an edit.
 - Lists affected branches and tags (from `GetAffectedRefs`) with the option to move branches along.
 - Highlights changed values visually so the user can quickly verify what will be rewritten.
 - Exposes `Cancel` and `Apply` actions; `Apply` is disabled while a rewrite request is already in flight.
@@ -535,12 +538,13 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `ShiftCommitDates`, `GetAffectedRefs`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `ShiftCommitDates`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
 | `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers and `ShiftDates` for bulk date shifts; commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author validation (`validateIdentity`) |
+| `git/signed.go` | `FindSignedCommits`: the signed commits in the chain a rewrite rebuilds; checks the raw headers for `gpgsig-sha256`, which go-git drops |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
 | `git/branch_test.go` | *(Phase 3)* Tests for `ListBranches`, `OpenBranch`, and rewriting/undoing on a branch that is not checked out |
 

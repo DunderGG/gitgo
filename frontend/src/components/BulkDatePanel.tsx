@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GetAffectedRefs, GetCommitLog, RefreshLog, ShiftCommitDates } from '../../wailsjs/go/app/App'
+import { GetAffectedRefs, GetCommitLog, GetSignedCommits, RefreshLog, ShiftCommitDates } from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
@@ -64,6 +64,7 @@ export default function BulkDatePanel() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [affectedRefs, setAffectedRefs] = useState<app.AffectedRef[]>([])
+  const [signedCommits, setSignedCommits] = useState<app.SignedCommit[]>([])
   const [moveBranches, setMoveBranches] = useState(true)
 
   const selectedSet = new Set(selectedHashes)
@@ -76,7 +77,9 @@ export default function BulkDatePanel() {
 
   async function openConfirmDialog() {
     try {
-      setAffectedRefs(await GetAffectedRefs(selectedHashes))
+      const [refs, signed] = await Promise.all([GetAffectedRefs(selectedHashes), GetSignedCommits(selectedHashes)])
+      setAffectedRefs(refs)
+      setSignedCommits(signed)
     } catch (error) {
       setError(errorText(error))
       return
@@ -238,6 +241,7 @@ export default function BulkDatePanel() {
         isOpen={showConfirmDialog}
         isSubmitting={isSubmitting}
         title={`Shift ${selected.length} Commits ${formatShift(shiftMinutes)}`}
+        signedCommits={signedCommits}
         affectedRefs={affectedRefs}
         moveBranches={moveBranches}
         onMoveBranchesChange={setMoveBranches}

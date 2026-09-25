@@ -8,6 +8,9 @@ interface ConfirmDialogProps {
   title: string
   // The before/after comparison, e.g. CommitComparison.
   children: ReactNode
+  // Signed commits the edit rebuilds, which lose their signatures (see
+  // GetSignedCommits).
+  signedCommits: app.SignedCommit[]
   // Other branches and tags the edit affects (see GetAffectedRefs).
   affectedRefs: app.AffectedRef[]
   moveBranches: boolean
@@ -77,6 +80,39 @@ export function CommitComparison({ before, after }: { before: ConfirmValues; aft
   )
 }
 
+// Warns that signed commits come out of the rewrite unsigned: a signature
+// covers the exact commit bytes, including the parent hashes, so neither the
+// edited commits nor the ones rebuilt above them can keep it.
+function SignedCommitsNotice({ commits }: { commits: app.SignedCommit[] }) {
+  if (commits.length === 0) {
+    return null
+  }
+  const summary =
+    commits.length === 1
+      ? '1 signed commit will lose its signature.'
+      : `${commits.length} signed commits will lose their signatures.`
+
+  return (
+    <div className="space-y-2 rounded-lg border border-yellow-900/60 bg-yellow-950/20 p-3 text-sm text-yellow-200">
+      <div className="text-xs font-medium uppercase tracking-wide text-yellow-300/80">Signatures</div>
+      <p>
+        {summary} A signature only matches the exact commit it was made for, and GitGo cannot re-sign commits yet.
+      </p>
+      <ul className="space-y-0.5">
+        {commits.map((commit) => (
+          <li key={commit.hash} className="flex gap-2">
+            <span className="font-mono text-yellow-100">{commit.shortHash}</span>
+            <span className="truncate" title={commit.subject}>
+              {commit.subject}
+            </span>
+            <span className="shrink-0 text-yellow-300/70">{commit.edited ? 'edited' : 'rebuilt above an edit'}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 interface AffectedRefsNoticeProps {
   refs: app.AffectedRef[]
   moveBranches: boolean
@@ -143,6 +179,7 @@ export default function ConfirmDialog({
   isSubmitting,
   title,
   children,
+  signedCommits,
   affectedRefs,
   moveBranches,
   onMoveBranchesChange,
@@ -193,6 +230,7 @@ export default function ConfirmDialog({
 
         <div className="space-y-4 p-5">
           {children}
+          <SignedCommitsNotice commits={signedCommits} />
           <AffectedRefsNotice
             refs={affectedRefs}
             moveBranches={moveBranches}

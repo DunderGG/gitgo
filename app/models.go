@@ -125,6 +125,16 @@ type AffectedRef struct {
 	Kind string `json:"kind"`
 }
 
+// SignedCommit is a signed commit that an edit would leave unsigned, for the
+// confirm dialog's warning. Edited is false for commits that are only
+// rebuilt because they sit above an edited one.
+type SignedCommit struct {
+	Hash      string `json:"hash"`
+	ShortHash string `json:"shortHash"`
+	Subject   string `json:"subject"`
+	Edited    bool   `json:"edited"`
+}
+
 // OperationResult is returned by all mutating bound methods to convey
 // success or failure to the frontend.
 // Note that even if Success is true, the Message may contain warnings or other

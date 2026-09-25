@@ -250,7 +250,7 @@ Found in the follow-up review (2026-09-25):
 - [ ] Side-by-side commit comparison view
 - [ ] Include prerequisites with the app
 - [ ] Handle signed commits: an edit silently drops the GPG/SSH signature of the edited commit and of every commit rebuilt above it (a copied signature would no longer verify)
-  - [ ] Warn in `ConfirmDialog` when any commit that will be rebuilt is signed
+  - [x] Warn in `ConfirmDialog` when any commit that will be rebuilt is signed (`FindSignedCommits` / `GetSignedCommits`, which also detect `gpgsig-sha256`, which go-git does not parse; `TestFindSignedCommits_*`)
   - [ ] Optionally re-sign rebuilt commits when `commit.gpgSign` is set (like `git rebase` does), via the native `git` / `gpg` binaries
 
 ---

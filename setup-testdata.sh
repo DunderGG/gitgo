@@ -5,9 +5,11 @@
 #   testdata/test-remote/  — a bare repository simulating a remote server
 #   testdata/test-repo/    — a working repository with:
 #                              3 pushed commits  (already on the fake remote)
-#                              3 unpushed commits (local only, editable in GitGo)
+#                              3 unpushed commits (local only, editable in GitGo);
+#                              the middle one is SSH-signed with a throwaway
+#                              key generated into testdata/test-signing-key
 #
-# Re-running this script resets both directories to a clean state.
+# Re-running this script resets both directories (and the key) to a clean state.
 
 set -euo pipefail
 
@@ -15,9 +17,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TESTDATA_DIR="$SCRIPT_DIR/testdata"
 TEST_REPO_DIR="$TESTDATA_DIR/test-repo"
 TEST_REMOTE_DIR="$TESTDATA_DIR/test-remote"
+SIGNING_KEY="$TESTDATA_DIR/test-signing-key"
+ALLOWED_SIGNERS="$TESTDATA_DIR/allowed-signers"
 
 # ── Clean up any previous run ──────────────────────────────────────────────────
 rm -rf "$TEST_REPO_DIR" "$TEST_REMOTE_DIR"
+rm -f "$SIGNING_KEY" "$SIGNING_KEY.pub" "$ALLOWED_SIGNERS"
 
 # ── Create bare remote ─────────────────────────────────────────────────────────
 echo "Creating bare remote  : $TEST_REMOTE_DIR"
@@ -35,17 +40,19 @@ git config user.email "testuser@example.com"
 
 git remote add origin "$TEST_REMOTE_DIR"
 
-# Helper: write a file, stage it, and commit with a fixed date.
+# Helper: write a file, stage it, and commit with a fixed date. Any extra
+# arguments (e.g. -S to sign) are passed on to git commit.
 add_commit() {
     local commit_message="$1"
     local file_name="$2"
     local file_content="$3"
     local commit_date="$4"
+    shift 4
 
     printf '%s' "$file_content" > "$file_name"
     git add "$file_name"
     GIT_AUTHOR_DATE="$commit_date" GIT_COMMITTER_DATE="$commit_date" \
-        git commit -m "$commit_message" --quiet
+        git commit -m "$commit_message" --quiet "$@"
 }
 
 # ── Pushed commits (will be on the remote after the push below) ────────────────
@@ -87,6 +94,15 @@ echo "Pushed 3 commits to remote."
 git config user.name  "Alice Dev"
 git config user.email "alice@example.com"
 
+# SSH signing with a throwaway key, so GitGo's warning about dropped
+# signatures can be tried out. Only commits made with -S are signed.
+# `git log --show-signature` verifies them against the allowed-signers file.
+ssh-keygen -t ed25519 -N "" -C "alice@example.com" -f "$SIGNING_KEY" -q
+printf 'alice@example.com %s\n' "$(cat "$SIGNING_KEY.pub")" > "$ALLOWED_SIGNERS"
+git config gpg.format ssh
+git config user.signingKey "$SIGNING_KEY"
+git config gpg.ssh.allowedSignersFile "$ALLOWED_SIGNERS"
+
 add_commit \
     "Update README: add contributing guide" \
     "README.md" \
@@ -113,7 +129,8 @@ func main() {
 }
 
 func run() {}' \
-    "2026-05-25T16:45:00"
+    "2026-05-25T16:45:00" \
+    -S
 
 add_commit \
     "Add configuration file" \
@@ -129,5 +146,5 @@ echo "Test repository ready."
 echo "  Working repo : $TEST_REPO_DIR"
 echo "  Bare remote  : $TEST_REMOTE_DIR"
 echo ""
-echo "Commit log:"
-git log --oneline
+echo "Commit log (G = good signature):"
+git log --format='%h %G? %s'

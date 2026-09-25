@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { GetAffectedRefs, GetCommitDetail, GetCommitLog, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
+import { GetAffectedRefs, GetCommitDetail, GetCommitLog, GetSignedCommits, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog, { CommitComparison, ConfirmValues } from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
@@ -154,6 +154,7 @@ export default function EditPanel() {
   // Other branches and tags the edit would leave behind, loaded when the
   // confirm dialog opens.
   const [affectedRefs, setAffectedRefs] = useState<app.AffectedRef[]>([])
+  const [signedCommits, setSignedCommits] = useState<app.SignedCommit[]>([])
   const [moveBranches, setMoveBranches] = useState(true)
 
   useEffect(() => {
@@ -254,7 +255,12 @@ export default function EditPanel() {
       return
     }
     try {
-      setAffectedRefs(await GetAffectedRefs([selectedHash]))
+      const [refs, signed] = await Promise.all([
+        GetAffectedRefs([selectedHash]),
+        GetSignedCommits([selectedHash]),
+      ])
+      setAffectedRefs(refs)
+      setSignedCommits(signed)
     } catch (error) {
       setError(errorText(error))
       return
@@ -535,6 +541,7 @@ export default function EditPanel() {
           isOpen={showConfirmDialog}
           isSubmitting={isSubmitting}
           title="Confirm Commit Update"
+          signedCommits={signedCommits}
           affectedRefs={affectedRefs}
           moveBranches={moveBranches}
           onMoveBranchesChange={setMoveBranches}

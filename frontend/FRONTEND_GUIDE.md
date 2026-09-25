@@ -214,6 +214,8 @@ Current behavior:
 
 - shows current values and new values side-by-side
 - highlights changed values
+- warns when signed commits will lose their signatures (GitGo cannot re-sign yet)
+- warns when signed commits will lose their signatures (GitGo cannot re-sign yet)
 - provides Apply and Cancel actions
 - Escape cancels the dialog; Ctrl+Z is blocked while it is open
 
