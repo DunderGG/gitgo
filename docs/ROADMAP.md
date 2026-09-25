@@ -236,7 +236,8 @@ Found in the follow-up review (2026-09-25):
 - [ ] Persistent app preferences (window size, warning visibility, default UI behavior)
 - [ ] Open commit details in an external tool or terminal command
 - [ ] Export commit metadata or history summaries as text/JSON for sharing
-- [ ] Add tiny date/time buttons under the date field to add +1 hour, +1 day, current time, etc.
+- [x] Add tiny date/time buttons under the date field to add +1 hour, +1 day, current time, etc.
+  - [x] `EditPanel` has −1d, −1h, +1h, +1d (shift the wall-clock time, keeping the offset) and Now (current time and this computer's offset)
 
 ### Larger additions
 
