@@ -104,6 +104,7 @@ Top-level layout and routing-by-state:
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
+- keeps the window title as "GitGo — repo (branch)" using the Wails runtime's WindowSetTitle
 
 ### src/store/repoStore.ts
 

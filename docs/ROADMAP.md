@@ -126,7 +126,10 @@
 - [x] Error boundary in frontend with user-friendly messages
   - [x] Friendly mapping for raw backend errors, with the raw text kept as a tooltip
   - [x] Uncaught promise rejections shown in `StatusBar`
-- [ ] Application icon and Wails window configuration (title, min size)
+- [x] Application icon and Wails window configuration (title, min size)
+  - [x] Square `appicon.png`; icon embedded for Linux and the macOS About panel
+  - [x] Dark native title bar on Windows and macOS
+  - [x] Window title shows the open repository and branch
 - [x] `CommitList` row selection state (highlight selected commit, drive `EditPanel`)
 - [ ] Reload / refresh button in header to re-read the repo from disk
 

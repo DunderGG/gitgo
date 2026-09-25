@@ -147,7 +147,7 @@ See [diagrams/layer-diagram.puml](diagrams/layer-diagram.puml).
 The Wails entry point. Its only responsibilities are:
 
 1. **Embed the frontend** — the `//go:embed all:frontend/dist` directive bundles the compiled Vite output into the binary at build time so the app ships as a single executable with no external assets.
-2. **Configure the window** — title (`"GitGo"`), initial size (1200×800), minimum size (900×600), and background colour (the same `gray-900` used by Tailwind, preventing a flash of white on startup).
+2. **Configure the window** — title (`"GitGo"`), initial size (1200×800), minimum size (900×600, below which the header and commit columns no longer fit), and background colour (the same `gray-900` used by Tailwind, preventing a flash of white on startup). Platform options keep the native chrome dark to match the dark-only UI: `windows.Dark` theme on Windows, `NSAppearanceNameDarkAqua` plus an About panel (title, description, icon) on macOS, and the window icon and program name on Linux. The icon comes from `build/appicon.png`, embedded with `//go:embed` because Linux and the macOS About panel need it at runtime.
 3. **Wire lifecycle hooks** — `OnStartup: app.Startup` passes the Wails context into the `App` struct so bound methods can use it for dialogs and events.
 4. **Register bindings** — `Bind: []interface{}{app}` exposes all exported methods on `*App` to the frontend IPC bridge.
 
@@ -305,6 +305,8 @@ The root layout component. Renders a full-height flex column with three vertical
 - **Footer** — always-visible `<StatusBar>`.
 
 `App.tsx` owns the top-level conditional render. It subscribes to only `repoInfo` from the store to decide which view to show, keeping re-renders minimal.
+
+It also keeps the window title in sync with the open repository and branch (`"GitGo — <repo folder> (<branch>)"`, or just `"GitGo"` when nothing is open), via the Wails runtime's `WindowSetTitle` plus `document.title`. The runtime call is wrapped in `try`/`catch` because it does not exist when the frontend runs in a plain browser.
 
 ---
 
@@ -480,6 +482,10 @@ Configures Vite to use the React plugin. In `wails dev` mode Wails injects a pro
 #### `frontend/tailwind.config.ts`
 
 Configures Tailwind to scan `src/**/*.{ts,tsx}` for class names. The dark theme used throughout the app is built entirely from Tailwind utility classes — no custom CSS.
+
+#### `build/appicon.png` and `build/windows/icon.ico`
+
+The application icon. `appicon.png` is the source image: square (1224×1224) with a transparent background, as Wails expects when generating the macOS `.icns`. It is also embedded into the binary for the Linux window icon and the macOS About panel. `icon.ico` is the Windows icon, with 16–256 px sizes. Wails only regenerates `icon.ico` from `appicon.png` when the `.ico` is missing, so after changing the artwork, delete `icon.ico` and run `wails build` to regenerate it.
 
 #### `build/windows/info.json` and `build/windows/wails.exe.manifest`
 
