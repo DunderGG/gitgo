@@ -42,6 +42,23 @@ func main() {
 	if size.Maximised {
 		startState = options.Maximised
 	}
+	theme := application.GetSettings().Theme
+
+	// Match the frontend's bg-gray-900 in the chosen theme, so there is no
+	// flash of the wrong colour while loading.
+	background := &options.RGBA{R: 17, G: 24, B: 39, A: 1}
+	if !app.PrefersDark(theme) {
+		background = &options.RGBA{R: 249, G: 250, B: 251, A: 1}
+	}
+	// The title bar follows the theme too. The frontend updates it on Windows
+	// when the theme changes; macOS picks it up at the next start.
+	windowsTheme, macAppearance := windows.SystemDefault, mac.DefaultAppearance
+	switch theme {
+	case app.ThemeLight:
+		windowsTheme, macAppearance = windows.Light, mac.NSAppearanceNameAqua
+	case app.ThemeDark:
+		windowsTheme, macAppearance = windows.Dark, mac.NSAppearanceNameDarkAqua
+	}
 
 	err := wails.Run(&options.App{
 		Title:            "GitGo",
@@ -53,20 +70,18 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		// Matches the frontend's bg-gray-900 so there is no flash while loading.
-		BackgroundColour: &options.RGBA{R: 17, G: 24, B: 39, A: 1},
+		BackgroundColour: background,
 		OnStartup:        application.Startup,
 		OnDomReady:       window.FitToScreen,
 		OnBeforeClose:    window.Save,
 		Bind: []interface{}{
 			application,
 		},
-		// The UI is dark-only, so use a dark title bar on every platform.
 		Windows: &windows.Options{
-			Theme: windows.Dark,
+			Theme: windowsTheme,
 		},
 		Mac: &mac.Options{
-			Appearance: mac.NSAppearanceNameDarkAqua,
+			Appearance: macAppearance,
 			About: &mac.AboutInfo{
 				Title:   "GitGo",
 				Message: "Edit the message, date, and author of commits you have not pushed yet.\n\nCopyright © 2026 dunder.gg",

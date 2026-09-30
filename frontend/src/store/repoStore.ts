@@ -6,9 +6,11 @@ import {
   RefreshLog,
   ReloadRepository,
   SetRecentRepos,
+  SetTheme,
   UndoLastOperation,
 } from '../../wailsjs/go/app/App'
 import { errorText, friendlyError } from '../errors'
+import { applyTheme, isThemePreference, type ThemePreference } from '../theme'
 
 // Where earlier versions kept the recent repositories, in the WebView's
 // localStorage. loadSettings moves the list to the backend's settings file.
@@ -52,7 +54,9 @@ export async function loadSettings(): Promise<void> {
     recentRepos = legacy
   }
   removeLegacyRecentRepos()
-  useRepoStore.setState({ recentRepos })
+  const theme = isThemePreference(settings.theme) ? settings.theme : 'system'
+  applyTheme(theme)
+  useRepoStore.setState({ recentRepos, theme })
 }
 
 function persistRecentRepos(paths: string[]) {
@@ -97,6 +101,8 @@ interface RepoStore {
   repoInfo: RepoInfo | null
   commits: CommitSummary[]
   recentRepos: string[]
+  // Colour theme the user picked (header theme button), saved in the settings file.
+  theme: ThemePreference
   // Hash of the commit currently selected in CommitList; null when nothing is
   // selected. EditPanel reads this to know which commit to load. With several
   // commits selected it is the one last clicked or moved to.
@@ -128,6 +134,7 @@ interface RepoStore {
   errorDetail: string | null
   setRepo: (info: RepoInfo, commits: CommitSummary[]) => void
   removeRecentRepo: (path: string) => void
+  setTheme: (theme: ThemePreference) => void
   selectCommit: (hash: string | null) => void
   // Ctrl/Cmd-click: add or remove an unpushed commit from the selection.
   toggleCommitSelection: (hash: string) => void
@@ -153,6 +160,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   repoInfo: null,
   commits: [],
   recentRepos: [],
+  theme: 'system',
   selectedHash: null,
   selectedHashes: [],
   selectionAnchor: null,
@@ -189,6 +197,13 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       persistRecentRepos(recentRepos)
       return { recentRepos }
     }),
+
+  setTheme: (theme) => {
+    applyTheme(theme)
+    set({ theme })
+    // The theme is already showing, so a failed save only loses it for the next run.
+    SetTheme(theme).catch((error) => console.error('Saving the theme failed:', error))
+  },
 
   selectCommit: (hash) =>
     set(hash ? { selectedHash: hash, selectedHashes: [hash], selectionAnchor: hash } : NO_SELECTION),

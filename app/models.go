@@ -40,6 +40,8 @@ type App struct {
 type Settings struct {
 	// RecentRepos are the repository paths opened most recently, newest first.
 	RecentRepos []string `json:"recentRepos"`
+	// Theme is the colour theme: ThemeSystem, ThemeLight or ThemeDark.
+	Theme string `json:"theme"`
 }
 
 // rewriteRecord captures the branch tip before and after a rewrite. Undo moves

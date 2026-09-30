@@ -60,7 +60,7 @@ Vite configuration. Enables the React plugin.
 
 ### tailwind.config.ts
 
-Tailwind configuration. Tells Tailwind which files to scan for class names.
+Tailwind configuration. Tells Tailwind which files to scan for class names, and makes the light theme: the gray, indigo, yellow, red and sky colours are CSS variables that change when src/theme.ts sets data-theme="light" on the page. Write components with the dark-theme classes (bg-gray-900, text-gray-100, …); they flip on their own.
 
 ### postcss.config.js
 
@@ -94,19 +94,23 @@ Entry point for React. Loads global CSS and renders App inside ErrorBoundary. Al
 
 Turns raw backend error text into friendly messages (friendlyError). setError in the store uses it automatically, so components can keep calling setError(String(error)). Add a rule here when a new backend error reads badly.
 
+### src/theme.ts
+
+Applies the colour theme: sets data-theme="light" or "dark" on the page (which switches the CSS variables from tailwind.config.ts), and updates the window background and, on Windows, the title bar. With the 'system' theme it follows the operating system, also when that changes while GitGo is open.
+
 ### src/components/ErrorBoundary.tsx
 
 Catches errors thrown while rendering and shows a "Something went wrong" screen with technical details and Try again / Close repository / Reload GitGo buttons, instead of a blank window.
 
 ### src/index.css
 
-Global stylesheet. Right now it only imports Tailwind base layers.
+Global stylesheet. Imports Tailwind's layers and gives the page the theme's background colour.
 
 ### src/App.tsx
 
 Top-level layout and routing-by-state:
 
-- Header with app title, currently opened repo path, BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), and a ? help button
+- Header with app title, currently opened repo path, BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a theme button (System / Light / Dark), and a ? help button
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
@@ -120,6 +124,7 @@ State currently includes:
 
 - repoInfo: opened repository details
 - commits: commit list shown in CommitList
+- theme: the colour theme, 'system', 'light' or 'dark' (saved via SetTheme)
 - recentRepos: last 10 opened repository paths (saved in the backend settings file via SetRecentRepos, loaded by loadSettings before the first render)
 - selectedHash: currently selected commit row
 - canUndo: true after a rewrite that can still be undone
@@ -131,6 +136,7 @@ Actions currently include:
 
 - setRepo: save repo info and commit list
 - removeRecentRepo: remove one path from the recent list
+- setTheme: switch the colour theme and save it
 - selectCommit: select one row (or none), replacing any multi-selection
 - toggleCommitSelection: Ctrl/Cmd-click; add or remove an unpushed commit from the selection
 - extendSelection: Shift-click / Shift+arrow; select the unpushed commits from the anchor row to the clicked one

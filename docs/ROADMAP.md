@@ -128,7 +128,7 @@
   - [x] Uncaught promise rejections shown in `StatusBar`
 - [x] Application icon and Wails window configuration (title, min size)
   - [x] Square `appicon.png`; icon embedded for Linux and the macOS About panel
-  - [x] Dark native title bar on Windows and macOS
+  - [x] Native title bar matching the theme on Windows and macOS
   - [x] Window title shows the open repository and branch
 - [x] `CommitList` row selection state (highlight selected commit, drive `EditPanel`)
 - [x] Reload / refresh button in header to re-read the repo from disk
@@ -328,7 +328,7 @@ Handing the repository or its data to other programs.
   - [ ] Window position
   - [ ] Warning visibility and default UI behavior
 - [ ] **Command palette** (`Ctrl+Shift+P`) listing every action with its shortcut, as in Sublime Merge and GitKraken
-- [ ] **Light theme** and following the system theme; the app is dark only today (`windows.Dark` in `main.go`, dark Tailwind classes throughout)
+- [x] **Light theme** and following the system theme: header button cycling System / Light / Dark, saved in `settings.json`; the palettes are CSS variables swapped per theme in `tailwind.config.ts`, and the native title bar follows
 - [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens
 - [ ] **First-run tour** highlighting the commit list, the edit panel and the Undo button, reusing the `HelpDialog` content
 - [ ] **Update check** against GitHub Releases, once Phase 6 publishes binaries

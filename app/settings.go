@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -77,6 +78,19 @@ func (app *App) SetRecentRepos(paths []string) error {
 	return app.saveSettings(settings)
 }
 
+// SetTheme saves the colour theme: ThemeSystem, ThemeLight or ThemeDark.
+func (app *App) SetTheme(theme string) error {
+	if !validTheme(theme) {
+		return fmt.Errorf("unknown theme %q", theme)
+	}
+	app.settingsMutex.Lock()
+	defer app.settingsMutex.Unlock()
+
+	settings := app.loadSettings()
+	settings.Theme = theme
+	return app.saveSettings(settings)
+}
+
 // loadSettings reads the settings file. The caller holds settingsMutex.
 func (app *App) loadSettings() Settings {
 	settings := Settings{}
@@ -86,6 +100,9 @@ func (app *App) loadSettings() Settings {
 	if settings.RecentRepos == nil {
 		// An empty list rather than null for the frontend.
 		settings.RecentRepos = []string{}
+	}
+	if !validTheme(settings.Theme) {
+		settings.Theme = ThemeSystem
 	}
 	return settings
 }

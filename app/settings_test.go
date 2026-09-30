@@ -72,3 +72,54 @@ func TestSettings_WithoutConfigDir(test *testing.T) {
 		test.Fatalf("RecentRepos = %v, want empty", got)
 	}
 }
+
+func TestGetSettings_ThemeDefaultsToSystem(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	if got := app.GetSettings().Theme; got != ThemeSystem {
+		test.Fatalf("Theme without a file = %q, want %q", got, ThemeSystem)
+	}
+
+	// A file from an earlier version, or edited by hand, may hold anything.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		test.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"theme": "purple"}`), 0o644); err != nil {
+		test.Fatal(err)
+	}
+	if got := app.GetSettings().Theme; got != ThemeSystem {
+		test.Fatalf("Theme with an unknown value = %q, want %q", got, ThemeSystem)
+	}
+}
+
+func TestSetTheme_SavedAlongsideRecentRepos(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+	repos := []string{"/repos/a"}
+	if err := app.SetRecentRepos(repos); err != nil {
+		test.Fatalf("SetRecentRepos: %v", err)
+	}
+
+	if err := app.SetTheme(ThemeLight); err != nil {
+		test.Fatalf("SetTheme: %v", err)
+	}
+
+	nextRun := &App{settingsPath: path}
+	settings := nextRun.GetSettings()
+	if settings.Theme != ThemeLight {
+		test.Fatalf("Theme = %q, want %q", settings.Theme, ThemeLight)
+	}
+	if !reflect.DeepEqual(settings.RecentRepos, repos) {
+		test.Fatalf("RecentRepos = %v, want %v", settings.RecentRepos, repos)
+	}
+}
+
+func TestSetTheme_RejectsUnknownTheme(test *testing.T) {
+	app, _ := appWithSettingsFile(test)
+
+	if err := app.SetTheme("purple"); err == nil {
+		test.Fatal("SetTheme accepted an unknown theme")
+	}
+	if got := app.GetSettings().Theme; got != ThemeSystem {
+		test.Fatalf("Theme = %q, want %q", got, ThemeSystem)
+	}
+}

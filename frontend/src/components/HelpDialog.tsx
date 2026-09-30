@@ -80,7 +80,7 @@ export default function HelpDialog() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/75 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
       onClick={(event) => event.target === event.currentTarget && setHelpOpen(false)}
     >
       <div
@@ -267,6 +267,10 @@ export default function HelpDialog() {
               <li>
                 Made changes outside GitGo, for example a new commit in a terminal? Press <Kbd>F5</Kbd> or click{' '}
                 <Ui>↻</Ui> in the header to reload.
+              </li>
+              <li>
+                GitGo follows your system's light or dark setting. Click <Ui>◐</Ui> in the header to switch between
+                System, Light and Dark; the button shows the current choice.
               </li>
             </Bullets>
           </Section>

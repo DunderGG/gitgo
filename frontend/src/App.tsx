@@ -11,6 +11,7 @@ import HelpDialog from './components/HelpDialog'
 import Spinner from './components/Spinner'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { reloadActivityLabel, useRepoStore } from './store/repoStore'
+import type { ThemePreference } from './theme'
 
 // windowTitle names the open repository and branch, e.g. "GitGo — myrepo (main)",
 // so the window is easy to find in the taskbar / window switcher.
@@ -22,12 +23,20 @@ function windowTitle(path: string | undefined, branch: string | undefined): stri
   return `GitGo — ${repoName} (${branch})`
 }
 
+// The theme button cycles System → Light → Dark. U+FE0E asks for the text
+// form of ☀ rather than the colour emoji.
+const nextTheme: Record<ThemePreference, ThemePreference> = { system: 'light', light: 'dark', dark: 'system' }
+const themeLabels: Record<ThemePreference, string> = { system: 'System', light: 'Light', dark: 'Dark' }
+const themeIcons: Record<ThemePreference, string> = { system: '◐', light: '☀︎', dark: '☾' }
+
 function App() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
   const activity = useRepoStore((s) => s.activity)
   const isMultiSelect = useRepoStore((s) => s.selectedHashes.length > 1)
   const reloadRepository = useRepoStore((s) => s.reloadRepository)
   const setHelpOpen = useRepoStore((s) => s.setHelpOpen)
+  const theme = useRepoStore((s) => s.theme)
+  const setTheme = useRepoStore((s) => s.setTheme)
   const setStatus = useRepoStore((s) => s.setStatus)
   const setError = useRepoStore((s) => s.setError)
   useKeyboardShortcuts()
@@ -56,7 +65,7 @@ function App() {
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
       <header className="flex items-center px-4 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
-        <h1 className="text-lg font-semibold text-white tracking-tight">GitGo</h1>
+        <h1 className="text-lg font-semibold text-gray-50 tracking-tight">GitGo</h1>
         {repoInfo && (
           <span className="ml-4 text-sm text-gray-400 truncate">
             {repoInfo.path}
@@ -87,6 +96,15 @@ function App() {
               </button>
             </>
           )}
+          <button
+            type="button"
+            onClick={() => setTheme(nextTheme[theme])}
+            title={`Theme: ${themeLabels[theme]}. Click for ${themeLabels[nextTheme[theme]]}`}
+            aria-label={`Theme: ${themeLabels[theme]}`}
+            className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+          >
+            {themeIcons[theme]}
+          </button>
           <button
             type="button"
             onClick={() => setHelpOpen(true)}

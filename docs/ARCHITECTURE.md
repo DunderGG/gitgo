@@ -102,7 +102,7 @@ The entire application state lives in one store (`repoStore.ts`). There is no lo
 [Tailwind](https://tailwindcss.com) is a utility-first CSS framework. Rather than writing CSS files, styles are composed from atomic class names directly in JSX (e.g. `"flex flex-col h-screen bg-gray-900 text-gray-100"`).
 
 **Why Tailwind?**  
-GitGo uses a consistent dark theme throughout. Tailwind's grey and indigo palette provides all the tones needed without any custom CSS. The constraint of utility classes naturally limits visual inconsistency — there is no risk of one component defining `color: #6366f1` while another uses `color: indigo` for what should be the same value.
+GitGo has a dark and a light theme, both from the same classes. Tailwind's grey and indigo palette provides all the tones needed without any custom CSS. The constraint of utility classes naturally limits visual inconsistency — there is no risk of one component defining `color: #6366f1` while another uses `color: indigo` for what should be the same value.
 
 **Colour palette in use:**
 | Role | Classes |
@@ -116,7 +116,9 @@ GitGo uses a consistent dark theme throughout. Tailwind's grey and indigo palett
 | Warning (no remote / no upstream) | `text-yellow-400` |
 | Error | `text-red-400` |
 
-All new components must use classes from this palette. Avoid one-off hex colours or inline styles.
+Components are written with these dark-theme classes. The light theme swaps the colours behind them (see `tailwind.config.ts` below), so a class names a role rather than a fixed colour: `bg-gray-900` is the page background in both themes. Use `text-gray-50` rather than `text-white` for text that should flip; `text-white` stays white, for text on indigo buttons. Dialog backdrops use `bg-scrim`.
+
+All new components must use classes from this palette (gray, indigo, yellow, red, sky). Avoid one-off hex colours or inline styles, and other Tailwind palettes, which do not change with the theme.
 
 ---
 
@@ -147,7 +149,7 @@ See [diagrams/layer-diagram.puml](diagrams/layer-diagram.puml).
 The Wails entry point. Its only responsibilities are:
 
 1. **Embed the frontend** — the `//go:embed all:frontend/dist` directive bundles the compiled Vite output into the binary at build time so the app ships as a single executable with no external assets.
-2. **Configure the window** — title (`"GitGo"`), initial size (the size saved by the last run, else 1300×880, which fits the edit panel without scrolling), minimum size (900×600, below which the header and commit columns no longer fit), and background colour (the same `gray-900` used by Tailwind, preventing a flash of white on startup). Platform options keep the native chrome dark to match the dark-only UI: `windows.Dark` theme on Windows, `NSAppearanceNameDarkAqua` plus an About panel (title, description, icon) on macOS, and the window icon and program name on Linux. The icon comes from `build/appicon.png`, embedded with `//go:embed` because Linux and the macOS About panel need it at runtime.
+2. **Configure the window** — title (`"GitGo"`), initial size (the size saved by the last run, else 1300×880, which fits the edit panel without scrolling), minimum size (900×600, below which the header and commit columns no longer fit), and background colour (`gray-900` of the saved theme, preventing a flash of the wrong colour on startup; `app.PrefersDark` reads the Windows app mode from the registry for the system theme, and assumes dark on other platforms). Platform options match the native chrome to the saved theme: `windows.Light` / `windows.Dark` / `windows.SystemDefault` on Windows, `NSAppearanceNameAqua` / `NSAppearanceNameDarkAqua` / the system default on macOS (applied at the next start after a change), plus an About panel (title, description, icon) on macOS, and the window icon and program name on Linux. The icon comes from `build/appicon.png`, embedded with `//go:embed` because Linux and the macOS About panel need it at runtime.
 3. **Wire lifecycle hooks** — `OnStartup: application.Startup` passes the Wails context into the `App` struct so bound methods can use it for dialogs and events.
    `OnDomReady: window.FitToScreen` shrinks the window when it is larger than the screen, and `OnBeforeClose: window.Save` stores its size and maximised state in `gitgo/window.json` under the user config directory (`app/window.go`). `Window` is not bound to the frontend.
 4. **Register bindings** — `Bind: []interface{}{application}` exposes all exported methods on `*App` to the frontend IPC bridge.
@@ -187,6 +189,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `OpenTerminal() error` | *(`app/terminal.go`)* Opens a terminal window in the repository root for running git by hand. Windows: Windows Terminal (`wt.exe -d`), else `cmd.exe` in a new console; macOS: `open -a Terminal`; Linux: `$TERMINAL`, then common emulators. The terminal is detached and outlives GitGo. |
 | `GetSettings() Settings` | *(`app/settings.go`)* Reads `settings.json` in GitGo's config directory (`os.UserConfigDir()/gitgo`). A missing or unreadable file gives the defaults, so it never fails. |
 | `SetRecentRepos(paths []string) error` | *(`app/settings.go`)* Saves the recent repositories list into `settings.json`, keeping the other settings. Files in the config directory are written to a temporary file and renamed, so a crash never leaves a half-written file. |
+| `SetTheme(theme string) error` | *(`app/settings.go`)* Saves the colour theme (`system`, `light` or `dark`) into `settings.json`. `GetSettings` gives `system` for a missing or unknown value. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
 
@@ -309,7 +312,7 @@ A class component (React has no hook equivalent) that catches errors thrown whil
 
 The root layout component. Renders a full-height flex column with three vertical sections:
 
-- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`. A **?** button that opens `HelpDialog` is shown on every screen.
+- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, and a **?** button that opens `HelpDialog` is shown on every screen.
 - **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
@@ -474,7 +477,8 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `repoInfo` | `RepoInfo \| null` | `null` means no repo is open. Non-null switches the main view from `RepoSelector` to `CommitList`. |
 | `commits` | `CommitSummary[]` | The current log. Empty array while no repo is open. |
 | `recentRepos` | `string[]` | Most-recent repository paths, saved in `settings.json` through `SetRecentRepos` and loaded by `loadSettings()` before the first render (moving a list from an earlier version's `localStorage` there once), deduplicated, and capped to 10 entries. |
-| `selectedHash` | `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
+| `theme` | `ThemePreference` | `'system'`, `'light'` or `'dark'`, saved in `settings.json` through `SetTheme` and applied by `loadSettings()` before the first render. |
+| `selectedHash` | `string | null` | Currently selected `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
 | `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
 | `pendingEditFocus` | `boolean` | Set by `Enter` on a commit row; consumed by `EditPanel` after the commit loads. |
@@ -488,6 +492,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 |---|---|
 | `setRepo(info, commits)` | Sets `repoInfo` and `commits` together, clears `selectedHash` and `error`, sets `status` to `"Opened: <path>"`. |
 | `removeRecentRepo(path)` | Removes one path from the recent list and saves the updated list with `SetRecentRepos`. |
+| `setTheme(theme)` | Applies the theme at once (`applyTheme` in `theme.ts`) and saves it with `SetTheme`. |
 | `selectCommit(hash)` | Sets `selectedHash` when a commit row is clicked or keyboard-selected. |
 | `setCanUndo(canUndo)` | Sets `canUndo`. `EditPanel` sets it to `true` after a rewrite. |
 | `reloadRepository()` | Async. Runs as `runGitOperation(reloadActivityLabel, …)`: calls `ReloadRepository` then `GetCommitLog` and writes both into the store directly (not via `setRepo`), keeping the selected commit if it still exists and keeping `canUndo` unless the branch changed. Sets `status` to `"Reloaded from disk"`, or explains the fallback when the branch was deleted. |
@@ -522,7 +527,7 @@ Configures Vite to use the React plugin. In `wails dev` mode Wails injects a pro
 
 #### `frontend/tailwind.config.ts`
 
-Configures Tailwind to scan `src/**/*.{ts,tsx}` for class names. The dark theme used throughout the app is built entirely from Tailwind utility classes — no custom CSS.
+Configures Tailwind to scan `src/**/*.{ts,tsx}` for class names, and makes the themes. The gray, indigo, yellow, red and sky palettes are CSS variables (`--color-gray-900`, …): `:root` holds Tailwind's own colours for the dark theme, and `:root[data-theme="light"]` maps each shade to the one that plays the same part on a light background (grays and tints swap ends of the scale; the 500–700 accent shades stay). The mapping lives in `lightShades`; `src/theme.ts` sets `data-theme` on `<html>`, following `prefers-color-scheme` for the system theme, and updates the Wails window background and Windows title bar.
 
 #### `build/appicon.png` and `build/windows/icon.ico`
 
@@ -558,7 +563,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -583,7 +588,8 @@ GitGo/
 ├── app/
 │   ├── app.go               # App struct — bound methods exposed to frontend
 │   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
-│   ├── settings.go          # GetSettings / SetRecentRepos: settings.json in the config directory
+│   ├── settings.go          # GetSettings / SetRecentRepos / SetTheme: settings.json in the config directory
+│   ├── theme.go             # Theme names; PrefersDark for the startup window colour (+ theme_windows.go / theme_other.go)
 │   ├── window.go            # Window size saved between runs (lifecycle hooks, not bound)
 │   └── models.go            # DTOs shared across layers
 │

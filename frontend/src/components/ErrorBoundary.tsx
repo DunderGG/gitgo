@@ -50,7 +50,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     return (
       <div className="flex h-screen items-center justify-center bg-gray-900 p-6 text-gray-100">
         <div className="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-800 p-6 shadow-2xl" role="alert">
-          <h1 className="text-lg font-semibold text-white">Something went wrong</h1>
+          <h1 className="text-lg font-semibold text-gray-50">Something went wrong</h1>
           <p className="mt-2 text-sm text-gray-300">
             GitGo hit an unexpected problem while showing this screen. Your repository has not been changed by this
             error.
