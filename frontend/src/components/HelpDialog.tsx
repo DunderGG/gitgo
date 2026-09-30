@@ -155,6 +155,11 @@ export default function HelpDialog() {
                 <Ui>Also set committer date</Ui> to give the committer date the same value.
               </li>
               <li>
+                Under <Ui>Committer</Ui>, keep the committer name and email, make them the <Ui>Same as author</Ui>,
+                or set new ones. When the committer was the author, it starts as <Ui>Same as author</Ui>, so fixing
+                the author fixes both.
+              </li>
+              <li>
                 Click <Ui>Review Changes</Ui>. <Ui>Reset</Ui> puts the fields back to how they were.
               </li>
             </Steps>
@@ -174,16 +179,17 @@ export default function HelpDialog() {
               </li>
               <li>
                 To fix commits made with the wrong identity, tick <Ui>Set Author</Ui> and type a name and email, or
-                click <Ui>Use my identity</Ui> to fill in user.name and user.email from your Git config. The
-                committers are kept.
+                click <Ui>Use my identity</Ui> to fill in user.name and user.email from your Git config. Under{' '}
+                <Ui>Committer</Ui>, keep the committers, make each one the same as its commit&apos;s author, or set
+                the same name and email on all of them.
               </li>
               <li>
-                The list below shows each new date and author. Click <Ui>Review Changes</Ui>.
+                The list below shows each new date, author and committer. Click <Ui>Review Changes</Ui>.
               </li>
             </Steps>
             <p className="text-gray-400">
-              Messages cannot be changed for several commits at once. A shift and a new author can be applied
-              together, as one rewrite that one undo reverts.
+              Messages cannot be changed for several commits at once. A shift, a new author and a new committer can
+              be applied together, as one rewrite that one undo reverts.
             </p>
           </Section>
 
@@ -249,7 +255,8 @@ export default function HelpDialog() {
                 <span className="font-mono text-gray-100">git reset --hard &lt;branch&gt;@&#123;1&#125;</span>.
               </li>
               <li>
-                The committer name and email are always kept; only the author can be changed.
+                The committer name and email are kept unless you change them under <Ui>Committer</Ui>, and the
+                committer date unless you tick the committer date checkbox.
               </li>
               <li>
                 Need a git command GitGo does not offer? Click <Ui>&gt;_</Ui> in the header to open a terminal in the

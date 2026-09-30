@@ -235,9 +235,72 @@ func TestEditCommits_ShiftsAndSetsAuthorTogether(test *testing.T) {
 	}
 }
 
-// TestEditCommits_RejectsInvalidAuthor verifies that an author that would
-// produce a malformed commit is refused before anything is rewritten.
-func TestEditCommits_RejectsInvalidAuthor(test *testing.T) {
+// TestEditCommits_SetsCommitterKeepingEverythingElse verifies that a new
+// committer on its own is a valid edit and changes only the committer name
+// and email of the selected commits.
+func TestEditCommits_SetsCommitterKeepingEverythingElse(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "base", gitCmd)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+
+	format := "--format=%an <%ae> %aI | %cn <%ce> %cI | %s"
+	before := gitOutputFromDir(test, dir, "git", "log", format)
+
+	opts := git.BulkEditOptions{Committer: git.SetCommitter, CommitterName: "New Committer", CommitterEmail: "c@example.com"}
+	hashes := []plumbing.Hash{revHash(test, dir, "HEAD"), revHash(test, dir, "HEAD~1")}
+	if err := git.EditCommits(mustOpen(test, dir), hashes, opts); err != nil {
+		test.Fatalf("git.EditCommits: %v", err)
+	}
+
+	beforeLines := strings.Split(before, "\n")
+	afterLines := strings.Split(gitOutputFromDir(test, dir, "git", "log", format), "\n")
+	for i, line := range afterLines {
+		want := beforeLines[i]
+		if i < 2 {
+			want = strings.Replace(want, "| Test Author <test@example.com>", "| New Committer <c@example.com>", 1)
+		}
+		if line != want {
+			test.Errorf("commit %d = %q, want %q", i, line, want)
+		}
+	}
+}
+
+// TestEditCommits_CommitterFromAuthor verifies that CommitterFromAuthor gives
+// each commit a committer matching its own author, after any author change.
+func TestEditCommits_CommitterFromAuthor(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "base", gitCmd)
+	gitCmd("commit", "--allow-empty", "-m", "other author", "--author", "Other Person <other@example.com>")
+	addCommit(test, dir, "second", gitCmd)
+	hashes := []plumbing.Hash{revHash(test, dir, "HEAD"), revHash(test, dir, "HEAD~1")}
+
+	opts := git.BulkEditOptions{Committer: git.CommitterFromAuthor}
+	if err := git.EditCommits(mustOpen(test, dir), hashes, opts); err != nil {
+		test.Fatalf("git.EditCommits: %v", err)
+	}
+	want := "Test Author <test@example.com>\nOther Person <other@example.com>\nTest Author <test@example.com>"
+	if got := gitOutputFromDir(test, dir, "git", "log", "--format=%cn <%ce>"); got != want {
+		test.Errorf("committers = %q, want %q", got, want)
+	}
+
+	hashes = []plumbing.Hash{revHash(test, dir, "HEAD"), revHash(test, dir, "HEAD~1")}
+	opts = git.BulkEditOptions{SetAuthor: true, AuthorName: "New Name", AuthorEmail: "new@example.com", Committer: git.CommitterFromAuthor}
+	if err := git.EditCommits(mustOpen(test, dir), hashes, opts); err != nil {
+		test.Fatalf("git.EditCommits: %v", err)
+	}
+	want = "New Name <new@example.com>\nNew Name <new@example.com>\nTest Author <test@example.com>"
+	if got := gitOutputFromDir(test, dir, "git", "log", "--format=%cn <%ce>"); got != want {
+		test.Errorf("committers = %q, want %q", got, want)
+	}
+}
+
+// TestEditCommits_RejectsInvalidIdentity verifies that an author or committer
+// that would produce a malformed commit is refused before anything is
+// rewritten.
+func TestEditCommits_RejectsInvalidIdentity(test *testing.T) {
 	dir := test.TempDir()
 	gitCmd := initRepo(test, dir)
 	addCommit(test, dir, "only", gitCmd)
@@ -246,6 +309,8 @@ func TestEditCommits_RejectsInvalidAuthor(test *testing.T) {
 	for _, opts := range []git.BulkEditOptions{
 		{SetAuthor: true, AuthorName: " ", AuthorEmail: "new@example.com"},
 		{SetAuthor: true, AuthorName: "New Name", AuthorEmail: "<new@example.com>"},
+		{Committer: git.SetCommitter, CommitterName: "", CommitterEmail: "c@example.com"},
+		{Committer: git.SetCommitter, CommitterName: "Two\nLines", CommitterEmail: "c@example.com"},
 	} {
 		err := git.EditCommits(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, opts)
 		if !errors.Is(err, git.ErrInvalidIdentity) {

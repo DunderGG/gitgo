@@ -171,10 +171,10 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `SelectDirectory() (string, error)` | Calls `runtime.OpenDirectoryDialog` with the Wails context to show a native OS folder picker. Returns the selected path or an empty string if the user cancels. Implemented as a bound Go method rather than via the auto-generated runtime JS, because that file is overwritten on every build. |
 | `OpenRepository(path string) (RepoInfo, error)` | Calls `git.Open(path)` to validate the path and build a `RepoState`. Stores the state under the mutex for later use. Maps the result to a `RepoInfo` DTO and returns it. Errors from `git.Open` (not a repo, detached HEAD, operation in progress) propagate directly as a rejected Promise on the frontend. |
 | `GetCommitLog() ([]CommitSummary, error)` | Reads `repoState` under the mutex; returns an error if no repo is open. Calls `git.Log(state, 0)` to walk up to 100 commits, then maps each `git.CommitEntry` to a `CommitSummary` DTO — including formatting the author date as an RFC 3339 string so the frontend can parse it with `new Date()`. |
-| `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, unpushed flag) for the edit UI. |
+| `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, committer name/email/date, unpushed flag) for the edit UI. |
 | `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
 | `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit via `RebaseRewrite`. Re-reads the repository, performs the server-side unpushed safety check, records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state (shared with `EditCommits` through `runRewrite`). |
-| `EditCommits(req BulkEditRequest) (OperationResult, error)` | Applies the same change to several unpushed commits in one `git.EditCommits` rewrite: moves each author date (optionally also the committer date) by `req.Minutes`, keeping each commit's offset, and with `req.SetAuthor` replaces the author name and email (committers are kept). One undo reverts the whole batch. |
+| `EditCommits(req BulkEditRequest) (OperationResult, error)` | Applies the same change to several unpushed commits in one `git.EditCommits` rewrite: moves each author date (optionally also the committer date) by `req.Minutes`, keeping each commit's offset, and with `req.SetAuthor` replaces the author name and email. `req.Committer` keeps the committer names and emails, sets them all to `req.CommitterName` / `req.CommitterEmail`, or copies each commit's (new) author. One undo reverts the whole batch. |
 | `GetGitIdentity() (Identity, error)` | Returns the author identity git would use for a new commit (`GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`, then `user.name` / `user.email` from the repository and global config), for the "Use my identity" buttons. |
 | `GetAffectedRefs(hashes []string) ([]AffectedRef, error)` | Lists other branches and tags an edit of the given commits would leave behind, for the confirm dialog. |
 | `GetSignedCommits(hashes []string) ([]SignedCommit, error)` | Lists the signed commits an edit of the given commits would rebuild (the edited ones and those above them), which come out unsigned, for the confirm dialog's warning. |
@@ -196,9 +196,9 @@ Data transfer types that cross the IPC boundary. All fields carry `json:` tags s
 | Type | Purpose |
 |---|---|
 | `RepoInfo` | Returned by `OpenRepository` and `SwitchBranch`. Carries the absolute repo path, the selected branch name, `IsCheckedOut` (whether that branch is the one HEAD points at), and two boolean flags: `HasRemote` (at least one remote configured) and `HasUpstream` (current branch tracks a remote branch). The frontend uses these flags to decide what to display in `StatusBar`. |
-| `CommitSummary` | One row in the commit list. Contains the full 40-character hash, a 7-character short hash for display, the first line of the commit message, the author name, an RFC 3339 date string, and `IsUnpushed` — the flag the frontend uses for visual distinction and to gate editing. |
+| `CommitSummary` | One row in the commit list. Contains the full 40-character hash, a 7-character short hash for display, the first line of the commit message, the author and committer names, an RFC 3339 date string, and `IsUnpushed` — the flag the frontend uses for visual distinction and to gate editing. |
 | `CommitDetail` | *(Phase 2)* Full commit metadata for the edit form. Extends `CommitSummary` with `AuthorEmail` so the user can edit it. |
-| `EditRequest` | *(Phase 2)* The payload the frontend sends when the user confirms an edit. Contains the target hash plus all four editable fields: message, author name, author email, and date. |
+| `EditRequest` | *(Phase 2)* The payload the frontend sends when the user confirms an edit. Contains the target hash plus the editable fields: message, author name, author email, and date, whether to sync the committer date, and `Committer` (`"keep"`, `"author"` or `"set"` with `CommitterName` / `CommitterEmail`) for the committer name and email. |
 | `OperationResult` | *(Phase 2)* Returned by all mutating bound methods. `Success bool` lets the frontend distinguish a handled error from an unexpected one; `Message string` provides human-readable context to display. |
 
 ---
@@ -372,6 +372,7 @@ The edit workspace for the currently selected commit. Reads `selectedHash` from 
 Behaviour:
 - With nothing selected, shows a hint: how to select a commit (click, or `↑` / `↓` and `Enter`), or, when the branch has no unpushed commits, that there is nothing to edit.
 - Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke. "Use my identity" (`UseMyIdentityButton`, via `GetGitIdentity`) fills the author fields from the Git config; the name and email are validated inline with `src/identity.ts`.
+- The Committer section (`CommitterFields`) keeps the committer name and email, makes them the same as the author, or sets new ones (with its own "Use my identity"). It starts as "Same as author" when the loaded committer is the author, like "Also set committer date" starts checked when the dates match. Change detection compares the resulting committer, so picking an option that changes nothing does not enable "Review Changes".
 - Tracks the originally loaded values separately from the current form values so it can detect changes, support reset, and feed the confirmation dialog with an explicit before/after comparison.
 - Disables all editable controls while commit details are loading (shown with a spinner), while a rewrite is being submitted, and for pushed commits. `isUnpushed` is read from the matching entry in the store's `commits` (not from the loaded detail), so a reload that finds the commit was pushed makes it read-only immediately without resetting the form. "Review Changes" is also disabled while any other git operation is running.
 - The rewrite (`UpdateCommit` + `RefreshLog`) runs inside `runGitOperation('Rewriting commit history…', …)`; the dialog's Apply button shows a spinner meanwhile.
@@ -390,8 +391,9 @@ Replaces `EditPanel` while several commits are selected (`selectedHashes.length 
 Behaviour:
 - The shared `DateShiftButtons` (±1h / ±1d) add to one accumulated shift; nothing is written until the user confirms. Each selected commit shows its current and new author date in its own offset (helpers in `src/dates.ts`).
 - "Also shift committer dates" (on by default) keeps each commit's author/committer gap.
-- "Set Author" enables a name and email that replace every selected commit's author, validated with the same rules as `EditPanel` (`src/identity.ts`). "Use my identity" fills them from `GetGitIdentity` and ticks the checkbox. Committers are kept.
-- A shift, a new author, or both can be applied; "Review Changes" needs at least one.
+- "Set Author" enables a name and email that replace every selected commit's author, validated with the same rules as `EditPanel` (`src/identity.ts`). "Use my identity" fills them from `GetGitIdentity` and ticks the checkbox.
+- The Committer section (`CommitterFields`, shared with `EditPanel`) keeps the committers (the default), makes each one the same as its commit's author, or gives them all the same name and email. The current committer names come from `CommitSummary.committer`.
+- A shift, a new author and a new committer can be applied together; "Review Changes" needs at least one.
 - Warns, and disables "Review Changes", when a selected commit has been pushed since it was selected; warns when the shift makes a commit older than the one listed below it.
 - On confirm, calls `EditCommits` inside `runGitOperation('Rewriting commit history…', …)`, then `RefreshLog` and `setRepo`, which clears the selection because every edited commit has a new hash. One undo reverts the whole edit.
 
@@ -402,8 +404,7 @@ Behaviour:
 A modal confirmation dialog rendered by `EditPanel` and `BulkEditPanel`. Its only responsibility is review and confirmation — it does not own any repository state itself.
 
 Behaviour:
-- Renders the comparison it is given as children: `EditPanel` passes `<CommitComparison before after>` (a side-by-side comparison for message, dates, author name, and author email); `BulkEditPanel` passes a table of current and new author dates and authors.
-- Warns when signed commits will lose their signatures (from `GetSignedCommits`), marking each as edited or rebuilt above an edit.
+- Renders the comparison it is given as children: `EditPanel` passes `<CommitComparison before after>` (a side-by-side comparison for message, dates, author name, author email and committer); `BulkEditPanel` passes a table of current and new author dates, authors and committers.
 - Warns when signed commits will lose their signatures (from `GetSignedCommits`), marking each as edited or rebuilt above an edit.
 - Lists affected branches and tags (from `GetAffectedRefs`) with the option to move branches along.
 - Highlights changed values visually so the user can quickly verify what will be rewritten.
@@ -558,7 +559,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
-| `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers and `EditCommits` for bulk date shifts and author changes; commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author validation (`validateIdentity`) |
+| `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers and `EditCommits` for bulk date shifts and author and committer changes; committer changes (`changeCommitter`: keep, set, or copy the author), commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author and committer validation (`validateIdentity`) |
 | `git/identity.go` | `ConfiguredIdentity`: the author name and email git would use for a new commit (environment, then repository and global config) |
 | `git/signed.go` | `FindSignedCommits`: the signed commits in the chain a rewrite rebuilds; checks the raw headers for `gpgsig-sha256`, which go-git drops |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
@@ -595,11 +596,12 @@ GitGo/
 │       ├── main.tsx
 │       ├── errors.ts               # (Phase 3) Friendly error messages
 │       ├── dates.ts                # Wall-clock + offset date helpers
-│       ├── identity.ts             # Author name/email validation
+│       ├── identity.ts             # Author and committer name/email validation
 │       ├── App.tsx
 │       ├── components/
 │       │   ├── BranchSelector.tsx  # (Phase 3)
-│       │   ├── BulkEditPanel.tsx   # Shift dates / set author of several commits
+│       │   ├── BulkEditPanel.tsx   # Shift dates / set author and committer of several commits
+│       │   ├── CommitterFields.tsx # Committer section shared by the edit panels
 │       │   ├── DateShiftButtons.tsx
 │       │   ├── UseMyIdentityButton.tsx
 │       │   ├── RepoSelector.tsx

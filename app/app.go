@@ -165,6 +165,7 @@ func commitSummariesFromEntries(entries []gitpkg.CommitEntry) []CommitSummary {
 			ShortHash:  entry.ShortHash,
 			Message:    entry.Message,
 			Author:     entry.AuthorName,
+			Committer:  entry.CommitterName,
 			Date:       entry.Date.Format("2006-01-02T15:04:05Z07:00"),
 			IsUnpushed: entry.IsUnpushed,
 		}
@@ -254,6 +255,11 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		}
 	}
 
+	committer, err := parseCommitterChange(req.Committer)
+	if err != nil {
+		return OperationResult{}, err
+	}
+
 	opts := gitpkg.AmendOptions{
 		Message:     req.Message,
 		AuthorName:  req.AuthorName,
@@ -261,6 +267,9 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 		Date:        date,
 
 		SyncCommitterDate: req.SyncCommitterDate,
+		Committer:         committer,
+		CommitterName:     req.CommitterName,
+		CommitterEmail:    req.CommitterEmail,
 		MoveBranches:      req.MoveBranches,
 	}
 	commitHash := plumbing.NewHash(req.Hash)
@@ -272,12 +281,17 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 
 // EditCommits applies the same change to each unpushed commit in req: its
 // author date moves by req.Minutes (keeping its own time zone offset) and,
-// with req.SetAuthor, its author name and email are replaced. It is a single
+// with req.SetAuthor, its author name and email are replaced, and
+// req.Committer can replace its committer name and email. It is a single
 // rewrite that one undo reverts; see UpdateCommit for what is left alone.
 func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 	hashes := make([]plumbing.Hash, len(req.Hashes))
 	for i, hash := range req.Hashes {
 		hashes[i] = plumbing.NewHash(hash)
+	}
+	committer, err := parseCommitterChange(req.Committer)
+	if err != nil {
+		return OperationResult{}, err
 	}
 	opts := gitpkg.BulkEditOptions{
 		Shift:          time.Duration(req.Minutes) * time.Minute,
@@ -285,6 +299,9 @@ func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 		SetAuthor:      req.SetAuthor,
 		AuthorName:     req.AuthorName,
 		AuthorEmail:    req.AuthorEmail,
+		Committer:      committer,
+		CommitterName:  req.CommitterName,
+		CommitterEmail: req.CommitterEmail,
 		MoveBranches:   req.MoveBranches,
 	}
 
@@ -295,6 +312,21 @@ func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 	return app.runRewrite(hashes, req.MoveBranches, message, func(state *gitpkg.RepoState) error {
 		return gitpkg.EditCommits(state, hashes, opts)
 	})
+}
+
+// parseCommitterChange maps the Committer field of EditRequest and
+// BulkEditRequest to a git.CommitterChange. Empty means "keep".
+func parseCommitterChange(committer string) (gitpkg.CommitterChange, error) {
+	switch committer {
+	case "", "keep":
+		return gitpkg.KeepCommitter, nil
+	case "set":
+		return gitpkg.SetCommitter, nil
+	case "author":
+		return gitpkg.CommitterFromAuthor, nil
+	default:
+		return gitpkg.KeepCommitter, fmt.Errorf("invalid committer change %q", committer)
+	}
 }
 
 // GetGitIdentity returns the author name and email git would use for a new

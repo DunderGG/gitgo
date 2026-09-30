@@ -6,7 +6,8 @@ import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
 import UseMyIdentityButton from './UseMyIdentityButton'
 import { formatShift, shiftWallClock, splitRfc3339, toPreviewDateText } from '../dates'
 import { errorText } from '../errors'
-import { identityErrors } from '../identity'
+import { identityErrors, NO_IDENTITY_ERRORS, type CommitterMode } from '../identity'
+import CommitterFields from './CommitterFields'
 import { useRepoStore, type CommitSummary } from '../store/repoStore'
 
 interface ShiftPreview {
@@ -45,6 +46,12 @@ function breaksDateOrder(commits: CommitSummary[], selected: Set<string>, minute
   })
 }
 
+// Joins the given words as "a", "a and b" or "a, b and c", skipping false.
+function joinWords(words: (string | false)[]): string {
+  const kept = words.filter((word): word is string => word !== false)
+  return kept.length <= 1 ? (kept[0] ?? '') : `${kept.slice(0, -1).join(', ')} and ${kept[kept.length - 1]}`
+}
+
 const INPUT_CLASS =
   'mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60'
 
@@ -69,6 +76,9 @@ export default function BulkEditPanel() {
   const [setAuthor, setSetAuthor] = useState(false)
   const [authorName, setAuthorName] = useState('')
   const [authorEmail, setAuthorEmail] = useState('')
+  const [committerMode, setCommitterMode] = useState<CommitterMode>('keep')
+  const [committerName, setCommitterName] = useState('')
+  const [committerEmail, setCommitterEmail] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [affectedRefs, setAffectedRefs] = useState<app.AffectedRef[]>([])
@@ -81,11 +91,22 @@ export default function BulkEditPanel() {
   const hasPushed = selected.some((commit) => !commit.isUnpushed)
   const previews = shiftPreviews(selected, shiftMinutes)
   const outOfOrder = breaksDateOrder(commits, selectedSet, shiftMinutes)
-  const fieldErrors = setAuthor ? identityErrors(authorName, authorEmail) : { name: null, email: null }
-  const isValid = fieldErrors.name === null && fieldErrors.email === null
-  const hasChanges = shiftMinutes !== 0 || setAuthor
+  const fieldErrors = setAuthor ? identityErrors(authorName, authorEmail) : NO_IDENTITY_ERRORS
+  const committerErrors =
+    committerMode === 'set' ? identityErrors(committerName, committerEmail, 'Committer') : NO_IDENTITY_ERRORS
+  const isValid = [fieldErrors, committerErrors].every((errors) => errors.name === null && errors.email === null)
+  const changesCommitter = committerMode !== 'keep'
+  const hasChanges = shiftMinutes !== 0 || setAuthor || changesCommitter
   const canReview = hasChanges && isValid && !hasPushed && !isSubmitting && activity === null
   const newAuthorText = `${authorName} <${authorEmail}>`
+  // The new committer of commit. The list only has names, so a committer
+  // copied from an unchanged author is shown by name alone.
+  const newCommitterText = (commit: CommitSummary) =>
+    committerMode === 'set'
+      ? `${committerName} <${committerEmail}>`
+      : setAuthor
+        ? newAuthorText
+        : commit.author
 
   async function openConfirmDialog() {
     try {
@@ -117,6 +138,9 @@ export default function BulkEditPanel() {
             setAuthor,
             authorName: setAuthor ? authorName : '',
             authorEmail: setAuthor ? authorEmail : '',
+            committer: committerMode,
+            committerName: committerMode === 'set' ? committerName : '',
+            committerEmail: committerMode === 'set' ? committerEmail : '',
             moveBranches: moveBranches
               ? affectedRefs.filter((ref) => ref.kind === 'branch').map((ref) => ref.name)
               : [],
@@ -162,8 +186,15 @@ export default function BulkEditPanel() {
       : shiftCommitter
         ? `Committer dates are shifted by ${formatShift(shiftMinutes)} as well.`
         : 'Committer dates are kept.',
-    setAuthor ? 'Messages and committers are not changed.' : 'Messages and authors are not changed.',
+    `${joinWords(['Messages', !setAuthor && 'authors', !changesCommitter && 'committers'])} are not changed.`,
   ].join(' ')
+
+  // Heading of the confirm dialog's table.
+  const changedLabel = joinWords([
+    shiftMinutes !== 0 && `Author Dates (${formatShift(shiftMinutes)})`,
+    setAuthor && 'Authors',
+    changesCommitter && 'Committers',
+  ])
 
   return (
     <>
@@ -171,7 +202,7 @@ export default function BulkEditPanel() {
         <div className="h-full overflow-y-auto p-4 sm:p-5">
           <h2 className="text-base font-semibold text-gray-100">Edit Several Commits</h2>
           <p className="mt-1 text-xs text-gray-400">
-            Shift the dates or set the author of the {selected.length} selected commits in one rewrite. Each commit
+            Shift the dates or set the author and committer of the {selected.length} selected commits in one rewrite. Each commit
             keeps its own time zone and message.
           </p>
 
@@ -254,7 +285,22 @@ export default function BulkEditPanel() {
               placeholder="author@example.com"
             />
             {fieldErrors.email && <p className="mt-1 text-xs text-red-300">{fieldErrors.email}</p>}
-            <p className="mt-1 text-xs text-gray-500">The committers are kept.</p>
+          </div>
+
+          <div className="mt-5">
+            <CommitterFields
+              mode={committerMode}
+              name={committerName}
+              email={committerEmail}
+              errors={committerErrors}
+              disabled={isSubmitting}
+              authorOptionLabel="Same as each commit's author"
+              onModeChange={setCommitterMode}
+              onIdentityChange={(name, email) => {
+                setCommitterName(name)
+                setCommitterEmail(email)
+              }}
+            />
           </div>
 
           {hasPushed && (
@@ -284,6 +330,9 @@ export default function BulkEditPanel() {
                 </div>
                 {shiftMinutes !== 0 && <div className="text-indigo-300">→ {after}</div>}
                 {setAuthor && <div className="break-words text-indigo-300">→ {newAuthorText}</div>}
+                {changesCommitter && (
+                  <div className="break-words text-indigo-300">→ committed by {newCommitterText(commit)}</div>
+                )}
               </li>
             ))}
           </ul>
@@ -322,11 +371,7 @@ export default function BulkEditPanel() {
       >
         <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
           <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
-            {shiftMinutes !== 0 && setAuthor
-              ? `Author Dates (${formatShift(shiftMinutes)}) and Authors`
-              : shiftMinutes !== 0
-                ? `Author Dates (${formatShift(shiftMinutes)})`
-                : 'Authors'}
+            {changedLabel}
           </div>
           <table className="mt-2 w-full text-left text-sm">
             <thead className="text-[11px] uppercase tracking-wide text-gray-500">
@@ -346,10 +391,12 @@ export default function BulkEditPanel() {
                   <td className="py-1.5 pr-3 text-gray-400">
                     {shiftMinutes !== 0 && <div>{before}</div>}
                     {setAuthor && <div>{commit.author}</div>}
+                    {changesCommitter && <div>Committer: {commit.committer}</div>}
                   </td>
                   <td className="break-words py-1.5 text-indigo-200">
                     {shiftMinutes !== 0 && <div>{after}</div>}
                     {setAuthor && <div>{newAuthorText}</div>}
+                    {changesCommitter && <div>Committer: {newCommitterText(commit)}</div>}
                   </td>
                 </tr>
               ))}

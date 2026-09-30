@@ -10,7 +10,7 @@ import (
 
 // AmendCommit rewrites the tip commit of state.Branch with the values in opts,
 // keeping the existing file tree and parent chain intact. The committer is
-// kept (see editedSignatures).
+// kept unless opts changes it (see editedSignatures).
 //
 // The branch does not need to be checked out; only its ref is moved.
 //
@@ -25,7 +25,7 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 		return err
 	}
 
-	if err := validateIdentity(opts.AuthorName, opts.AuthorEmail); err != nil {
+	if err := validateAmendOptions(opts); err != nil {
 		return err
 	}
 	return RewriteCommits(state, map[plumbing.Hash]CommitEdit{head.Hash(): amendEdit(opts)}, opts.MoveBranches)
@@ -39,7 +39,7 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 //
 // Returns ErrCommitNotUnpushed if targetHash is not in state.UnpushedHashes.
 func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions) error {
-	if err := validateIdentity(opts.AuthorName, opts.AuthorEmail); err != nil {
+	if err := validateAmendOptions(opts); err != nil {
 		return err
 	}
 	return RewriteCommits(state, map[plumbing.Hash]CommitEdit{targetHash: amendEdit(opts)}, opts.MoveBranches)
@@ -47,21 +47,25 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 
 // EditCommits applies the same change to each commit in hashes, in one rewrite
 // (see RewriteCommits): the author date moves by opts.Shift, and with
-// opts.SetAuthor the author name and email are replaced. Each commit keeps its
-// own time zone offset and message, and its committer, except that the
-// committer date is shifted too when opts.ShiftCommitter is set.
+// opts.SetAuthor the author name and email are replaced; opts.Committer does
+// the same for the committer. Each commit keeps its own time zone offset and
+// message, and its committer date, except that it is shifted too when
+// opts.ShiftCommitter is set.
 //
 // Returns ErrCommitNotUnpushed if any commit is not in state.UnpushedHashes,
-// ErrInvalidIdentity for an author that would produce a malformed commit, and
-// an error when opts changes nothing.
+// ErrInvalidIdentity for an author or committer that would produce a
+// malformed commit, and an error when opts changes nothing.
 func EditCommits(state *RepoState, hashes []plumbing.Hash, opts BulkEditOptions) error {
-	if opts.Shift == 0 && !opts.SetAuthor {
+	if opts.Shift == 0 && !opts.SetAuthor && opts.Committer == KeepCommitter {
 		return fmt.Errorf("the edit changes nothing")
 	}
 	if opts.SetAuthor {
-		if err := validateIdentity(opts.AuthorName, opts.AuthorEmail); err != nil {
+		if err := validateIdentity("author", opts.AuthorName, opts.AuthorEmail); err != nil {
 			return err
 		}
+	}
+	if err := validateCommitterChange(opts.Committer, opts.CommitterName, opts.CommitterEmail); err != nil {
+		return err
 	}
 	edits := make(map[plumbing.Hash]CommitEdit, len(hashes))
 	for _, hash := range hashes {
@@ -83,6 +87,7 @@ func bulkEdit(opts BulkEditOptions) CommitEdit {
 			author.Name = opts.AuthorName
 			author.Email = opts.AuthorEmail
 		}
+		committer = changeCommitter(committer, author, opts.Committer, opts.CommitterName, opts.CommitterEmail)
 		return author, committer, original.Message
 	}
 }
@@ -205,8 +210,9 @@ func reflogRewriteMessage(targets []plumbing.Hash) string {
 // A zero opts.Date keeps the original author date, including its time zone
 // offset, so edits that do not touch the date leave it byte-for-byte intact.
 //
-// The original committer name, email and date are always kept, except that
-// opts.SyncCommitterDate replaces the committer date with the new author date.
+// The original committer is kept, except that opts.SyncCommitterDate replaces
+// the committer date with the new author date and opts.Committer can change
+// the committer name and email (see changeCommitter).
 func editedSignatures(original *object.Commit, opts AmendOptions) (author, committer object.Signature) {
 	when := opts.Date
 	if when.IsZero() {
@@ -222,7 +228,23 @@ func editedSignatures(original *object.Commit, opts AmendOptions) (author, commi
 	if opts.SyncCommitterDate {
 		committer.When = when
 	}
+	committer = changeCommitter(committer, author, opts.Committer, opts.CommitterName, opts.CommitterEmail)
 	return author, committer
+}
+
+// changeCommitter returns committer with its name and email changed as
+// change says: kept, set to name and email, or copied from the (new) author.
+// The committer date is never changed here.
+func changeCommitter(committer, author object.Signature, change CommitterChange, name, email string) object.Signature {
+	switch change {
+	case SetCommitter:
+		committer.Name = name
+		committer.Email = email
+	case CommitterFromAuthor:
+		committer.Name = author.Name
+		committer.Email = author.Email
+	}
+	return committer
 }
 
 // rebuildCommit returns a copy of original with the given identities, message
@@ -250,18 +272,42 @@ func rebuildCommit(original *object.Commit, author, committer object.Signature, 
 	}
 }
 
-// validateIdentity rejects an author name or email that would produce a
-// malformed commit header, which `git fsck` and many servers refuse on push:
-// an empty name, or angle brackets or line breaks in either field.
-func validateIdentity(name, email string) error {
+// validateAmendOptions checks the author and, when it is set, the committer
+// in opts with validateIdentity.
+func validateAmendOptions(opts AmendOptions) error {
+	if err := validateIdentity("author", opts.AuthorName, opts.AuthorEmail); err != nil {
+		return err
+	}
+	return validateCommitterChange(opts.Committer, opts.CommitterName, opts.CommitterEmail)
+}
+
+// validateCommitterChange checks the committer name and email of a
+// SetCommitter change, and rejects unknown changes. The other changes use
+// identities that are already valid or checked as the author.
+func validateCommitterChange(change CommitterChange, name, email string) error {
+	switch change {
+	case KeepCommitter, CommitterFromAuthor:
+		return nil
+	case SetCommitter:
+		return validateIdentity("committer", name, email)
+	default:
+		return fmt.Errorf("unknown committer change %d", change)
+	}
+}
+
+// validateIdentity rejects a name or email that would produce a malformed
+// commit header, which `git fsck` and many servers refuse on push: an empty
+// name, or angle brackets or line breaks in either field. role ("author" or
+// "committer") names the identity in the error.
+func validateIdentity(role, name, email string) error {
 	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("%w: the author name is empty", ErrInvalidIdentity)
+		return fmt.Errorf("%w: the %s name is empty", ErrInvalidIdentity, role)
 	}
 	if strings.ContainsAny(name, "<>\r\n") {
-		return fmt.Errorf("%w: the author name contains <, > or a line break", ErrInvalidIdentity)
+		return fmt.Errorf("%w: the %s name contains <, > or a line break", ErrInvalidIdentity, role)
 	}
 	if strings.ContainsAny(email, "<>\r\n") {
-		return fmt.Errorf("%w: the author email contains <, > or a line break", ErrInvalidIdentity)
+		return fmt.Errorf("%w: the %s email contains <, > or a line break", ErrInvalidIdentity, role)
 	}
 	return nil
 }

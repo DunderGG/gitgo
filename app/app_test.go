@@ -371,6 +371,64 @@ func TestEditCommits_SetsAuthorAndUndoRestores(test *testing.T) {
 	}
 }
 
+// TestUpdateCommit_ChangesCommitter verifies that EditRequest.Committer sets
+// the committer name and email, or resets them to the new author, and that
+// an unknown value is refused.
+func TestUpdateCommit_ChangesCommitter(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+
+	req := editRequest(runGit(test, dir, "rev-parse", "HEAD"))
+	req.Committer = "set"
+	req.CommitterName = "New Committer"
+	req.CommitterEmail = "committer@example.com"
+	if _, err := app.UpdateCommit(req); err != nil {
+		test.Fatalf("UpdateCommit: %v", err)
+	}
+	if got := runGit(test, dir, "log", "-1", "--format=%cn <%ce>"); got != "New Committer <committer@example.com>" {
+		test.Errorf("committer = %q", got)
+	}
+
+	req = editRequest(runGit(test, dir, "rev-parse", "HEAD"))
+	req.AuthorName = "Right Person"
+	req.AuthorEmail = "right@example.com"
+	req.Committer = "author"
+	if _, err := app.UpdateCommit(req); err != nil {
+		test.Fatalf("UpdateCommit: %v", err)
+	}
+	if got := runGit(test, dir, "log", "-1", "--format=%cn <%ce>"); got != "Right Person <right@example.com>" {
+		test.Errorf("committer = %q", got)
+	}
+
+	req.Committer = "someone"
+	if _, err := app.UpdateCommit(req); err == nil {
+		test.Error("expected an error for an unknown committer change")
+	}
+}
+
+// TestEditCommits_SetsCommitterOnly verifies that a bulk edit can change only
+// the committers.
+func TestEditCommits_SetsCommitterOnly(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	commitFile(test, dir, "second")
+	if _, err := app.ReloadRepository(); err != nil {
+		test.Fatalf("ReloadRepository: %v", err)
+	}
+
+	result, err := app.EditCommits(BulkEditRequest{
+		Hashes:         []string{runGit(test, dir, "rev-parse", "HEAD"), runGit(test, dir, "rev-parse", "HEAD~1")},
+		Committer:      "set",
+		CommitterName:  "New Committer",
+		CommitterEmail: "committer@example.com",
+	})
+	if err != nil || !result.Success {
+		test.Fatalf("EditCommits = %+v, %v", result, err)
+	}
+	want := "Test Author New Committer\nTest Author New Committer\nTest Author Test Author"
+	if got := runGit(test, dir, "log", "-3", "--format=%an %cn"); got != want {
+		test.Errorf("authors and committers = %q, want %q", got, want)
+	}
+}
+
 // TestGetGitIdentity_ReturnsConfiguredIdentity verifies that the identity
 // comes from the open repository's config.
 func TestGetGitIdentity_ReturnsConfiguredIdentity(test *testing.T) {

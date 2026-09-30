@@ -14,8 +14,9 @@ import {
   WALL_CLOCK_PATTERN,
 } from '../dates'
 import { errorText, friendlyError } from '../errors'
-import { identityErrors } from '../identity'
+import { identityErrors, NO_IDENTITY_ERRORS, type CommitterMode } from '../identity'
 import { useRepoStore } from '../store/repoStore'
+import CommitterFields from './CommitterFields'
 import UseMyIdentityButton from './UseMyIdentityButton'
 
 interface EditFormState {
@@ -27,12 +28,16 @@ interface EditFormState {
   dateLocal: string
   // Time zone offset of the commit date: +HH:MM or -HH:MM
   offset: string
-  // Also set the committer date to the author date. The committer name and
-  // email are always kept.
+  // Also set the committer date to the author date.
   syncCommitterDate: boolean
+  // What happens to the committer name and email; committerName and
+  // committerEmail are only used with 'set'.
+  committerMode: CommitterMode
+  committerName: string
+  committerEmail: string
 }
 
-// Read-only committer of the loaded commit, with its date split like the form.
+// Committer of the loaded commit, with its date split like the form.
 interface CommitterInfo {
   name: string
   email: string
@@ -47,6 +52,9 @@ const EMPTY_FORM: EditFormState = {
   dateLocal: '',
   offset: '+00:00',
   syncCommitterDate: false,
+  committerMode: 'keep',
+  committerName: '',
+  committerEmail: '',
 }
 
 // UTC offsets in use around the world. The commit's original offset is added
@@ -80,23 +88,43 @@ function localOffsetAt(dateLocal: string): string | null {
   return formatOffset(-date.getTimezoneOffset())
 }
 
-function formsEqual(left: EditFormState, right: EditFormState): boolean {
+// The committer name and email the form would give the commit.
+function newCommitter(form: EditFormState, committer: CommitterInfo): { name: string; email: string } {
+  switch (form.committerMode) {
+    case 'author':
+      return { name: form.authorName, email: form.authorEmail }
+    case 'set':
+      return { name: form.committerName, email: form.committerEmail }
+    default:
+      return { name: committer.name, email: committer.email }
+  }
+}
+
+// Compares the resulting commits rather than the committer controls, so
+// picking "Same as author" when the two already match is not a change.
+function formsEqual(left: EditFormState, right: EditFormState, committer: CommitterInfo): boolean {
+  const leftCommitter = newCommitter(left, committer)
+  const rightCommitter = newCommitter(right, committer)
   return (
     left.message === right.message &&
     left.authorName === right.authorName &&
     left.authorEmail === right.authorEmail &&
     left.dateLocal === right.dateLocal &&
     left.offset === right.offset &&
-    left.syncCommitterDate === right.syncCommitterDate
+    left.syncCommitterDate === right.syncCommitterDate &&
+    leftCommitter.name === rightCommitter.name &&
+    leftCommitter.email === rightCommitter.email
   )
 }
 
 function formToConfirmValues(form: EditFormState, committer: CommitterInfo): ConfirmValues {
+  const { name, email } = newCommitter(form, committer)
   return {
     message: form.message,
     authorName: form.authorName,
     authorEmail: form.authorEmail,
     dateText: toPreviewDateText(form),
+    committerText: `${name} <${email}>`,
     committerDateText: toPreviewDateText(form.syncCommitterDate ? form : committer),
   }
 }
@@ -175,6 +203,14 @@ export default function EditPanel() {
           // Keep the dates together when they already match, which is the
           // usual case for commits nobody has rebased or amended.
           syncCommitterDate: detail.committerDate === detail.date,
+          // Likewise, a committer who is the author follows author changes,
+          // since a wrong identity usually affects both.
+          committerMode:
+            detail.committerName === detail.authorName && detail.committerEmail === detail.authorEmail
+              ? ('author' as const)
+              : ('keep' as const),
+          committerName: detail.committerName,
+          committerEmail: detail.committerEmail,
         }
         setCommitter({
           name: detail.committerName,
@@ -217,9 +253,14 @@ export default function EditPanel() {
       messageRef.current?.focus()
     }
   }, [pendingEditFocus, isLoading, selectedHash, loadedHash, fieldsDisabled, loadError, consumeEditFocus])
-  const hasChanges = originalForm !== null && !formsEqual(form, originalForm)
+  const hasChanges = originalForm !== null && committer !== null && !formsEqual(form, originalForm, committer)
   const fieldErrors = identityErrors(form.authorName, form.authorEmail)
-  const isValid = fieldErrors.name === null && fieldErrors.email === null
+  const committerErrors =
+    form.committerMode === 'set'
+      ? identityErrors(form.committerName, form.committerEmail, 'Committer')
+      : NO_IDENTITY_ERRORS
+  const isValid = [fieldErrors, committerErrors].every((errors) => errors.name === null && errors.email === null)
+  const committerPreview = committer ? newCommitter(form, committer) : null
 
   const offsetOptions = [...COMMON_OFFSETS]
   for (const offset of [originalForm?.offset, form.offset]) {
@@ -279,6 +320,9 @@ export default function EditPanel() {
             authorEmail: form.authorEmail,
             date: rfc3339Date,
             syncCommitterDate: form.syncCommitterDate,
+            committer: form.committerMode,
+            committerName: form.committerMode === 'set' ? form.committerName : '',
+            committerEmail: form.committerMode === 'set' ? form.committerEmail : '',
             moveBranches: moveBranches
               ? affectedRefs.filter((ref) => ref.kind === 'branch').map((ref) => ref.name)
               : [],
@@ -454,12 +498,6 @@ export default function EditPanel() {
               />
               Also set committer date
             </label>
-            {committer && (
-              <p className="mt-1 break-words text-xs text-gray-500">
-                Committer: {committer.name} &lt;{committer.email}&gt;,{' '}
-                {toPreviewDateText(form.syncCommitterDate ? form : committer)}
-              </p>
-            )}
           </div>
 
           <div>
@@ -503,6 +541,26 @@ export default function EditPanel() {
               <p className="mt-1 text-xs text-red-300">{fieldErrors.email}</p>
             )}
           </div>
+
+          <CommitterFields
+            mode={form.committerMode}
+            name={form.committerName}
+            email={form.committerEmail}
+            errors={committerErrors}
+            disabled={fieldsDisabled}
+            authorOptionLabel="Same as author"
+            onModeChange={(committerMode) => setForm((current) => ({ ...current, committerMode }))}
+            onIdentityChange={(committerName, committerEmail) =>
+              setForm((current) => ({ ...current, committerName, committerEmail }))
+            }
+          >
+            {committer && committerPreview && (
+              <p className="mt-1 break-words text-xs text-gray-500">
+                {committerPreview.name} &lt;{committerPreview.email}&gt;,{' '}
+                {toPreviewDateText(form.syncCommitterDate ? form : committer)}
+              </p>
+            )}
+          </CommitterFields>
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button

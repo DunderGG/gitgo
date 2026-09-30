@@ -16,10 +16,14 @@ type AmendOptions struct {
 	// Date is the new author date, including its time zone offset. The zero
 	// value keeps the commit's original author date unchanged.
 	Date time.Time
-	// SyncCommitterDate sets the committer date to the new author date. The
-	// committer name and email are always kept, and so is the committer date
-	// when this is false.
+	// SyncCommitterDate sets the committer date to the new author date. When
+	// false the committer date is kept.
 	SyncCommitterDate bool
+	// Committer says what happens to the committer name and email; with
+	// SetCommitter they become CommitterName and CommitterEmail.
+	Committer      CommitterChange
+	CommitterName  string
+	CommitterEmail string
 	// MoveBranches names other local branches to move along with the edit:
 	// each one that points at a rewritten commit is moved to its new copy
 	// (see FindAffectedRefs). Others are ignored.
@@ -27,7 +31,7 @@ type AmendOptions struct {
 }
 
 // BulkEditOptions describes the same change applied to several commits (see
-// EditCommits): a date shift, a new author, or both.
+// EditCommits): a date shift, a new author, a new committer, or a mix.
 type BulkEditOptions struct {
 	// Shift is added to each commit's author date. Zero keeps the dates.
 	Shift time.Duration
@@ -39,10 +43,29 @@ type BulkEditOptions struct {
 	SetAuthor   bool
 	AuthorName  string
 	AuthorEmail string
+	// Committer says what happens to each commit's committer name and email,
+	// as in AmendOptions. The committer dates are only changed by Shift.
+	Committer      CommitterChange
+	CommitterName  string
+	CommitterEmail string
 	// MoveBranches names other local branches to move along with the
 	// rewrite, as in AmendOptions.
 	MoveBranches []string
 }
+
+// CommitterChange says what an edit does with a commit's committer name and
+// email. The committer date is handled separately.
+type CommitterChange int
+
+const (
+	// KeepCommitter leaves the committer name and email unchanged.
+	KeepCommitter CommitterChange = iota
+	// SetCommitter replaces them with the given name and email.
+	SetCommitter
+	// CommitterFromAuthor copies the commit's author name and email, after
+	// the edit's own author change, so the two match again.
+	CommitterFromAuthor
+)
 
 // Identity is a name and email as used in a commit's author or committer.
 type Identity struct {
@@ -53,12 +76,13 @@ type Identity struct {
 // CommitEntry is the git-layer representation of a single commit.
 // The app layer converts this to app.CommitSummary.
 type CommitEntry struct {
-	Hash       plumbing.Hash
-	ShortHash  string
-	Message    string
-	AuthorName string
-	Date       time.Time
-	IsUnpushed bool
+	Hash          plumbing.Hash
+	ShortHash     string
+	Message       string
+	AuthorName    string
+	CommitterName string
+	Date          time.Time
+	IsUnpushed    bool
 }
 
 // RepoState holds an open repository and all computed metadata needed by the

@@ -63,6 +63,7 @@ export interface CommitSummary {
   shortHash: string
   message: string
   author: string
+  committer: string
   date: string
   isUnpushed: boolean
 }

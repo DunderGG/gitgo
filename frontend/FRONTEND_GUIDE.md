@@ -191,6 +191,7 @@ Current behavior:
 - disables fields for pushed commits (pushed state comes from the commit list, so it updates after a reload)
 - tiny buttons under the date (DateShiftButtons plus Now) adjust it by ±1 hour / ±1 day or set the current time
 - "Use my identity" by the author name fills the author from the Git config
+- the Committer section keeps the committer name and email, makes them the same as the author (the default when they already match), or sets new ones
 - opens ConfirmDialog before applying a rewrite
 - calls UpdateCommit and then RefreshLog after confirmation
 
@@ -202,8 +203,9 @@ Current behavior:
 
 - the ±1h / ±1d buttons add up to one shift, shown with a before/after author date for each selected commit
 - "Also shift committer dates" (on by default) moves the committer dates by the same amount
-- "Set Author" gives every selected commit the same author name and email (committers are kept); "Use my identity" fills them from the Git config
-- a shift, a new author, or both can be applied
+- "Set Author" gives every selected commit the same author name and email; "Use my identity" fills them from the Git config
+- the Committer section keeps the committers (the default), makes each the same as its commit's author, or gives them all the same name and email
+- a shift, a new author and a new committer can be applied together
 - warns when a selected commit has been pushed (Review Changes is disabled) or when the shift puts a commit before the one below it in the list
 - calls EditCommits (one rewrite, one undo) and then RefreshLog after confirmation
 
@@ -215,9 +217,13 @@ The row of −1d / −1h / +1h / +1d buttons shared by EditPanel and BulkEditPan
 
 Tiny button shared by EditPanel and BulkEditPanel that fills the author fields with GetGitIdentity (user.name / user.email), or reports that none is set.
 
+### src/components/CommitterFields.tsx
+
+The Committer section shared by EditPanel and BulkEditPanel: a Keep / Same as author / Set menu, and with Set a name, an email and a Use my identity button.
+
 ### src/identity.ts
 
-Author name and email validation shared by the edit panels, mirroring validateIdentity in git/rewrite.go.
+Author and committer name and email validation shared by the edit panels, mirroring validateIdentity in git/rewrite.go, and the CommitterMode type.
 
 ### src/dates.ts
 

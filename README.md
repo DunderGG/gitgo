@@ -17,8 +17,8 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 
 ## Features
 
-- **Edit commit metadata:** message, author name and email, and author date (to the second, in the commit's own time zone), with quick −1d / −1h / +1h / +1d / Now buttons
-- **Shift several commits at once:** select multiple unpushed commits and move all their dates in one rewrite
+- **Edit commit metadata:** message, author name and email, committer name and email, and author date (to the second, in the commit's own time zone), with quick −1d / −1h / +1h / +1d / Now buttons
+- **Edit several commits at once:** select multiple unpushed commits and move all their dates, or set their author and committer, in one rewrite
 - **Preview before applying:** every change is shown old-vs-new in a confirmation dialog
 - **One-step undo:** revert the last rewrite with `Ctrl+Z`
 - **Work on any branch:** view and edit other local branches without checking them out
@@ -31,7 +31,7 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - Unpushed commits are computed like `git rev-list HEAD ^@{u}`, and commits on any remote-tracking branch are excluded too
 - Pushed state is re-checked right before every edit and undo
 - Every rewrite and undo is written to the reflog (entries start with `gitgo:`), so you can also recover with `git reset --hard <branch>@{1}`
-- Committer identity and extra commit headers (`encoding`, `mergetag`, …) are preserved
+- The committer is kept unless you choose to change it, and extra commit headers (`encoding`, `mergetag`, …) are preserved
 - Other local branches pointing at an edited commit are moved along with it; tags are never moved, only flagged
 - You are warned before an edit that would drop GPG/SSH signatures
 

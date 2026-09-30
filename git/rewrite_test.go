@@ -332,6 +332,72 @@ func TestAmendCommit_SyncCommitterDate(test *testing.T) {
 	}
 }
 
+// TestAmendCommit_SetsCommitter verifies that SetCommitter replaces the
+// committer name and email but keeps the committer date.
+func TestAmendCommit_SetsCommitter(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original commit", gitCmd)
+
+	opts := newAuthorOpts(test)
+	opts.Committer = git.SetCommitter
+	opts.CommitterName = "New Committer"
+	opts.CommitterEmail = "committer@example.com"
+	mustAmend(test, mustOpen(test, dir), opts)
+
+	want := "New Committer <committer@example.com> " + testCommitDate.Format(time.RFC3339)
+	if got := committerISO(test, dir, "HEAD"); got != want {
+		test.Errorf("committer = %q, want %q", got, want)
+	}
+}
+
+// TestAmendCommit_CommitterFromAuthor verifies that CommitterFromAuthor
+// copies the new author name and email, and together with SyncCommitterDate
+// makes the committer match the author exactly.
+func TestAmendCommit_CommitterFromAuthor(test *testing.T) {
+	const want = "New Author <new@example.com> 2025-06-15T10:20:37+05:30"
+
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original commit", gitCmd)
+
+	opts := newAuthorOpts(test)
+	opts.Committer = git.CommitterFromAuthor
+	opts.CommitterName = "Ignored"
+	opts.SyncCommitterDate = true
+	mustAmend(test, mustOpen(test, dir), opts)
+
+	if got := committerISO(test, dir, "HEAD"); got != want {
+		test.Errorf("committer = %q, want %q", got, want)
+	}
+}
+
+// TestRebaseRewrite_SetsCommitterOnTargetOnly verifies that a new committer
+// is given to the edited commit only, not to the commits rebuilt above it.
+func TestRebaseRewrite_SetsCommitterOnTargetOnly(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+	addCommit(test, dir, "third", gitCmd)
+	wantHead := committerISO(test, dir, "HEAD")
+
+	targetHash := plumbing.NewHash(gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD~1"))
+	opts := newAuthorOpts(test)
+	opts.Committer = git.SetCommitter
+	opts.CommitterName = "New Committer"
+	opts.CommitterEmail = "committer@example.com"
+	mustRebaseRewrite(test, mustOpen(test, dir), targetHash, opts)
+
+	wantTarget := "New Committer <committer@example.com> " + testCommitDate.Format(time.RFC3339)
+	if got := committerISO(test, dir, "HEAD~1"); got != wantTarget {
+		test.Errorf("target committer = %q, want %q", got, wantTarget)
+	}
+	if got := committerISO(test, dir, "HEAD"); got != wantHead {
+		test.Errorf("HEAD committer = %q, want %q", got, wantHead)
+	}
+}
+
 // TestRebaseRewrite_KeepsCommitter verifies that rewriting an older commit
 // keeps the committer of both the target and the commit above it.
 func TestRebaseRewrite_KeepsCommitter(test *testing.T) {
@@ -494,6 +560,15 @@ func TestAmendCommit_RejectsInvalidIdentity(test *testing.T) {
 		"newline in name":  func(opts *git.AmendOptions) { opts.AuthorName = "Two\nLines" },
 		"bracket in email": func(opts *git.AmendOptions) { opts.AuthorEmail = "a>b@example.com" },
 		"newline in email": func(opts *git.AmendOptions) { opts.AuthorEmail = "a@example.com\n" },
+		"empty committer name": func(opts *git.AmendOptions) {
+			opts.Committer = git.SetCommitter
+			opts.CommitterEmail = "c@example.com"
+		},
+		"bracket in committer email": func(opts *git.AmendOptions) {
+			opts.Committer = git.SetCommitter
+			opts.CommitterName = "Committer"
+			opts.CommitterEmail = "<c@example.com>"
+		},
 	}
 	for name, mutate := range cases {
 		test.Run(name, func(test *testing.T) {

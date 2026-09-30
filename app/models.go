@@ -65,6 +65,7 @@ type CommitSummary struct {
 	ShortHash  string `json:"shortHash"`
 	Message    string `json:"message"`
 	Author     string `json:"author"`
+	Committer  string `json:"committer"`
 	Date       string `json:"date"`
 	IsUnpushed bool   `json:"isUnpushed"`
 }
@@ -77,8 +78,8 @@ type CommitDetail struct {
 	AuthorName  string `json:"authorName"`
 	AuthorEmail string `json:"authorEmail"`
 	Date        string `json:"date"`
-	// Committer fields are read-only in the edit panel; rewrites keep them
-	// unless the committer date is synced to the author date.
+	// Committer fields show the current committer; EditRequest says whether
+	// an edit keeps or changes them.
 	CommitterName  string `json:"committerName"`
 	CommitterEmail string `json:"committerEmail"`
 	CommitterDate  string `json:"committerDate"`
@@ -98,13 +99,19 @@ type EditRequest struct {
 	// SyncCommitterDate sets the committer date to the (new) author date. When
 	// false the original committer date is kept.
 	SyncCommitterDate bool `json:"syncCommitterDate"`
+	// Committer is what happens to the committer name and email: "keep" (or
+	// empty), "author" to copy the new author, or "set" to use CommitterName
+	// and CommitterEmail. The committer date is handled by SyncCommitterDate.
+	Committer      string `json:"committer"`
+	CommitterName  string `json:"committerName"`
+	CommitterEmail string `json:"committerEmail"`
 	// MoveBranches names other local branches (from GetAffectedRefs) to move
 	// to the rewritten commits along with the edited branch.
 	MoveBranches []string `json:"moveBranches"`
 }
 
 // BulkEditRequest describes the same change applied to several unpushed
-// commits: a date shift, a new author, or both.
+// commits: a date shift, a new author, a new committer, or a mix.
 type BulkEditRequest struct {
 	Hashes []string `json:"hashes"`
 	// Minutes is added to each commit's author date; negative moves it
@@ -118,6 +125,12 @@ type BulkEditRequest struct {
 	SetAuthor   bool   `json:"setAuthor"`
 	AuthorName  string `json:"authorName"`
 	AuthorEmail string `json:"authorEmail"`
+	// Committer is what happens to each commit's committer name and email,
+	// as in EditRequest ("author" copies each commit's new author). The
+	// committer dates are handled by ShiftCommitter.
+	Committer      string `json:"committer"`
+	CommitterName  string `json:"committerName"`
+	CommitterEmail string `json:"committerEmail"`
 	// MoveBranches names other local branches (from GetAffectedRefs) to move
 	// to the rewritten commits along with the edited branch.
 	MoveBranches []string `json:"moveBranches"`

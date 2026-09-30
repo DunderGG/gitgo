@@ -155,7 +155,7 @@
 - [x] **Committer identity is always overwritten by the author**
   - `AmendCommit` / `RebaseRewrite` set `Committer = Author`, so a message-only edit also replaces the committer name, email, and date
   - [x] Decided: keep the original committer name, email, and date; an "Also set committer date" checkbox in `EditPanel` sets the committer date to the author date (checked by default when the two dates already match)
-  - [x] Show the committer (read-only) in `EditPanel` and the committer date in `ConfirmDialog`
+  - [x] Show the committer (read-only) in `EditPanel` and the committer date in `ConfirmDialog`; the committer name and email can now be changed too (see Edit the committer)
 - [x] **Rewrites leave no reflog entry**
   - go-git's `SetReference` does not write to the reflog, so `git reflog` cannot be used to recover the pre-rewrite tip
   - [x] Write a reflog entry for the branch (and HEAD when it points at the branch) on every rewrite, as `gitgo: edit commit <hash>`; recover with `git reset --hard <branch>@{1}`
@@ -248,7 +248,10 @@ Editing commit metadata in `EditPanel` and `BulkEditPanel`.
 - [ ] **Spread dates evenly** in `BulkEditPanel`: set a first and last date and space the selected commits between them, for backdating a series without making every commit share the same shift
 - [ ] **Keep dates within a time window**: move the selected commits' times into a daily window (for example 09:00–17:00), keeping their order and days (like `git-redate` and similar scripts)
 - [ ] **Change time zone, keeping the moment**: convert the selected commits' dates to another offset (for example "my time zone") without changing the actual point in time, unlike the offset menu in `EditPanel`, which keeps the wall-clock time
-- [ ] **Edit the committer**: an option to set the committer name and email too, or to reset them to the author, since a wrong identity usually affects both. Today the committer is always kept
+- [x] **Edit the committer**: an option to set the committer name and email too, or to reset them to the author, since a wrong identity usually affects both
+  - [x] `git.CommitterChange` (`KeepCommitter`, `SetCommitter`, `CommitterFromAuthor`) in `AmendOptions` and `BulkEditOptions`, with `validateIdentity` naming the author or committer (`TestAmendCommit_SetsCommitter`, `TestAmendCommit_CommitterFromAuthor`, `TestRebaseRewrite_SetsCommitterOnTargetOnly`, `TestEditCommits_SetsCommitterKeepingEverythingElse`, `TestEditCommits_CommitterFromAuthor`)
+  - [x] `Committer` (`"keep"` / `"author"` / `"set"`), `CommitterName` and `CommitterEmail` in `EditRequest` and `BulkEditRequest` (`TestUpdateCommit_ChangesCommitter`, `TestEditCommits_SetsCommitterOnly`); `CommitSummary.committer` for the bulk preview
+  - [x] `CommitterFields` in `EditPanel` (starts as "Same as author" when the committer is the author) and `BulkEditPanel`; the committer is shown in `ConfirmDialog`
 - [ ] **Apply `.mailmap`**: rewrite the author (and committer) of the selected commits from the repository's `.mailmap`, like `git filter-repo --use-mailmap`
 - [ ] **Find and replace in messages** across the selected commits, with a preview per commit (like `git filter-repo --replace-message`), for example to fix a misspelled ticket number
 - [ ] **Trailers**: add or remove `Co-authored-by:` and `Signed-off-by:` lines on one or several commits, with co-authors picked from the repository's authors (GitHub Desktop has a co-author picker)

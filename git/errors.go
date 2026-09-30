@@ -8,9 +8,10 @@ import (
 // that has already been pushed to a remote.
 var ErrCommitNotUnpushed = errors.New("commit has already been pushed and cannot be rewritten")
 
-// ErrInvalidIdentity is returned when the author name or email would produce a
-// malformed commit. The wrapping error says which field is wrong.
-var ErrInvalidIdentity = errors.New("invalid author")
+// ErrInvalidIdentity is returned when an author or committer name or email
+// would produce a malformed commit. The wrapping error says which field is
+// wrong.
+var ErrInvalidIdentity = errors.New("invalid identity")
 
 // ErrDetachedHead is returned when the repository is in a detached HEAD state.
 var ErrDetachedHead = errors.New("repository is in detached HEAD state; attach to a branch before using GitGo")

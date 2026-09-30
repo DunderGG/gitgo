@@ -24,6 +24,8 @@ export interface ConfirmValues {
   authorName: string
   authorEmail: string
   dateText: string
+  // Committer name and email as "Name <email>".
+  committerText: string
   committerDateText: string
 }
 
@@ -76,6 +78,7 @@ export function CommitComparison({ before, after }: { before: ConfirmValues; aft
       <CompareRow label="Committer Date" before={before.committerDateText} after={after.committerDateText} />
       <CompareRow label="Author Name" before={before.authorName} after={after.authorName} />
       <CompareRow label="Author Email" before={before.authorEmail} after={after.authorEmail} />
+      <CompareRow label="Committer" before={before.committerText} after={after.committerText} />
     </>
   )
 }
