@@ -134,6 +134,7 @@ Actions currently include:
 - selectCommit: select one row (or none), replacing any multi-selection
 - toggleCommitSelection: Ctrl/Cmd-click; add or remove an unpushed commit from the selection
 - extendSelection: Shift-click / Shift+arrow; select the unpushed commits from the anchor row to the clicked one
+- selectAllUnpushed: the Select all unpushed button / Ctrl+A; select every unpushed commit
 - setCanUndo: show or hide the Undo button
 - reloadRepository: re-read the repository from disk, keeping the selected commit and the Undo button
 - runGitOperation: run one git operation at a time, setting activity (the label shown with a spinner in StatusBar) while it runs
@@ -176,6 +177,7 @@ Current behavior:
 - Enter on a row selects it and focuses the edit form (editable commits only)
 - Up / Down arrows move the selection between rows
 - Ctrl/Cmd-click, Shift-click and Shift+Up / Down select several unpushed commits (pushed commits never join a multi-selection); the legend then shows how many are selected
+- the Select all unpushed button in the legend (or Ctrl+A) selects every unpushed commit at once
 - a banner above the rows explains when the repo has no remote, the branch has no upstream (every commit counts as unpushed), or every commit is already pushed
 - shows "This branch has no commits yet." when the log is empty
 
@@ -279,6 +281,7 @@ App-wide keyboard shortcuts, registered once from App.tsx:
 
 - F5 / Ctrl+R: reload the repository from disk (instead of reloading the page)
 - Ctrl+Z (Cmd+Z on macOS): undo the last rewrite; ignored while typing in a field so normal text undo still works
+- Ctrl+A (Cmd+A on macOS): select every unpushed commit; ignored while typing in a field or with a dialog open
 - Escape: close the edit panel by clearing the selection, and return focus to the commit row
 - F1: open the help dialog (skipped while the confirm dialog is open)
 

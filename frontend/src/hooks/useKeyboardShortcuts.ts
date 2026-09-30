@@ -20,6 +20,7 @@ export function focusCommitRow(hash: string) {
 // useKeyboardShortcuts registers the app-wide shortcuts:
 //   - F5 / Ctrl+R / Cmd+R: reload the repository from disk (instead of the page)
 //   - Ctrl+Z / Cmd+Z: undo the last rewrite (not while typing in a field)
+//   - Ctrl+A / Cmd+A: select every unpushed commit (not while typing in a field)
 //   - Escape: close the edit panel by clearing the selection
 //   - F1: open the help
 //
@@ -28,8 +29,15 @@ export function focusCommitRow(hash: string) {
 export function useKeyboardShortcuts() {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      const { repoInfo, selectedHash, selectCommit, undoLastOperation, reloadRepository, setHelpOpen } =
-        useRepoStore.getState()
+      const {
+        repoInfo,
+        selectedHash,
+        selectCommit,
+        selectAllUnpushed,
+        undoLastOperation,
+        reloadRepository,
+        setHelpOpen,
+      } = useRepoStore.getState()
 
       if (event.key === 'F1') {
         event.preventDefault()
@@ -59,6 +67,24 @@ export function useKeyboardShortcuts() {
       if (isUndoShortcut && !isTextEditingTarget(event.target)) {
         event.preventDefault()
         undoLastOperation()
+        return
+      }
+
+      const isSelectAllShortcut =
+        (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'a'
+
+      // Not in a field, where Ctrl+A selects its text, nor behind a dialog.
+      if (
+        isSelectAllShortcut &&
+        repoInfo &&
+        !isTextEditingTarget(event.target) &&
+        !document.querySelector('[aria-modal="true"]')
+      ) {
+        event.preventDefault()
+        const primary = selectAllUnpushed()
+        if (primary) {
+          focusCommitRow(primary)
+        }
         return
       }
 

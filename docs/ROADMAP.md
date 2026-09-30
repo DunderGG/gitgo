@@ -267,7 +267,7 @@ Editing commit metadata in `EditPanel` and `BulkEditPanel`.
 
 Finding, selecting and inspecting commits in `CommitList`.
 
-- [ ] **Select all unpushed** (button above `CommitList` and `Ctrl+A`), as the starting point for a bulk shift or author fix
+- [x] **Select all unpushed** (button above `CommitList` and `Ctrl+A`), as the starting point for a bulk shift or author fix
 - [ ] Commit search and filtering by message, author, date, or hash
 - [ ] Side-by-side commit comparison view
 - [ ] Copy actions for commit metadata (full hash, short hash, author name, author email)

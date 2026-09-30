@@ -45,6 +45,7 @@ Squash, reorder and drop are planned next, followed by CI and installable binari
 |---|---|
 | `↑` / `↓` | Move the selection between commits |
 | `Shift+↑` / `Shift+↓`, `Ctrl`/`Shift`+click | Select several unpushed commits |
+| `Ctrl+A` | Select every unpushed commit (also the button above the list) |
 | `Enter` | Open the edit panel for the selected commit |
 | `Escape` | Close the edit panel or dialog |
 | `Ctrl+Z` | Undo the last rewrite |

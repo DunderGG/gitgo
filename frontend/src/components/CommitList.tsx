@@ -109,6 +109,7 @@ export default function CommitList() {
   const selectCommit = useRepoStore((s) => s.selectCommit)
   const toggleCommitSelection = useRepoStore((s) => s.toggleCommitSelection)
   const extendSelection = useRepoStore((s) => s.extendSelection)
+  const selectAllUnpushed = useRepoStore((s) => s.selectAllUnpushed)
   const requestEditFocus = useRepoStore((s) => s.requestEditFocus)
   const isMultiSelect = selectedHashes.length > 1
 
@@ -157,7 +158,16 @@ export default function CommitList() {
   }
 
   const unpushedCount = commits.filter((c) => c.isUnpushed).length
+  const isAllUnpushedSelected = commits.every((c) => !c.isUnpushed || selectedHashes.includes(c.hash))
   const notice = repoInfo ? listNotice(repoInfo, unpushedCount) : null
+
+  // Focus the primary row so the arrow keys and Escape work right away.
+  function handleSelectAll() {
+    const primary = selectAllUnpushed()
+    if (primary) {
+      focusCommitRow(primary)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -180,11 +190,22 @@ export default function CommitList() {
           <span className="w-2 h-2 rounded-full bg-gray-600 inline-block" />
           {commits.length - unpushedCount} pushed
         </span>
-        {isMultiSelect && (
-          <span className="ml-auto text-indigo-300">
-            {selectedHashes.length} selected · Esc to clear
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-3">
+          {isMultiSelect && (
+            <span className="text-indigo-300">
+              {selectedHashes.length} selected · Esc to clear
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            disabled={unpushedCount === 0 || isAllUnpushedSelected}
+            title="Select every unpushed commit (Ctrl+A)"
+            className="rounded px-1.5 py-0.5 text-indigo-300 transition hover:bg-gray-800 hover:text-indigo-200 disabled:cursor-default disabled:text-gray-600 disabled:hover:bg-transparent"
+          >
+            Select all unpushed
+          </button>
+        </span>
       </div>
 
       {notice && (

@@ -133,6 +133,9 @@ interface RepoStore {
   toggleCommitSelection: (hash: string) => void
   // Shift-click / Shift+arrow: select the unpushed commits from the anchor to hash.
   extendSelection: (hash: string) => void
+  // Button above CommitList / Ctrl+A: select every unpushed commit. Returns
+  // the commit that ends up primary, or null when there is nothing to select.
+  selectAllUnpushed: () => string | null
   requestEditFocus: () => void
   consumeEditFocus: () => void
   setHelpOpen: (isHelpOpen: boolean) => void
@@ -240,6 +243,19 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       selectedHash: range.includes(hash) ? hash : range[range.length - 1],
       selectionAnchor: anchor,
     })
+  },
+
+  selectAllUnpushed: () => {
+    const { commits, selectedHash } = get()
+    const unpushed = commits.filter((commit) => commit.isUnpushed).map((commit) => commit.hash)
+    if (unpushed.length === 0) {
+      set({ status: 'There are no unpushed commits to select' })
+      return null
+    }
+    // Keep the commit the user was on as the primary one when it is included.
+    const primary = selectedHash && unpushed.includes(selectedHash) ? selectedHash : unpushed[0]
+    set({ selectedHashes: unpushed, selectedHash: primary, selectionAnchor: primary })
+    return primary
   },
 
   requestEditFocus: () => set({ pendingEditFocus: true }),

@@ -29,6 +29,7 @@ const SHORTCUTS: { keys: ReactNode; action: string }[] = [
   { keys: <><Kbd>Shift</Kbd>+<Kbd>↑</Kbd> <Kbd>Shift</Kbd>+<Kbd>↓</Kbd></>, action: 'Extend the selection over several unpushed commits' },
   { keys: <><Kbd>Ctrl</Kbd>+click</>, action: 'Add or remove an unpushed commit from the selection' },
   { keys: <><Kbd>Shift</Kbd>+click</>, action: 'Select every unpushed commit between the last selected one and the clicked one' },
+  { keys: <><Kbd>Ctrl</Kbd>+<Kbd>A</Kbd></>, action: 'Select every unpushed commit (outside text fields)' },
   { keys: <Kbd>Enter</Kbd>, action: 'Open the selected commit and jump to its first field' },
   { keys: <Kbd>Escape</Kbd>, action: 'Close the edit panel, confirmation dialog or this help' },
   { keys: <><Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd></>, action: 'Undo the last rewrite (outside text fields)' },
@@ -170,6 +171,7 @@ export default function HelpDialog() {
               <li>
                 Select several unpushed commits: <Kbd>Ctrl</Kbd>+click to add or remove one at a time,{' '}
                 <Kbd>Shift</Kbd>+click to select a range, or hold <Kbd>Shift</Kbd> and use <Kbd>↑</Kbd> <Kbd>↓</Kbd>.
+                To take them all, click <Ui>Select all unpushed</Ui> above the list or press <Kbd>Ctrl</Kbd>+<Kbd>A</Kbd>.
                 The <Ui>Edit Several Commits</Ui> panel replaces the edit panel.
               </li>
               <li>

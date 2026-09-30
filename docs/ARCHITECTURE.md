@@ -351,7 +351,7 @@ The main view after a repository is opened. Reads `commits` from the Zustand sto
 
 Structure:
 - **Column headers** — a fixed header row with labels for hash, message, author, and date.
-- **Legend** — a summary row showing the count of unpushed (indigo dot) vs pushed (grey dot) commits.
+- **Legend** — a summary row showing the count of unpushed (indigo dot) vs pushed (grey dot) commits, the selected count during a multi-selection, and a **Select all unpushed** button (`selectAllUnpushed`, also `Ctrl+A`). The button is disabled when there are no unpushed commits or all of them are already selected, and moves focus to the primary row.
 - **Notice banner** (optional, from `listNotice`) — explains a surprising pushed/unpushed split. At most one shows, in this priority order: no remote (info: every commit counts as unpushed), no upstream (warning: every commit counts as unpushed, avoid editing commits pushed under another name), or no unpushed commits (muted: nothing to edit).
 - **Empty branch** — when `commits` is empty, the list is replaced by "This branch has no commits yet."
 - **Scrollable commit rows** — each rendered by the internal `CommitRow` component.
@@ -453,6 +453,7 @@ Registers the app-wide keyboard shortcuts on `window`; called once from `App.tsx
 |---|---|
 | `F5` / `Ctrl+R` / `Cmd+R` | Calls `reloadRepository()` when a repo is open. Always intercepted, because in the Wails webview these keys would otherwise reload the page and lose all UI state. |
 | `Ctrl+Z` / `Cmd+Z` | Calls `undoLastOperation()`. Ignored when the key event comes from an `input`, `textarea`, `select` or editable element, so the browser's own text undo keeps working there. |
+| `Ctrl+A` / `Cmd+A` | Calls `selectAllUnpushed()` when a repo is open, keeping the current commit as the primary one if it is unpushed, and focuses that row. Ignored in text-editing elements (where it selects the field's text) and while an `aria-modal` dialog is open. |
 | `Escape` | When a commit is selected: clears the selection (closing the edit panel and discarding unsaved form changes) and moves focus back to that row in `CommitList`. |
 | `F1` | Opens `HelpDialog` (`setHelpOpen(true)`), unless another `aria-modal` dialog is open, where `Escape` would close both. |
 
