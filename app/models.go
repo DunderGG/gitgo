@@ -42,6 +42,11 @@ type Settings struct {
 	RecentRepos []string `json:"recentRepos"`
 	// Theme is the colour theme: ThemeSystem, ThemeLight or ThemeDark.
 	Theme string `json:"theme"`
+	// SubjectGuide is the column of the subject ruler in the commit message
+	// field, and the longest subject before a hint. BodyGuide is the longest
+	// body line before a hint. 0 turns a guide off.
+	SubjectGuide int `json:"subjectGuide"`
+	BodyGuide    int `json:"bodyGuide"`
 }
 
 // rewriteRecord captures the branch tip before and after a rewrite. Undo moves

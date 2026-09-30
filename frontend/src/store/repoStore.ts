@@ -11,6 +11,7 @@ import {
 } from '../../wailsjs/go/app/App'
 import { errorText, friendlyError } from '../errors'
 import { applyTheme, isThemePreference, type ThemePreference } from '../theme'
+import { DEFAULT_MESSAGE_GUIDES, type MessageGuides } from '../messageGuides'
 
 // Where earlier versions kept the recent repositories, in the WebView's
 // localStorage. loadSettings moves the list to the backend's settings file.
@@ -56,7 +57,8 @@ export async function loadSettings(): Promise<void> {
   removeLegacyRecentRepos()
   const theme = isThemePreference(settings.theme) ? settings.theme : 'system'
   applyTheme(theme)
-  useRepoStore.setState({ recentRepos, theme })
+  const messageGuides = { subject: settings.subjectGuide, body: settings.bodyGuide }
+  useRepoStore.setState({ recentRepos, theme, messageGuides })
 }
 
 function persistRecentRepos(paths: string[]) {
@@ -103,6 +105,9 @@ interface RepoStore {
   recentRepos: string[]
   // Colour theme the user picked (header theme button), saved in the settings file.
   theme: ThemePreference
+  // Commit message guide columns (0 turns a guide off), saved in the
+  // settings file.
+  messageGuides: MessageGuides
   // Hash of the commit currently selected in CommitList; null when nothing is
   // selected. EditPanel reads this to know which commit to load. With several
   // commits selected it is the one last clicked or moved to.
@@ -161,6 +166,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   commits: [],
   recentRepos: [],
   theme: 'system',
+  messageGuides: DEFAULT_MESSAGE_GUIDES,
   selectedHash: null,
   selectedHashes: [],
   selectionAnchor: null,

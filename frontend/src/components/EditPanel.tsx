@@ -15,6 +15,7 @@ import {
 } from '../dates'
 import { errorText, friendlyError } from '../errors'
 import { identityErrors, NO_IDENTITY_ERRORS, type CommitterMode } from '../identity'
+import { lineLength, messageGuideHints } from '../messageGuides'
 import { useRepoStore } from '../store/repoStore'
 import CommitterFields from './CommitterFields'
 import UseMyIdentityButton from './UseMyIdentityButton'
@@ -151,8 +152,11 @@ export default function EditPanel() {
   const hasUnpushedCommits = useRepoStore((s) => s.commits.some((commit) => commit.isUnpushed))
   const pendingEditFocus = useRepoStore((s) => s.pendingEditFocus)
   const consumeEditFocus = useRepoStore((s) => s.consumeEditFocus)
+  const messageGuides = useRepoStore((s) => s.messageGuides)
 
   const messageRef = useRef<HTMLTextAreaElement>(null)
+  // Scroll position of the message field, which the subject ruler follows.
+  const [messageScrollTop, setMessageScrollTop] = useState(0)
   // Hash whose detail request has finished (successfully or not). Compared
   // with selectedHash so the focus effect never acts on the previous commit's
   // state in the render right after the selection changes.
@@ -229,6 +233,11 @@ export default function EditPanel() {
         })
         setOriginalForm(loadedForm)
         setForm(loadedForm)
+        // Show the new message from its first line, with the subject ruler.
+        if (messageRef.current) {
+          messageRef.current.scrollTop = 0
+        }
+        setMessageScrollTop(0)
       } catch (error) {
         if (!isActive) {
           return
@@ -271,6 +280,8 @@ export default function EditPanel() {
       : NO_IDENTITY_ERRORS
   const isValid = [fieldErrors, committerErrors].every((errors) => errors.name === null && errors.email === null)
   const committerPreview = committer ? newCommitter(form, committer) : null
+  const subjectLength = lineLength(form.message.split('\n')[0])
+  const messageHints = messageGuideHints(form.message, messageGuides)
 
   const offsetOptions = [...COMMON_OFFSETS]
   for (const offset of [originalForm?.offset, form.offset]) {
@@ -431,18 +442,55 @@ export default function EditPanel() {
           }}
         >
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">
-              Message
-            </label>
-            <textarea
-              ref={messageRef}
-              value={form.message}
-              onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
-              disabled={fieldsDisabled}
-              rows={5}
-              className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 font-mono text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-              placeholder="Commit message"
-            />
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">
+                Message
+              </label>
+              {!fieldsDisabled && messageGuides.subject > 0 && (
+                <span
+                  title="Subject line length"
+                  className={`font-mono text-xs ${subjectLength > messageGuides.subject ? 'text-yellow-300' : 'text-gray-500'}`}
+                >
+                  {subjectLength}/{messageGuides.subject}
+                </span>
+              )}
+            </div>
+            {/* The ruler is measured in ch of the textarea's font, from its
+                left border (1px) and padding (px-3). */}
+            <div className="relative mt-1 overflow-hidden rounded-md font-mono text-sm">
+              <textarea
+                ref={messageRef}
+                value={form.message}
+                onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
+                onScroll={(e) => setMessageScrollTop(e.currentTarget.scrollTop)}
+                disabled={fieldsDisabled}
+                rows={5}
+                className="block w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 font-mono text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                placeholder="Commit message"
+              />
+              {/* The subject ruler only spans the first line (py-2 plus one
+                  text-sm line), so it moves with the text when it scrolls.
+                  There is no body ruler: the field is about 72ch wide and
+                  wraps long lines, so they could never cross one; the hints
+                  below report them instead. */}
+              {!fieldsDisabled && messageGuides.subject > 0 && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute h-5 w-px bg-gray-600"
+                  style={{
+                    left: `calc(0.75rem + 1px + ${messageGuides.subject}ch)`,
+                    top: `calc(0.5rem + 1px - ${messageScrollTop}px)`,
+                  }}
+                />
+              )}
+            </div>
+            {!fieldsDisabled && messageHints.length > 0 && (
+              <ul className="mt-1 space-y-0.5 text-xs text-yellow-300">
+                {messageHints.map((hint) => (
+                  <li key={hint}>{hint}</li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div>

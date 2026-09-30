@@ -237,7 +237,7 @@ Found in the follow-up review (2026-09-25):
 
 ### Commit editing
 
-Editing commit metadata in `EditPanel` and `BulkEditPanel`.
+> Editing commit metadata in `EditPanel` and `BulkEditPanel`.
 
 - [x] **Use my identity** button by the author fields in `EditPanel`, filling in `user.name` / `user.email` from the Git config. The most common reason to change an author is a commit made with the wrong identity
   - [x] `ConfiguredIdentity` in `git/identity.go` (`GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`, then repository and global config) and the `GetGitIdentity` bound method (`TestConfiguredIdentity_*`, `TestGetGitIdentity_*`)
@@ -256,6 +256,9 @@ Editing commit metadata in `EditPanel` and `BulkEditPanel`.
 - [ ] **Find and replace in messages** across the selected commits, with a preview per commit (like `git filter-repo --replace-message`), for example to fix a misspelled ticket number
 - [ ] **Trailers**: add or remove `Co-authored-by:` and `Signed-off-by:` lines on one or several commits, with co-authors picked from the repository's authors (GitHub Desktop has a co-author picker)
 - [ ] **Message guides**: a ruler at 50 characters for the subject and 72 for the body, and a warning when the second line is not blank (as in Sublime Merge and Tower)
+  - [x] `Settings.SubjectGuide` / `Settings.BodyGuide` (defaults 50 / 72, 0 turns a guide off, missing or out-of-range values fall back to the defaults) and the `SetMessageGuides` bound method (`TestGetSettings_MessageGuideDefaults`, `TestSetMessageGuides_*`)
+  - [x] `EditPanel`: a subject ruler over the first line of the message field (no body ruler: the field is about 72ch wide and wraps long lines, so the hint reports them instead), a subject length counter, and hints for a long subject, a non-blank second line and long body lines (`src/messageGuides.ts`)
+  - [ ] Settings dialog to change the columns (until then, edit `subjectGuide` / `bodyGuide` in `settings.json`)
 - [x] Add tiny date/time buttons under the date field to add +1 hour, +1 day, current time, etc.
   - [x] `EditPanel` has −1d, −1h, +1h, +1d (shift the wall-clock time, keeping the offset) and Now (current time and this computer's offset)
 - [x] Shift the dates of several selected commits at once (multi-select in `CommitList`, ±1h/±1d in a bulk panel)
@@ -265,7 +268,7 @@ Editing commit metadata in `EditPanel` and `BulkEditPanel`.
 
 ### Commit list and selection
 
-Finding, selecting and inspecting commits in `CommitList`.
+> Finding, selecting and inspecting commits in `CommitList`.
 
 - [x] **Select all unpushed** (button above `CommitList` and `Ctrl+A`), as the starting point for a bulk shift or author fix
 - [ ] Commit search and filtering by message, author, date, or hash
@@ -281,7 +284,7 @@ Finding, selecting and inspecting commits in `CommitList`.
 
 ### Safety and recovery
 
-Protecting history and getting back to an earlier state.
+> Protecting history and getting back to an earlier state.
 
 - [ ] **Backups**: save the branch's history before an edit and restore it later, persistently and with multiple steps, unlike the one in-memory `Ctrl+Z` step. Design: [BACKUPS.md](BACKUPS.md)
   - [ ] `git/backup.go`: create, list, delete and restore backup refs under `refs/gitgo/backups/` (never pushed, kept by `git gc`)
@@ -300,7 +303,7 @@ Protecting history and getting back to an earlier state.
 
 ### Repository and branch status
 
-Opening repositories and showing their state in the header and `StatusBar`.
+> Opening repositories and showing their state in the header and `StatusBar`.
 
 - [ ] **Close / switch repository** button in the header. Once a repository is open there is no way back to the start screen and its recent list; `clearRepo` exists in the store but only `ErrorBoundary` calls it
 - [ ] Ahead-of-remote details in the status area (for example: exact number of commits ahead)
@@ -311,7 +314,7 @@ Opening repositories and showing their state in the header and `StatusBar`.
 
 ### External tools and export
 
-Handing the repository or its data to other programs.
+> Handing the repository or its data to other programs.
 
 - [ ] **Open folder** button next to the terminal button, showing the repository in Explorer / Finder / the Linux file manager
 - [ ] Open commit details in an external tool or terminal command

@@ -190,6 +190,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetSettings() Settings` | *(`app/settings.go`)* Reads `settings.json` in GitGo's config directory (`os.UserConfigDir()/gitgo`). A missing or unreadable file gives the defaults, so it never fails. |
 | `SetRecentRepos(paths []string) error` | *(`app/settings.go`)* Saves the recent repositories list into `settings.json`, keeping the other settings. Files in the config directory are written to a temporary file and renamed, so a crash never leaves a half-written file. |
 | `SetTheme(theme string) error` | *(`app/settings.go`)* Saves the colour theme (`system`, `light` or `dark`) into `settings.json`. `GetSettings` gives `system` for a missing or unknown value. |
+| `SetMessageGuides(subject, body int) error` | *(`app/settings.go`)* Saves the commit message guide columns, for the subject ruler and length hint and for the body line length hint (0–200, 0 turns a guide off), into `settings.json`. `GetSettings` gives 50 and 72 for missing or out-of-range values. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
 
@@ -377,7 +378,7 @@ The edit workspace for the currently selected commit. Reads `selectedHash` from 
 
 Behaviour:
 - With nothing selected, shows a hint: how to select a commit (click, or `↑` / `↓` and `Enter`), or, when the branch has no unpushed commits, that there is nothing to edit.
-- Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke. "Use my identity" (`UseMyIdentityButton`, via `GetGitIdentity`) fills the author fields from the Git config; the name and email are validated inline with `src/identity.ts`.
+- Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke. The message field has a ruler at the subject column in the store's `messageGuides` (spanning only the first line and following the field's scrolling; there is no body ruler, since the field is about 72ch wide and wraps long lines), a subject length counter, and hints from `messageGuideHints` in `src/messageGuides.ts` for a long subject, a non-blank second line and long body lines; they are hints only and never block an edit. "Use my identity" (`UseMyIdentityButton`, via `GetGitIdentity`) fills the author fields from the Git config; the name and email are validated inline with `src/identity.ts`.
 - The Committer section (`CommitterFields`) keeps the committer name and email, makes them the same as the author, or sets new ones (with its own "Use my identity"). It starts as "Same as author" when the loaded committer is the author, like "Also set committer date" starts checked when the dates match. Change detection compares the resulting committer, so picking an option that changes nothing does not enable "Review Changes".
 - Tracks the originally loaded values separately from the current form values so it can detect changes, support reset, and feed the confirmation dialog with an explicit before/after comparison.
 - Disables all editable controls while commit details are loading (shown with a spinner), while a rewrite is being submitted, and for pushed commits. `isUnpushed` is read from the matching entry in the store's `commits` (not from the loaded detail), so a reload that finds the commit was pushed makes it read-only immediately without resetting the form. "Review Changes" is also disabled while any other git operation is running.
@@ -478,6 +479,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `commits` | `CommitSummary[]` | The current log. Empty array while no repo is open. |
 | `recentRepos` | `string[]` | Most-recent repository paths, saved in `settings.json` through `SetRecentRepos` and loaded by `loadSettings()` before the first render (moving a list from an earlier version's `localStorage` there once), deduplicated, and capped to 10 entries. |
 | `theme` | `ThemePreference` | `'system'`, `'light'` or `'dark'`, saved in `settings.json` through `SetTheme` and applied by `loadSettings()` before the first render. |
+| `messageGuides` | `MessageGuides` | Commit message guide columns, `{ subject, body }`: the subject ruler and length hint, and the body line length hint (0 turns a guide off), saved in `settings.json` through `SetMessageGuides` and loaded by `loadSettings()`. |
 | `selectedHash` | `string | null` | Currently selected `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
 | `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
@@ -563,7 +565,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -588,7 +590,7 @@ GitGo/
 ├── app/
 │   ├── app.go               # App struct — bound methods exposed to frontend
 │   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
-│   ├── settings.go          # GetSettings / SetRecentRepos / SetTheme: settings.json in the config directory
+│   ├── settings.go          # GetSettings / SetRecentRepos / SetTheme / SetMessageGuides: settings.json in the config directory
 │   ├── theme.go             # Theme names; PrefersDark for the startup window colour (+ theme_windows.go / theme_other.go)
 │   ├── window.go            # Window size saved between runs (lifecycle hooks, not bound)
 │   └── models.go            # DTOs shared across layers

@@ -91,11 +91,48 @@ func (app *App) SetTheme(theme string) error {
 	return app.saveSettings(settings)
 }
 
+// SetMessageGuides saves the commit message guide columns: the subject ruler
+// and longest subject, and the longest body line. 0 turns a guide off.
+func (app *App) SetMessageGuides(subject, body int) error {
+	if !validGuide(subject) || !validGuide(body) {
+		return fmt.Errorf("message guide columns must be between 0 and %d", maxGuideColumn)
+	}
+	app.settingsMutex.Lock()
+	defer app.settingsMutex.Unlock()
+
+	settings := app.loadSettings()
+	settings.SubjectGuide = subject
+	settings.BodyGuide = body
+	return app.saveSettings(settings)
+}
+
+// The usual limits for commit messages: a 50-character subject and a body
+// wrapped at 72, as git's own documentation and most GUIs suggest.
+const (
+	defaultSubjectGuide = 50
+	defaultBodyGuide    = 72
+	maxGuideColumn      = 200
+)
+
+func validGuide(column int) bool {
+	return column >= 0 && column <= maxGuideColumn
+}
+
+func defaultSettings() Settings {
+	return Settings{
+		Theme:        ThemeSystem,
+		SubjectGuide: defaultSubjectGuide,
+		BodyGuide:    defaultBodyGuide,
+	}
+}
+
 // loadSettings reads the settings file. The caller holds settingsMutex.
+// Fields missing from the file, for example in a file from an earlier
+// version, keep their defaults.
 func (app *App) loadSettings() Settings {
-	settings := Settings{}
+	settings := defaultSettings()
 	if app.settingsPath != "" && readJSONFile(app.settingsPath, &settings) != nil {
-		settings = Settings{}
+		settings = defaultSettings()
 	}
 	if settings.RecentRepos == nil {
 		// An empty list rather than null for the frontend.
@@ -103,6 +140,12 @@ func (app *App) loadSettings() Settings {
 	}
 	if !validTheme(settings.Theme) {
 		settings.Theme = ThemeSystem
+	}
+	if !validGuide(settings.SubjectGuide) {
+		settings.SubjectGuide = defaultSubjectGuide
+	}
+	if !validGuide(settings.BodyGuide) {
+		settings.BodyGuide = defaultBodyGuide
 	}
 	return settings
 }

@@ -123,3 +123,62 @@ func TestSetTheme_RejectsUnknownTheme(test *testing.T) {
 		test.Fatalf("Theme = %q, want %q", got, ThemeSystem)
 	}
 }
+
+func TestGetSettings_MessageGuideDefaults(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	settings := app.GetSettings()
+	if settings.SubjectGuide != 50 || settings.BodyGuide != 72 {
+		test.Fatalf("guides without a file = %d/%d, want 50/72", settings.SubjectGuide, settings.BodyGuide)
+	}
+
+	// A file from before the guides existed has no guide fields.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		test.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"theme": "dark"}`), 0o644); err != nil {
+		test.Fatal(err)
+	}
+	settings = app.GetSettings()
+	if settings.SubjectGuide != 50 || settings.BodyGuide != 72 {
+		test.Fatalf("guides from an older file = %d/%d, want 50/72", settings.SubjectGuide, settings.BodyGuide)
+	}
+
+	// Out-of-range values, edited by hand, fall back to the defaults.
+	if err := os.WriteFile(path, []byte(`{"subjectGuide": -1, "bodyGuide": 5000}`), 0o644); err != nil {
+		test.Fatal(err)
+	}
+	settings = app.GetSettings()
+	if settings.SubjectGuide != 50 || settings.BodyGuide != 72 {
+		test.Fatalf("out-of-range guides = %d/%d, want 50/72", settings.SubjectGuide, settings.BodyGuide)
+	}
+}
+
+func TestSetMessageGuides_SavedForNextRun(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	// 0 turns a guide off, and must survive a reload rather than become a default.
+	if err := app.SetMessageGuides(0, 100); err != nil {
+		test.Fatalf("SetMessageGuides: %v", err)
+	}
+
+	nextRun := &App{settingsPath: path}
+	settings := nextRun.GetSettings()
+	if settings.SubjectGuide != 0 || settings.BodyGuide != 100 {
+		test.Fatalf("guides = %d/%d, want 0/100", settings.SubjectGuide, settings.BodyGuide)
+	}
+}
+
+func TestSetMessageGuides_RejectsOutOfRange(test *testing.T) {
+	app, _ := appWithSettingsFile(test)
+
+	for _, columns := range [][2]int{{-1, 72}, {50, 201}} {
+		if err := app.SetMessageGuides(columns[0], columns[1]); err == nil {
+			test.Fatalf("SetMessageGuides(%d, %d) accepted out-of-range columns", columns[0], columns[1])
+		}
+	}
+	settings := app.GetSettings()
+	if settings.SubjectGuide != 50 || settings.BodyGuide != 72 {
+		test.Fatalf("guides = %d/%d, want the defaults", settings.SubjectGuide, settings.BodyGuide)
+	}
+}

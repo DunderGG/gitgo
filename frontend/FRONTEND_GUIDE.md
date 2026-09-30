@@ -125,6 +125,7 @@ State currently includes:
 - repoInfo: opened repository details
 - commits: commit list shown in CommitList
 - theme: the colour theme, 'system', 'light' or 'dark' (saved via SetTheme)
+- messageGuides: commit message guide columns, { subject, body }: the subject ruler and length hint, and the body line length hint; 0 turns a guide off (saved via SetMessageGuides)
 - recentRepos: last 10 opened repository paths (saved in the backend settings file via SetRecentRepos, loaded by loadSettings before the first render)
 - selectedHash: currently selected commit row
 - canUndo: true after a rewrite that can still be undone
@@ -196,6 +197,7 @@ Current behavior:
 - loads full commit metadata from GetCommitDetail when a row is selected
 - with nothing selected, shows how to select a commit, or that there is nothing to edit when every commit is pushed
 - keeps local form state for message, date/time, author name, and author email
+- the message field has a ruler at the subject guide column (messageGuides in the store), a subject length counter, and hints for a long subject, a non-blank second line and long body lines (src/messageGuides.ts)
 - disables fields for pushed commits (pushed state comes from the commit list, so it updates after a reload)
 - tiny buttons under the date (DateShiftButtons plus Now) adjust it by ±1 hour / ±1 day or set the current time
 - "Use my identity" by the author name fills the author from the Git config
