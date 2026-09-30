@@ -4,6 +4,7 @@ set -euo pipefail
 
 SKIP_BUILD=0
 RUN_AFTER_BUILD=0
+NEW_RUN=0
 RUN_TESTS=0
 VERBOSE=0
 WAILS_ARGS=()
@@ -15,6 +16,10 @@ for arg in "$@"; do
             ;;
         --run)
             RUN_AFTER_BUILD=1
+            ;;
+        --new-run)
+            RUN_AFTER_BUILD=1
+            NEW_RUN=1
             ;;
         --test)
             RUN_TESTS=1
@@ -71,6 +76,45 @@ assert_node_version() {
     fi
 }
 
+# Remove what GitGo keeps between runs so it starts like a first run: the
+# window size (app/window.go) and the WebView's storage, which holds the
+# recent repositories list.
+clear_saved_state() {
+    if command -v pgrep >/dev/null 2>&1 && pgrep -x gitgo >/dev/null 2>&1; then
+        echo "Close GitGo before using --new-run; it saves its window size when it closes." >&2
+        exit 1
+    fi
+
+    local paths=()
+    case "$(uname -s)" in
+        Darwin)
+            paths=(
+                "$HOME/Library/Application Support/gitgo/window.json"
+                "$HOME/Library/WebKit/com.wails.GitGo"
+                "$HOME/Library/Caches/com.wails.GitGo"
+            )
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            paths=("$APPDATA/gitgo/window.json" "$APPDATA/gitgo.exe")
+            ;;
+        *)
+            paths=(
+                "${XDG_CONFIG_HOME:-$HOME/.config}/gitgo/window.json"
+                "${XDG_DATA_HOME:-$HOME/.local/share}/gitgo"
+                "${XDG_CACHE_HOME:-$HOME/.cache}/gitgo"
+            )
+            ;;
+    esac
+
+    local path
+    for path in "${paths[@]}"; do
+        if [[ -e "$path" ]]; then
+            rm -rf -- "$path"
+            echo "Removed: $path"
+        fi
+    done
+}
+
 echo "Checking prerequisites..."
 require_command go
 require_command node
@@ -91,7 +135,7 @@ echo "npm:   $npm_version"
 echo "Wails: $wails_version"
 
 if [[ "$SKIP_BUILD" -eq 1 ]] && [[ "$RUN_AFTER_BUILD" -eq 1 ]]; then
-    echo "Cannot use --skip-build and --run together." >&2
+    echo "Cannot use --skip-build with --run or --new-run." >&2
     exit 1
 fi
 if [[ "$SKIP_BUILD" -eq 1 ]] && [[ "$RUN_TESTS" -eq 1 ]]; then
@@ -99,7 +143,7 @@ if [[ "$SKIP_BUILD" -eq 1 ]] && [[ "$RUN_TESTS" -eq 1 ]]; then
     exit 1
 fi
 if [[ "$RUN_AFTER_BUILD" -eq 1 ]] && [[ "$RUN_TESTS" -eq 1 ]]; then
-    echo "Cannot use --run and --test together." >&2
+    echo "Cannot use --test with --run or --new-run." >&2
     exit 1
 fi
 
@@ -145,6 +189,10 @@ if [[ "$RUN_AFTER_BUILD" -eq 1 ]]; then
             echo "Build output not found at: $binary_path" >&2
             exit 1
         fi
+    fi
+    if [[ "$NEW_RUN" -eq 1 ]]; then
+        echo "Clearing saved state (--new-run)..."
+        clear_saved_state
     fi
     echo "Launching: $binary_path"
     "$binary_path" &

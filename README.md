@@ -86,6 +86,7 @@ Both scripts check prerequisites (`go`, `node`, `npm`, `wails`) and their versio
 |---|---|---|---|
 | Check only | `-SkipBuild` | `--skip-build` | Run prerequisite checks without building |
 | Build and run | `-Run` | `--run` | Launch the app after a successful build |
+| Build and run as a new user | `-NewRun` | `--new-run` | Like `-Run`, but first delete the saved window size and the recent repositories list, so the app starts as on a first run |
 
 `go build` alone is not enough: the frontend must be compiled first and embedded into the Go binary, which `wails build` does for you.
 

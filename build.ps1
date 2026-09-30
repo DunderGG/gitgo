@@ -1,6 +1,7 @@
 param(
     [switch]$SkipBuild,
     [switch]$Run,
+    [switch]$NewRun,
     [switch]$Test,
     [switch]$FullOutput,
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -80,6 +81,26 @@ function Assert-NodeVersion {
     }
 }
 
+function Clear-SavedState {
+    # Remove what GitGo keeps between runs so it starts like a first run: the
+    # window size (app/window.go) and the WebView's storage, which holds the
+    # recent repositories list.
+    if (Get-Process -Name gitgo -ErrorAction SilentlyContinue) {
+        throw "Close GitGo before using -NewRun; it saves its window size when it closes."
+    }
+
+    $paths = @(
+        (Join-Path $env:APPDATA "gitgo\window.json"),
+        (Join-Path $env:APPDATA "gitgo.exe")
+    )
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            Remove-Item -Path $path -Recurse -Force
+            Write-Host "Removed: $path"
+        }
+    }
+}
+
 Sync-PathFromRegistry
 Add-CommonToolPaths
 
@@ -103,6 +124,12 @@ Write-Host "Node:   $nodeVersion"
 Write-Host "npm:    $npmVersion"
 Write-Host "Wails:  $wailsVersion"
 
+if ($SkipBuild -and $NewRun) {
+    throw "Cannot use -SkipBuild and -NewRun together."
+}
+if ($Test -and $NewRun) {
+    throw "Cannot use -Test and -NewRun together."
+}
 if ($SkipBuild -and $Run) {
     throw "Cannot use -SkipBuild and -Run together."
 }
@@ -141,10 +168,14 @@ if ($Test) {
     Write-Host "All tests passed." -ForegroundColor Green
 }
 
-if ($Run) {
+if ($Run -or $NewRun) {
     $binaryPath = Join-Path $PSScriptRoot "build\bin\gitgo.exe"
     if (-not (Test-Path $binaryPath)) {
         throw "Build output not found at: $binaryPath"
+    }
+    if ($NewRun) {
+        Write-Host "Clearing saved state (-NewRun)..." -ForegroundColor Cyan
+        Clear-SavedState
     }
     Write-Host "Launching: $binaryPath" -ForegroundColor Cyan
     Start-Process -FilePath $binaryPath
