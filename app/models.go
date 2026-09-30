@@ -47,6 +47,10 @@ type Settings struct {
 	// body line before a hint. 0 turns a guide off.
 	SubjectGuide int `json:"subjectGuide"`
 	BodyGuide    int `json:"bodyGuide"`
+	// TerminalCommand is the command the terminal button runs, with {dir} for
+	// the repository folder (for example `wt.exe -d {dir} pwsh`). Empty picks
+	// a terminal automatically.
+	TerminalCommand string `json:"terminalCommand"`
 }
 
 // rewriteRecord captures the branch tip before and after a rewrite. Undo moves

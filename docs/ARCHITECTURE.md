@@ -186,11 +186,12 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `ListBranches() ([]string, error)` | Returns the short names of all local branches, sorted alphabetically. |
 | `UndoLastOperation() (OperationResult, error)` | Re-opens the repo and calls `git.ResetBranch` to move the branch from the post-rewrite tip back to the pre-rewrite tip. Only one level of undo is kept. Returns `ErrBranchMoved` (and drops the record) if the branch no longer points at the rewritten tip, e.g. a new commit was made. The worktree is not touched: rewrites only change metadata, so both tips have the same tree. |
 | `CanUndo() bool` | Reports whether `lastRewrite` is set. Used by the frontend to re-sync the Undo button after a failed undo. |
-| `OpenTerminal() error` | *(`app/terminal.go`)* Opens a terminal window in the repository root for running git by hand. Windows: Windows Terminal (`wt.exe -d`), else `cmd.exe` in a new console; macOS: `open -a Terminal`; Linux: `$TERMINAL`, then common emulators. The terminal is detached and outlives GitGo. |
+| `OpenTerminal() error` | *(`app/terminal.go`)* Opens a terminal window in the repository root for running git by hand. Windows: Windows Terminal (`wt.exe -d`), else `cmd.exe` in a new console; macOS: `open -a Terminal`; Linux: `$TERMINAL`, then common emulators. A terminal command set in `SettingsDialog` replaces this choice, with no fallback, and on Windows gets a console of its own. The terminal is detached and outlives GitGo. |
 | `GetSettings() Settings` | *(`app/settings.go`)* Reads `settings.json` in GitGo's config directory (`os.UserConfigDir()/gitgo`). A missing or unreadable file gives the defaults, so it never fails. |
 | `SetRecentRepos(paths []string) error` | *(`app/settings.go`)* Saves the recent repositories list into `settings.json`, keeping the other settings. Files in the config directory are written to a temporary file and renamed, so a crash never leaves a half-written file. |
 | `SetTheme(theme string) error` | *(`app/settings.go`)* Saves the colour theme (`system`, `light` or `dark`) into `settings.json`. `GetSettings` gives `system` for a missing or unknown value. |
 | `SetMessageGuides(subject, body int) error` | *(`app/settings.go`)* Saves the commit message guide columns, for the subject ruler and length hint and for the body line length hint (0–200, 0 turns a guide off), into `settings.json`. `GetSettings` gives 50 and 72 for missing or out-of-range values. |
+| `SetTerminalCommand(command string) error` | *(`app/settings.go`)* Saves the command `OpenTerminal` runs into `settings.json`, trimmed; `{dir}` stands for the repository folder, and double or single quotes keep spaces in one argument (backslashes are literal, for Windows paths). Rejects an unclosed quote or an empty program name. An empty command goes back to the automatic choice. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
 
@@ -313,7 +314,7 @@ A class component (React has no hook equivalent) that catches errors thrown whil
 
 The root layout component. Renders a full-height flex column with three vertical sections:
 
-- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, and a **?** button that opens `HelpDialog` is shown on every screen.
+- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, a **⚙** button opens `SettingsDialog`, and a **?** button opens `HelpDialog`; these three are shown on every screen.
 - **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
@@ -428,6 +429,16 @@ A modal with usage instructions, opened with the **?** button in the header (sho
 - Closes on `Escape`, `F1`, the **×** button or a click on the backdrop; like `ConfirmDialog`, a capture-phase listener also swallows `Ctrl+Z` while it is open.
 - Focuses its close button on open and restores the previous focus on close.
 
+#### `frontend/src/components/SettingsDialog.tsx`
+
+A modal with the user's preferences, opened with the **⚙** button in the header or `Ctrl+,` (store: `isSettingsOpen`). Like `HelpDialog`, it is an overlay because Wails v2 has one native window.
+
+- **Theme**: System / Light / Dark buttons calling the store's `setTheme`, the same setting the header's theme button cycles.
+- **Commit message guides**: number fields for the subject and body columns (0–200, 0 turns a guide off), and a button that restores 50 / 72. A valid value calls `setMessageGuides` at once, so `EditPanel` follows while the dialog is open; an invalid one is marked and not saved.
+- **Terminal**: the command the `>_` button runs (`setTerminalCommand`), with this platform's automatic choice as the placeholder and two example commands. Each change is saved at once; the store chains the saves so the last one typed wins, and a rejected command is marked with the backend's message.
+- There is no Save or Cancel: every change is applied and saved as it is made, like the theme button. The content is mounted only while the dialog is open, so the fields start from the saved values each time.
+- Closes on `Escape`, `Ctrl+,`, the **×** button or a click on the backdrop; `Ctrl+Z` is swallowed outside its fields, and focus is handled like `HelpDialog`.
+
 ---
 
 #### `frontend/src/components/StatusBar.tsx`
@@ -460,8 +471,9 @@ Registers the app-wide keyboard shortcuts on `window`; called once from `App.tsx
 | `Ctrl+A` / `Cmd+A` | Calls `selectAllUnpushed()` when a repo is open, keeping the current commit as the primary one if it is unpushed, and focuses that row. Ignored in text-editing elements (where it selects the field's text) and while an `aria-modal` dialog is open. |
 | `Escape` | When a commit is selected: clears the selection (closing the edit panel and discarding unsaved form changes) and moves focus back to that row in `CommitList`. |
 | `F1` | Opens `HelpDialog` (`setHelpOpen(true)`), unless another `aria-modal` dialog is open, where `Escape` would close both. |
+| `Ctrl+,` / `Cmd+,` | Opens `SettingsDialog` (`setSettingsOpen(true)`), unless another `aria-modal` dialog is open. |
 
-Row-level keys (`Enter`, `↑`, `↓`) are handled in `CommitList`, and `ConfirmDialog` and `HelpDialog` take over `Escape` while they are open. The file also exports `focusCommitRow(hash)`, used by both.
+Row-level keys (`Enter`, `↑`, `↓`) are handled in `CommitList`, and `ConfirmDialog`, `HelpDialog` and `SettingsDialog` take over `Escape` while they are open. The file also exports `focusCommitRow(hash)`, used by both.
 
 The component subscribes to three separate store selectors rather than the whole store, so it only re-renders when one of those three values changes.
 
@@ -480,10 +492,12 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `recentRepos` | `string[]` | Most-recent repository paths, saved in `settings.json` through `SetRecentRepos` and loaded by `loadSettings()` before the first render (moving a list from an earlier version's `localStorage` there once), deduplicated, and capped to 10 entries. |
 | `theme` | `ThemePreference` | `'system'`, `'light'` or `'dark'`, saved in `settings.json` through `SetTheme` and applied by `loadSettings()` before the first render. |
 | `messageGuides` | `MessageGuides` | Commit message guide columns, `{ subject, body }`: the subject ruler and length hint, and the body line length hint (0 turns a guide off), saved in `settings.json` through `SetMessageGuides` and loaded by `loadSettings()`. |
+| `terminalCommand` | `string` | Command the `>_` button runs, with `{dir}` for the repository folder; empty picks a terminal automatically. Saved in `settings.json` through `SetTerminalCommand`. |
 | `selectedHash` | `string | null` | Currently selected `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
 | `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
 | `pendingEditFocus` | `boolean` | Set by `Enter` on a commit row; consumed by `EditPanel` after the commit loads. |
+| `isSettingsOpen` | `boolean` | Whether `SettingsDialog` is open (**⚙** button or `Ctrl+,`). |
 | `status` | `string` | Most-recent informational message (e.g. `"Opened: /path/to/repo"`). |
 | `error` | `string \| null` | Most-recent error, as a user-friendly message (see `errors.ts`). Non-null causes `StatusBar` to show it in red. Setting a new error does not clear `repoInfo` — the repo remains open. |
 | `errorDetail` | `string \| null` | The raw error text behind `error`, shown in the `StatusBar` tooltip. `null` when the friendly message says the same thing. |
@@ -565,7 +579,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetTerminalCommand` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -590,7 +604,7 @@ GitGo/
 ├── app/
 │   ├── app.go               # App struct — bound methods exposed to frontend
 │   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
-│   ├── settings.go          # GetSettings / SetRecentRepos / SetTheme / SetMessageGuides: settings.json in the config directory
+│   ├── settings.go          # GetSettings and the Set* methods: settings.json in the config directory
 │   ├── theme.go             # Theme names; PrefersDark for the startup window colour (+ theme_windows.go / theme_other.go)
 │   ├── window.go            # Window size saved between runs (lifecycle hooks, not bound)
 │   └── models.go            # DTOs shared across layers
@@ -626,6 +640,7 @@ GitGo/
 │       │   ├── ConfirmDialog.tsx   # (Phase 2)
 │       │   ├── HelpDialog.tsx      # In-app help (? button / F1)
 │       │   ├── Kbd.tsx             # Keyboard key label
+│       │   ├── SettingsDialog.tsx  # Theme and message guides (⚙ button / Ctrl+,)
 │       │   └── StatusBar.tsx
 │       ├── hooks/
 │       │   └── useKeyboardShortcuts.ts  # (Phase 3)

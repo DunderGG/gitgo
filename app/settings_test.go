@@ -182,3 +182,38 @@ func TestSetMessageGuides_RejectsOutOfRange(test *testing.T) {
 		test.Fatalf("guides = %d/%d, want the defaults", settings.SubjectGuide, settings.BodyGuide)
 	}
 }
+
+func TestSetTerminalCommand_SavedForNextRun(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	if got := app.GetSettings().TerminalCommand; got != "" {
+		test.Fatalf("TerminalCommand without a file = %q, want empty (automatic)", got)
+	}
+	if err := app.SetTerminalCommand("  wt.exe -d {dir} pwsh  "); err != nil {
+		test.Fatalf("SetTerminalCommand: %v", err)
+	}
+
+	nextRun := &App{settingsPath: path}
+	if got := nextRun.GetSettings().TerminalCommand; got != "wt.exe -d {dir} pwsh" {
+		test.Fatalf("TerminalCommand = %q, want the trimmed command", got)
+	}
+
+	// An empty command goes back to the automatic choice.
+	if err := nextRun.SetTerminalCommand(""); err != nil {
+		test.Fatalf("SetTerminalCommand(\"\"): %v", err)
+	}
+	if got := nextRun.GetSettings().TerminalCommand; got != "" {
+		test.Fatalf("TerminalCommand = %q, want empty", got)
+	}
+}
+
+func TestSetTerminalCommand_RejectsUnclosedQuote(test *testing.T) {
+	app, _ := appWithSettingsFile(test)
+
+	if err := app.SetTerminalCommand(`"C:\Program Files\PowerShell\7\pwsh.exe`); err == nil {
+		test.Fatal("SetTerminalCommand accepted an unclosed quote")
+	}
+	if got := app.GetSettings().TerminalCommand; got != "" {
+		test.Fatalf("TerminalCommand = %q, want it unchanged", got)
+	}
+}

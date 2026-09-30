@@ -79,3 +79,49 @@ func TestOpenTerminal_RequiresOpenRepository(test *testing.T) {
 		test.Fatal("OpenTerminal without a repository: want an error")
 	}
 }
+
+func TestSplitCommandLine(test *testing.T) {
+	cases := []struct {
+		line string
+		want []string
+	}{
+		{"wt.exe -d {dir} pwsh", []string{"wt.exe", "-d", "{dir}", "pwsh"}},
+		{`"C:\Program Files\Git\git-bash.exe" --cd={dir}`, []string{`C:\Program Files\Git\git-bash.exe`, "--cd={dir}"}},
+		{"open -a 'iTerm 2'  {dir}", []string{"open", "-a", "iTerm 2", "{dir}"}},
+		{`--title="my repo"`, []string{"--title=my repo"}},
+		{"  ", nil},
+	}
+	for _, testCase := range cases {
+		got, err := splitCommandLine(testCase.line)
+		if err != nil {
+			test.Fatalf("splitCommandLine(%q): %v", testCase.line, err)
+		}
+		if !reflect.DeepEqual(got, testCase.want) {
+			test.Fatalf("splitCommandLine(%q) = %q, want %q", testCase.line, got, testCase.want)
+		}
+	}
+}
+
+func TestSplitCommandLine_RejectsBadCommands(test *testing.T) {
+	for _, line := range []string{`"C:\Program Files\pwsh.exe`, `"" -d {dir}`} {
+		if _, err := splitCommandLine(line); err == nil {
+			test.Fatalf("splitCommandLine(%q) accepted a bad command", line)
+		}
+	}
+}
+
+func TestCustomTerminalLaunch_FillsInDirectory(test *testing.T) {
+	launch, err := customTerminalLaunch(`"C:\Program Files\Git\git-bash.exe" --cd={dir}`)
+	if err != nil {
+		test.Fatalf("customTerminalLaunch: %v", err)
+	}
+	dir := `C:\repos\my repo`
+	cmd := launch.command(dir)
+	want := []string{`C:\Program Files\Git\git-bash.exe`, `--cd=C:\repos\my repo`}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		test.Fatalf("args = %q, want %q", cmd.Args, want)
+	}
+	if !launch.newConsole {
+		test.Fatal("a custom terminal command should get a console of its own on Windows")
+	}
+}

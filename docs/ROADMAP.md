@@ -255,10 +255,10 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Apply `.mailmap`**: rewrite the author (and committer) of the selected commits from the repository's `.mailmap`, like `git filter-repo --use-mailmap`
 - [ ] **Find and replace in messages** across the selected commits, with a preview per commit (like `git filter-repo --replace-message`), for example to fix a misspelled ticket number
 - [ ] **Trailers**: add or remove `Co-authored-by:` and `Signed-off-by:` lines on one or several commits, with co-authors picked from the repository's authors (GitHub Desktop has a co-author picker)
-- [ ] **Message guides**: a ruler at 50 characters for the subject and 72 for the body, and a warning when the second line is not blank (as in Sublime Merge and Tower)
+- [x] **Message guides**: a ruler at 50 characters for the subject and 72 for the body, and a warning when the second line is not blank (as in Sublime Merge and Tower)
   - [x] `Settings.SubjectGuide` / `Settings.BodyGuide` (defaults 50 / 72, 0 turns a guide off, missing or out-of-range values fall back to the defaults) and the `SetMessageGuides` bound method (`TestGetSettings_MessageGuideDefaults`, `TestSetMessageGuides_*`)
   - [x] `EditPanel`: a subject ruler over the first line of the message field (no body ruler: the field is about 72ch wide and wraps long lines, so the hint reports them instead), a subject length counter, and hints for a long subject, a non-blank second line and long body lines (`src/messageGuides.ts`)
-  - [ ] Settings dialog to change the columns (until then, edit `subjectGuide` / `bodyGuide` in `settings.json`)
+  - [x] Both columns can be changed in `SettingsDialog` (see App settings and help)
 - [x] Add tiny date/time buttons under the date field to add +1 hour, +1 day, current time, etc.
   - [x] `EditPanel` has −1d, −1h, +1h, +1d (shift the wall-clock time, keeping the offset) and Now (current time and this computer's offset)
 - [x] Shift the dates of several selected commits at once (multi-select in `CommitList`, ±1h/±1d in a bulk panel)
@@ -278,8 +278,8 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Branch and tag labels** on the rows they point to, as every Git GUI does, so it is clear which other refs an edit will affect before opening `ConfirmDialog`
 - [ ] **Commit graph**: draw the branch and merge lines next to the list (as in Fork, GitKraken and `git log --graph`), making merge commits and where the pushed part starts easier to see
 - [ ] **Changed files list** (names and +/− line counts, read-only) in the commit details. This is much lighter than the file diffs that are out of scope, and helps confirm the right commit is selected
-- [ ] **Relative dates** ("3 hours ago") as an option, with the full date and offset in a tooltip
-- [ ] **Flag odd commits** in the list: author date later than the commit above it, committer different from the author, or a date in the future
+- [ ] **Relative dates** ("3 hours ago") as an option, with the full date and offset in a tooltip (setting in `SettingsDialog`)
+- [ ] **Flag odd commits** in the list: author date later than the commit above it, committer different from the author, or a date in the future (on/off setting in `SettingsDialog`, since some will find the markers noisy)
 - [ ] **Right-click menu** on commit rows with Edit, Copy hash and, later, Squash / Drop / Reword (every desktop Git client has one)
 
 ### Safety and recovery
@@ -290,15 +290,15 @@ Found in the follow-up review (2026-09-25):
   - [ ] `git/backup.go`: create, list, delete and restore backup refs under `refs/gitgo/backups/` (never pushed, kept by `git gc`)
   - [ ] Bound methods `CreateBackup`, `ListBackups`, `RestoreBackup`, `DeleteBackup`
   - [ ] **Back up** button in the header and a **Backups** list with Restore and Delete (this replaces the reflog-based history panel idea)
-  - [ ] **Back up before applying** checkbox in `ConfirmDialog` (on by default), keeping the last ~20 automatic backups per branch
+  - [ ] **Back up before applying** checkbox in `ConfirmDialog` (on by default), keeping the last ~20 automatic backups per branch (the checkbox default and the number kept as settings in `SettingsDialog`)
   - [ ] Back up every branch an edit moves, so a restore brings them all back
   - [ ] Optional: export a backup to a `git bundle` file
 - [ ] **Redo** after an undo (`Ctrl+Shift+Z` / `Ctrl+Y` and a button in the status bar), by keeping the undone tip the way `lastRewrite` keeps the pre-rewrite one
 - [ ] Handle signed commits: an edit silently drops the GPG/SSH signature of the edited commit and of every commit rebuilt above it (a copied signature would no longer verify)
   - [x] Warn in `ConfirmDialog` when any commit that will be rebuilt is signed (`FindSignedCommits` / `GetSignedCommits`, which also detect `gpgsig-sha256`, which go-git does not parse; `TestFindSignedCommits_*`)
-  - [ ] Optionally re-sign rebuilt commits when `commit.gpgSign` is set (like `git rebase` does), via the native `git` / `gpg` binaries
+  - [ ] Optionally re-sign rebuilt commits when `commit.gpgSign` is set (like `git rebase` does), via the native `git` / `gpg` binaries (setting in `SettingsDialog`: never, always, or follow `commit.gpgSign`)
 - [ ] Show a preview of the Git command that will actually be run
-- [ ] **Stale remote warning**: pushed/unpushed detection uses the local remote-tracking branches, which are only as fresh as the last `git fetch`. Show when the last fetch happened (from the time `FETCH_HEAD` was last written) and warn when it is old, without GitGo fetching itself
+- [ ] **Stale remote warning**: pushed/unpushed detection uses the local remote-tracking branches, which are only as fresh as the last `git fetch`. Show when the last fetch happened (from the time `FETCH_HEAD` was last written) and warn when it is old, without GitGo fetching itself (the age that counts as old as a setting in `SettingsDialog`)
 - [ ] **Protected branches** setting: never allow edits on chosen branches (for example `main`), even when unpushed
 
 ### Repository and branch status
@@ -322,20 +322,23 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Open in editor** button, opening the repository in the user's editor (VS Code, or the one set in `core.editor` / an app preference)
 - [ ] **View on GitHub / GitLab / Bitbucket** for pushed commits, building the commit URL from the remote URL
 - [ ] **Export as patches**: save the selected commits as `.patch` files, like `git format-patch`
-- [x] Header button that opens a terminal in the repository folder (`OpenTerminal`; Windows Terminal or cmd, Terminal.app, `$TERMINAL` or a common Linux emulator)
+- [x] Header button that opens a terminal in the repository folder (`OpenTerminal`; Windows Terminal or cmd, Terminal.app, `$TERMINAL` or a common Linux emulator, unless a terminal command is set in `SettingsDialog`)
 
 ### App settings and help
 
 - [ ] Persistent app preferences
   - [x] Window size and maximised state, saved on close to `gitgo/window.json` in the user config directory and shrunk to fit a smaller screen at startup
   - [ ] Window position
-  - [ ] Warning visibility and default UI behavior
+  - [ ] Warning visibility and default UI behavior (if warnings get "Don't show again", `SettingsDialog` is where they are turned back on)
+- [x] **Settings dialog** (`SettingsDialog`, ⚙ button in the header or `Ctrl+,`): theme and commit message guide columns, applied and saved as soon as they change; a modal rather than a window, since Wails v2 has only one
+  - [x] **Terminal command** for the `>_` button, with `{dir}` for the repository folder (for example `wt.exe -d {dir} pwsh` or Git Bash); empty keeps the automatic choice. `Settings.TerminalCommand` and `SetTerminalCommand`, which rejects an unclosed quote (`TestSplitCommandLine*`, `TestCustomTerminalLaunch_*`, `TestSetTerminalCommand_*`)
+  - [ ] Defaults for the **Move other branches along** checkbox in `ConfirmDialog` and **Also shift committer dates** in `BulkEditPanel` (both on today), if unticking them turns out to be common
 - [ ] **Command palette** (`Ctrl+Shift+P`) listing every action with its shortcut, as in Sublime Merge and GitKraken
 - [x] **Light theme** and following the system theme: header button cycling System / Light / Dark, saved in `settings.json`; the palettes are CSS variables swapped per theme in `tailwind.config.ts`, and the native title bar follows
-- [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens
+- [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens (level remembered in `settings.json`, shown with a Reset button in `SettingsDialog`)
 - [ ] **First-run tour** highlighting the commit list, the edit panel and the Undo button, reusing the `HelpDialog` content
-- [ ] **Update check** against GitHub Releases, once Phase 6 publishes binaries
-- [ ] **Translations**: move UI strings into one place so the app can be localised
+- [ ] **Update check** against GitHub Releases, once Phase 6 publishes binaries (with an off switch in `SettingsDialog`, since it contacts GitHub)
+- [ ] **Translations**: move UI strings into one place so the app can be localised (language picker in `SettingsDialog`, defaulting to the system language)
 - [x] In-app help (`HelpDialog`, `?` button in the header or `F1`): walkthrough of single and bulk edits, review and undo, keyboard shortcuts and safety notes
 
 ---

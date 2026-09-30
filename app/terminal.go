@@ -59,6 +59,63 @@ func terminalLaunches(goos string, lookPath func(string) (string, error), getenv
 	return found
 }
 
+// splitCommandLine splits a terminal command from the settings into the
+// program and its arguments. Arguments are separated by spaces; double or
+// single quotes keep spaces inside one argument. Backslashes are ordinary
+// characters, so Windows paths need no escaping.
+func splitCommandLine(line string) ([]string, error) {
+	var args []string
+	var current strings.Builder
+	inArg := false
+	var quote rune
+	for _, char := range line {
+		switch {
+		case quote != 0:
+			if char == quote {
+				quote = 0
+			} else {
+				current.WriteRune(char)
+			}
+		case char == '"' || char == '\'':
+			quote = char
+			inArg = true
+		case char == ' ' || char == '\t':
+			if inArg {
+				args = append(args, current.String())
+				current.Reset()
+				inArg = false
+			}
+		default:
+			current.WriteRune(char)
+			inArg = true
+		}
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("the terminal command has an unclosed %c quote", quote)
+	}
+	if inArg {
+		args = append(args, current.String())
+	}
+	if len(args) > 0 && args[0] == "" {
+		return nil, errors.New("the terminal command has no program name")
+	}
+	return args, nil
+}
+
+// customTerminalLaunch is the terminal command from the settings. On Windows
+// it gets a console of its own, which console programs such as pwsh.exe need
+// and programs with a window of their own ignore.
+func customTerminalLaunch(line string) (terminalLaunch, error) {
+	args, err := splitCommandLine(line)
+	if err != nil {
+		return terminalLaunch{}, err
+	}
+	if len(args) == 0 {
+		return terminalLaunch{}, errors.New("the terminal command is empty")
+	}
+	return terminalLaunch{name: args[0], args: args[1:], newConsole: true}, nil
+}
+
 // command builds the exec.Cmd that opens this terminal in dir.
 func (launch terminalLaunch) command(dir string) *exec.Cmd {
 	args := make([]string, len(launch.args))
@@ -86,9 +143,24 @@ func (app *App) OpenTerminal() error {
 		return fmt.Errorf("no repository is open; call OpenRepository first")
 	}
 
+	// A terminal command in the settings replaces the automatic choice, with
+	// no fallback, so a mistake in it shows instead of another terminal.
+	if command := app.GetSettings().TerminalCommand; command != "" {
+		launch, err := customTerminalLaunch(command)
+		if err != nil {
+			return err
+		}
+		cmd := launch.command(state.Path)
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("could not run the terminal command from Settings: %w", err)
+		}
+		go func() { _ = cmd.Wait() }()
+		return nil
+	}
+
 	launches := terminalLaunches(runtime.GOOS, exec.LookPath, os.Getenv)
 	if len(launches) == 0 {
-		return errors.New("no terminal program found; set the TERMINAL environment variable to your terminal")
+		return errors.New("no terminal program found; set a terminal command in Settings")
 	}
 
 	var startErrors []error

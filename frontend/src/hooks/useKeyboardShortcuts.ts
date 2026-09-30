@@ -23,9 +23,11 @@ export function focusCommitRow(hash: string) {
 //   - Ctrl+A / Cmd+A: select every unpushed commit (not while typing in a field)
 //   - Escape: close the edit panel by clearing the selection
 //   - F1: open the help
+//   - Ctrl+, / Cmd+,: open the settings
 //
 // Row-level shortcuts (Enter, arrow keys) live in CommitList, and
-// ConfirmDialog and HelpDialog handle Escape themselves while they are open.
+// ConfirmDialog, HelpDialog and SettingsDialog handle Escape themselves while
+// they are open.
 export function useKeyboardShortcuts() {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -37,6 +39,7 @@ export function useKeyboardShortcuts() {
         undoLastOperation,
         reloadRepository,
         setHelpOpen,
+        setSettingsOpen,
       } = useRepoStore.getState()
 
       if (event.key === 'F1') {
@@ -44,6 +47,14 @@ export function useKeyboardShortcuts() {
         // Not on top of another dialog, where Escape would close both.
         if (!document.querySelector('[aria-modal="true"]')) {
           setHelpOpen(true)
+        }
+        return
+      }
+
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key === ',') {
+        event.preventDefault()
+        if (!document.querySelector('[aria-modal="true"]')) {
+          setSettingsOpen(true)
         }
         return
       }

@@ -13,6 +13,9 @@ export interface MessageGuides {
 // Same as the Go defaults, used until the settings have loaded.
 export const DEFAULT_MESSAGE_GUIDES: MessageGuides = { subject: 50, body: 72 }
 
+// Largest column SetMessageGuides accepts (maxGuideColumn in Go).
+export const MAX_GUIDE_COLUMN = 200
+
 // Length in characters rather than UTF-16 code units, so an emoji counts once.
 export function lineLength(line: string): number {
   return [...line].length

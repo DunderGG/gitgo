@@ -1,0 +1,286 @@
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { DEFAULT_MESSAGE_GUIDES, MAX_GUIDE_COLUMN, type MessageGuides } from '../messageGuides'
+import { useRepoStore } from '../store/repoStore'
+import { themePreferences, type ThemePreference } from '../theme'
+
+const themeLabels: Record<ThemePreference, string> = { system: 'System', light: 'Light', dark: 'Dark' }
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">{title}</h3>
+      {children}
+    </section>
+  )
+}
+
+// The column typed in a guide field, or null when it is not a whole number
+// from 0 to MAX_GUIDE_COLUMN.
+function parseGuide(text: string): number | null {
+  if (!/^\d+$/.test(text.trim())) {
+    return null
+  }
+  const column = Number(text)
+  return column <= MAX_GUIDE_COLUMN ? column : null
+}
+
+interface GuideFieldProps {
+  id: string
+  label: string
+  description: string
+  text: string
+  onChange: (text: string) => void
+}
+
+function GuideField({ id, label, description, text, onChange }: GuideFieldProps) {
+  const isValid = parseGuide(text) !== null
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={id} className="text-sm text-gray-200">
+          {label}
+        </label>
+        <input
+          id={id}
+          type="number"
+          min={0}
+          max={MAX_GUIDE_COLUMN}
+          value={text}
+          onChange={(event) => onChange(event.target.value)}
+          aria-invalid={!isValid}
+          className={`w-20 rounded-md border bg-gray-800 px-2 py-1 text-right font-mono text-sm text-gray-100 outline-none transition focus:border-indigo-500 ${isValid ? 'border-gray-700' : 'border-red-500'}`}
+        />
+      </div>
+      <p className="mt-1 text-xs text-gray-500">{description}</p>
+      {!isValid && (
+        <p className="mt-1 text-xs text-red-300">Enter a whole number from 0 to {MAX_GUIDE_COLUMN}.</p>
+      )}
+    </div>
+  )
+}
+
+// What the automatic terminal choice does on this system (terminalLaunches in
+// app/terminal.go), and example commands for the terminal field.
+function terminalHelp(): { automatic: string; examples: string[] } {
+  const platform = navigator.userAgent
+  if (platform.includes('Windows')) {
+    return {
+      automatic: 'Windows Terminal, or cmd when it is not installed',
+      examples: ['wt.exe -d {dir} pwsh', '"C:\\Program Files\\Git\\git-bash.exe" --cd={dir}'],
+    }
+  }
+  if (platform.includes('Mac')) {
+    return { automatic: 'Terminal', examples: ['open -a iTerm {dir}', 'open -a Ghostty {dir}'] }
+  }
+  return {
+    automatic: '$TERMINAL, or the first common terminal found',
+    examples: ['kitty --directory {dir}', 'wezterm start --cwd {dir}'],
+  }
+}
+
+function TerminalField() {
+  const terminalCommand = useRepoStore((s) => s.terminalCommand)
+  const setTerminalCommand = useRepoStore((s) => s.setTerminalCommand)
+  const [text, setText] = useState(terminalCommand)
+  const [error, setError] = useState<string | null>(null)
+  const help = terminalHelp()
+
+  function change(value: string) {
+    setText(value)
+    setTerminalCommand(value).then(setError)
+  }
+
+  return (
+    <div>
+      <label htmlFor="settings-terminal" className="text-sm text-gray-200">
+        Terminal command
+      </label>
+      <input
+        id="settings-terminal"
+        type="text"
+        value={text}
+        onChange={(event) => change(event.target.value)}
+        placeholder={`Automatic: ${help.automatic}`}
+        spellCheck={false}
+        aria-invalid={error !== null}
+        className={`mt-1 w-full rounded-md border bg-gray-800 px-2 py-1 font-mono text-sm text-gray-100 outline-none transition focus:border-indigo-500 ${error ? 'border-red-500' : 'border-gray-700'}`}
+      />
+      {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
+      <p className="mt-1 text-xs text-gray-500">
+        What the <span className="font-mono">&gt;_</span> button runs. <span className="font-mono">{'{dir}'}</span> stands
+        for the repository folder; quote paths with spaces. Leave empty to use {help.automatic}. For example:
+      </p>
+      <ul className="mt-1 space-y-0.5 font-mono text-xs text-gray-400">
+        {help.examples.map((example) => (
+          <li key={example}>{example}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+// The dialog's content, mounted only while it is open so the guide fields
+// start from the saved values each time.
+function SettingsContent({ onClose }: { onClose: () => void }) {
+  const theme = useRepoStore((s) => s.theme)
+  const setTheme = useRepoStore((s) => s.setTheme)
+  const messageGuides = useRepoStore((s) => s.messageGuides)
+  const setMessageGuides = useRepoStore((s) => s.setMessageGuides)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  // What is typed in the guide fields. A valid value is saved at once; an
+  // invalid one stays here until it is fixed, or is dropped on close.
+  const [subjectText, setSubjectText] = useState(String(messageGuides.subject))
+  const [bodyText, setBodyText] = useState(String(messageGuides.body))
+
+  // Like HelpDialog, the dialog owns Escape while open and blocks Ctrl+Z
+  // outside its fields so the app-wide shortcuts cannot act behind it. Focus
+  // moves into the dialog and goes back to where it was on close.
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    closeRef.current?.focus()
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const isUndoShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z'
+      const isSettingsShortcut = (event.ctrlKey || event.metaKey) && event.key === ','
+
+      if (event.key === 'Escape' || isSettingsShortcut) {
+        event.preventDefault()
+        event.stopPropagation()
+        onClose()
+      } else if (isUndoShortcut && !(event.target instanceof HTMLInputElement)) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      previousFocus?.focus()
+    }
+  }, [onClose])
+
+  function changeGuide(field: keyof MessageGuides, text: string) {
+    if (field === 'subject') {
+      setSubjectText(text)
+    } else {
+      setBodyText(text)
+    }
+    const column = parseGuide(text)
+    if (column !== null && column !== messageGuides[field]) {
+      setMessageGuides({ ...messageGuides, [field]: column })
+    }
+  }
+
+  function restoreDefaults() {
+    setSubjectText(String(DEFAULT_MESSAGE_GUIDES.subject))
+    setBodyText(String(DEFAULT_MESSAGE_GUIDES.body))
+    setMessageGuides(DEFAULT_MESSAGE_GUIDES)
+  }
+
+  const guidesAreDefault =
+    subjectText === String(DEFAULT_MESSAGE_GUIDES.subject) && bodyText === String(DEFAULT_MESSAGE_GUIDES.body)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
+      onClick={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        className="flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-gray-700 bg-gray-900 shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-gray-800 px-5 py-4">
+          <div>
+            <h2 id="settings-title" className="text-lg font-semibold text-gray-100">
+              Settings
+            </h2>
+            <p className="mt-1 text-sm text-gray-400">Changes apply at once and are saved for next time.</p>
+          </div>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            title="Close (Escape)"
+            aria-label="Close settings"
+            className="rounded-md px-2 py-1 text-gray-400 transition hover:bg-gray-800 hover:text-gray-200"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-6 overflow-y-auto p-5">
+          <Section title="Appearance">
+            <div className="flex items-center justify-between gap-3">
+              <span id="settings-theme" className="text-sm text-gray-200">
+                Theme
+              </span>
+              <div role="group" aria-labelledby="settings-theme" className="flex rounded-md border border-gray-700">
+                {themePreferences.map((preference) => (
+                  <button
+                    key={preference}
+                    type="button"
+                    aria-pressed={theme === preference}
+                    onClick={() => setTheme(preference)}
+                    className={`px-3 py-1 text-sm transition first:rounded-l-md last:rounded-r-md ${
+                      theme === preference
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-gray-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    {themeLabels[preference]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">System follows your operating system&apos;s light or dark setting.</p>
+          </Section>
+
+          <Section title="Commit message guides">
+            <GuideField
+              id="settings-subject-guide"
+              label="Subject line length"
+              description="Draws a ruler over the first line of the message and warns about longer subjects. 0 turns it off."
+              text={subjectText}
+              onChange={(text) => changeGuide('subject', text)}
+            />
+            <GuideField
+              id="settings-body-guide"
+              label="Body line length"
+              description="Warns about body lines longer than this. 0 turns it off."
+              text={bodyText}
+              onChange={(text) => changeGuide('body', text)}
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={restoreDefaults}
+                disabled={guidesAreDefault}
+                className="rounded-md border border-gray-700 px-3 py-1 text-xs text-gray-300 transition hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Restore defaults ({DEFAULT_MESSAGE_GUIDES.subject} / {DEFAULT_MESSAGE_GUIDES.body})
+              </button>
+            </div>
+          </Section>
+
+          <Section title="Terminal">
+            <TerminalField />
+          </Section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// SettingsDialog holds the user's preferences: the colour theme, the
+// commit message guide columns and the terminal command. Changes apply and
+// are saved at once, like the header's theme button.
+export default function SettingsDialog() {
+  const isOpen = useRepoStore((s) => s.isSettingsOpen)
+  const setSettingsOpen = useRepoStore((s) => s.setSettingsOpen)
+  const close = useCallback(() => setSettingsOpen(false), [setSettingsOpen])
+
+  return isOpen ? <SettingsContent onClose={close} /> : null
+}

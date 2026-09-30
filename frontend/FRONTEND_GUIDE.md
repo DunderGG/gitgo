@@ -110,7 +110,7 @@ Global stylesheet. Imports Tailwind's layers and gives the page the theme's back
 
 Top-level layout and routing-by-state:
 
-- Header with app title, currently opened repo path, BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a theme button (System / Light / Dark), and a ? help button
+- Header with app title, currently opened repo path, BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a theme button (System / Light / Dark), a ⚙ settings button, and a ? help button
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
@@ -126,6 +126,7 @@ State currently includes:
 - commits: commit list shown in CommitList
 - theme: the colour theme, 'system', 'light' or 'dark' (saved via SetTheme)
 - messageGuides: commit message guide columns, { subject, body }: the subject ruler and length hint, and the body line length hint; 0 turns a guide off (saved via SetMessageGuides)
+- terminalCommand: the command the >_ button runs, with {dir} for the repository folder; empty picks a terminal automatically (saved via SetTerminalCommand)
 - recentRepos: last 10 opened repository paths (saved in the backend settings file via SetRecentRepos, loaded by loadSettings before the first render)
 - selectedHash: currently selected commit row
 - canUndo: true after a rewrite that can still be undone
@@ -138,6 +139,9 @@ Actions currently include:
 - setRepo: save repo info and commit list
 - removeRecentRepo: remove one path from the recent list
 - setTheme: switch the colour theme and save it
+- setMessageGuides: change the commit message guide columns and save them
+- setTerminalCommand: save the terminal command, resolving to an error message or null
+- setHelpOpen / setSettingsOpen: open or close HelpDialog / SettingsDialog
 - selectCommit: select one row (or none), replacing any multi-selection
 - toggleCommitSelection: Ctrl/Cmd-click; add or remove an unpushed commit from the selection
 - extendSelection: Shift-click / Shift+arrow; select the unpushed commits from the anchor row to the clicked one
@@ -260,6 +264,16 @@ The in-app help, opened with the ? button in the header or F1 (store: isHelpOpen
 - lists every keyboard shortcut and the safety rules
 - Escape, F1, the × button or a click outside closes it; Ctrl+Z is blocked while it is open
 
+### src/components/SettingsDialog.tsx
+
+The settings, opened with the ⚙ button in the header or Ctrl+, (store: isSettingsOpen / setSettingsOpen).
+
+- Theme: System / Light / Dark (setTheme)
+- Commit message guides: the subject and body columns, 0 to 200, 0 turns a guide off (setMessageGuides), and a button that restores 50 / 72
+- Terminal: the command the >_ button runs (setTerminalCommand), with example commands for this platform; a rejected command (such as an unclosed quote) is marked red with the reason
+- no Save button: each valid change applies and is saved at once; an invalid number is marked red and not saved
+- Escape, Ctrl+, the × button or a click outside closes it
+
 ### src/components/BranchSelector.tsx
 
 Branch dropdown in the header.
@@ -292,6 +306,7 @@ App-wide keyboard shortcuts, registered once from App.tsx:
 - Ctrl+A (Cmd+A on macOS): select every unpushed commit; ignored while typing in a field or with a dialog open
 - Escape: close the edit panel by clearing the selection, and return focus to the commit row
 - F1: open the help dialog (skipped while the confirm dialog is open)
+- Ctrl+, (Cmd+, on macOS): open the settings dialog (skipped while another dialog is open)
 
 ## Wails binding files you will see
 

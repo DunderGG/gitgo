@@ -5,7 +5,9 @@ import {
   GetSettings,
   RefreshLog,
   ReloadRepository,
+  SetMessageGuides,
   SetRecentRepos,
+  SetTerminalCommand,
   SetTheme,
   UndoLastOperation,
 } from '../../wailsjs/go/app/App'
@@ -58,8 +60,12 @@ export async function loadSettings(): Promise<void> {
   const theme = isThemePreference(settings.theme) ? settings.theme : 'system'
   applyTheme(theme)
   const messageGuides = { subject: settings.subjectGuide, body: settings.bodyGuide }
-  useRepoStore.setState({ recentRepos, theme, messageGuides })
+  const terminalCommand = settings.terminalCommand
+  useRepoStore.setState({ recentRepos, theme, messageGuides, terminalCommand })
 }
+
+// The last SetTerminalCommand call; see setTerminalCommand.
+let terminalSave: Promise<unknown> = Promise.resolve()
 
 function persistRecentRepos(paths: string[]) {
   // The list in the store is already up to date, so a failed save only loses
@@ -108,6 +114,9 @@ interface RepoStore {
   // Commit message guide columns (0 turns a guide off), saved in the
   // settings file.
   messageGuides: MessageGuides
+  // Command the header's terminal button runs, with {dir} for the repository
+  // folder; empty picks a terminal automatically. Saved in the settings file.
+  terminalCommand: string
   // Hash of the commit currently selected in CommitList; null when nothing is
   // selected. EditPanel reads this to know which commit to load. With several
   // commits selected it is the one last clicked or moved to.
@@ -131,6 +140,8 @@ interface RepoStore {
   pendingEditFocus: boolean
   // Whether HelpDialog is open (header button or F1).
   isHelpOpen: boolean
+  // Whether SettingsDialog is open (header button or Ctrl+,).
+  isSettingsOpen: boolean
   status: string
   // User-facing error message (see friendlyError), or null.
   error: string | null
@@ -140,6 +151,10 @@ interface RepoStore {
   setRepo: (info: RepoInfo, commits: CommitSummary[]) => void
   removeRecentRepo: (path: string) => void
   setTheme: (theme: ThemePreference) => void
+  setMessageGuides: (messageGuides: MessageGuides) => void
+  // Saves the terminal command. Resolves to an error message when the backend
+  // rejects it (for example an unclosed quote), or null.
+  setTerminalCommand: (command: string) => Promise<string | null>
   selectCommit: (hash: string | null) => void
   // Ctrl/Cmd-click: add or remove an unpushed commit from the selection.
   toggleCommitSelection: (hash: string) => void
@@ -151,6 +166,7 @@ interface RepoStore {
   requestEditFocus: () => void
   consumeEditFocus: () => void
   setHelpOpen: (isHelpOpen: boolean) => void
+  setSettingsOpen: (isSettingsOpen: boolean) => void
   setCanUndo: (canUndo: boolean) => void
   runGitOperation: <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
   undoLastOperation: () => Promise<void>
@@ -167,6 +183,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   recentRepos: [],
   theme: 'system',
   messageGuides: DEFAULT_MESSAGE_GUIDES,
+  terminalCommand: '',
   selectedHash: null,
   selectedHashes: [],
   selectionAnchor: null,
@@ -174,6 +191,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   activity: null,
   pendingEditFocus: false,
   isHelpOpen: false,
+  isSettingsOpen: false,
   status: '',
   error: null,
   errorDetail: null,
@@ -209,6 +227,29 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     set({ theme })
     // The theme is already showing, so a failed save only loses it for the next run.
     SetTheme(theme).catch((error) => console.error('Saving the theme failed:', error))
+  },
+
+  setMessageGuides: (messageGuides) => {
+    set({ messageGuides })
+    // Like the theme, the guides already apply, so a failed save only loses
+    // them for the next run.
+    SetMessageGuides(messageGuides.subject, messageGuides.body).catch((error) =>
+      console.error('Saving the message guides failed:', error),
+    )
+  },
+
+  setTerminalCommand: (command) => {
+    // Saves run one after another, so the last command typed is the one kept
+    // even when an earlier save is slower.
+    const save = terminalSave.then(() => SetTerminalCommand(command))
+    terminalSave = save.catch(() => undefined)
+    return save.then(
+      () => {
+        set({ terminalCommand: command.trim() })
+        return null
+      },
+      (error) => errorText(error),
+    )
   },
 
   selectCommit: (hash) =>
@@ -284,6 +325,8 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   consumeEditFocus: () => set({ pendingEditFocus: false }),
 
   setHelpOpen: (isHelpOpen) => set({ isHelpOpen }),
+
+  setSettingsOpen: (isSettingsOpen) => set({ isSettingsOpen }),
 
   setCanUndo: (canUndo) => set({ canUndo }),
 

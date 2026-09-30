@@ -8,6 +8,7 @@ import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
 import BulkEditPanel from './components/BulkEditPanel'
 import HelpDialog from './components/HelpDialog'
+import SettingsDialog from './components/SettingsDialog'
 import Spinner from './components/Spinner'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { reloadActivityLabel, useRepoStore } from './store/repoStore'
@@ -35,6 +36,7 @@ function App() {
   const isMultiSelect = useRepoStore((s) => s.selectedHashes.length > 1)
   const reloadRepository = useRepoStore((s) => s.reloadRepository)
   const setHelpOpen = useRepoStore((s) => s.setHelpOpen)
+  const setSettingsOpen = useRepoStore((s) => s.setSettingsOpen)
   const theme = useRepoStore((s) => s.theme)
   const setTheme = useRepoStore((s) => s.setTheme)
   const setStatus = useRepoStore((s) => s.setStatus)
@@ -107,6 +109,15 @@ function App() {
           </button>
           <button
             type="button"
+            onClick={() => setSettingsOpen(true)}
+            title="Settings (Ctrl+,)"
+            aria-label="Settings"
+            className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+          >
+            ⚙︎
+          </button>
+          <button
+            type="button"
             onClick={() => setHelpOpen(true)}
             title="How to use GitGo (F1)"
             aria-label="Help"
@@ -130,6 +141,7 @@ function App() {
 
       <StatusBar />
       <HelpDialog />
+      <SettingsDialog />
     </div>
   )
 }

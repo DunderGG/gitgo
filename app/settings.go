@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // configFile is the path of the named file in GitGo's config directory
@@ -103,6 +104,24 @@ func (app *App) SetMessageGuides(subject, body int) error {
 	settings := app.loadSettings()
 	settings.SubjectGuide = subject
 	settings.BodyGuide = body
+	return app.saveSettings(settings)
+}
+
+// SetTerminalCommand saves the command the header's terminal button runs, with
+// {dir} standing for the repository folder. An empty command goes back to
+// picking a terminal automatically.
+func (app *App) SetTerminalCommand(command string) error {
+	command = strings.TrimSpace(command)
+	if command != "" {
+		if _, err := customTerminalLaunch(command); err != nil {
+			return err
+		}
+	}
+	app.settingsMutex.Lock()
+	defer app.settingsMutex.Unlock()
+
+	settings := app.loadSettings()
+	settings.TerminalCommand = command
 	return app.saveSettings(settings)
 }
 

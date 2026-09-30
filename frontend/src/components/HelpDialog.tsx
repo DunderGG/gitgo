@@ -35,6 +35,7 @@ const SHORTCUTS: { keys: ReactNode; action: string }[] = [
   { keys: <><Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd></>, action: 'Undo the last rewrite (outside text fields)' },
   { keys: <><Kbd>F5</Kbd> / <Kbd>Ctrl</Kbd>+<Kbd>R</Kbd></>, action: 'Reload the repository from disk' },
   { keys: <Kbd>F1</Kbd>, action: 'Open or close this help' },
+  { keys: <><Kbd>Ctrl</Kbd>+<Kbd>,</Kbd></>, action: 'Open or close the settings (theme, commit message guides)' },
 ]
 
 // HelpDialog explains how to use the app: a walkthrough of editing one or
@@ -262,7 +263,8 @@ export default function HelpDialog() {
               </li>
               <li>
                 Need a git command GitGo does not offer? Click <Ui>&gt;_</Ui> in the header to open a terminal in the
-                repository folder. Running git there needs git installed; GitGo itself does not.
+                repository folder. Running git there needs git installed; GitGo itself does not. To use another
+                terminal or shell, set a <Ui>Terminal command</Ui> in the settings (<Kbd>Ctrl</Kbd>+<Kbd>,</Kbd>).
               </li>
               <li>
                 Made changes outside GitGo, for example a new commit in a terminal? Press <Kbd>F5</Kbd> or click{' '}
