@@ -28,6 +28,18 @@ type App struct {
 	// undone. It lives in memory only and is cleared when a repository is
 	// opened or the rewrite is undone. Guarded by mutex.
 	lastRewrite *rewriteRecord
+
+	// settingsPath is the settings file (app/settings.go), or empty when there
+	// is no config directory. settingsMutex serialises its read-modify-write.
+	settingsPath  string
+	settingsMutex sync.Mutex
+}
+
+// Settings are the user's preferences, kept in settings.json in GitGo's config
+// directory.
+type Settings struct {
+	// RecentRepos are the repository paths opened most recently, newest first.
+	RecentRepos []string `json:"recentRepos"`
 }
 
 // rewriteRecord captures the branch tip before and after a rewrite. Undo moves

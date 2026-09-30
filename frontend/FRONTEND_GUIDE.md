@@ -120,7 +120,7 @@ State currently includes:
 
 - repoInfo: opened repository details
 - commits: commit list shown in CommitList
-- recentRepos: last 10 opened repository paths (saved in localStorage)
+- recentRepos: last 10 opened repository paths (saved in the backend settings file via SetRecentRepos, loaded by loadSettings before the first render)
 - selectedHash: currently selected commit row
 - canUndo: true after a rewrite that can still be undone
 - status: normal status text
@@ -158,7 +158,7 @@ While a repository is opening, all buttons are disabled and the clicked one show
 
 It also shows recent repositories as quick-open buttons.
 
-- The list is persisted in localStorage.
+- The list is saved in settings.json in the config directory through the backend (GetSettings / SetRecentRepos).
 - It stores up to 10 unique paths (most recent first).
 - If a quick-open fails because the folder no longer exists, the stale entry is removed.
 - When there are no recent repositories, a hint says opened ones will appear there.

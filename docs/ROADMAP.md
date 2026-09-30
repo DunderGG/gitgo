@@ -102,7 +102,7 @@
 
 > Goal: the app feels complete and production-quality for everyday use.
 
-- [x] Recent repositories list (persisted in `localStorage`)
+- [x] Recent repositories list (saved in `settings.json` in the user config directory; earlier versions used `localStorage`)
   - [x] Store last 10 opened paths
   - [x] Show in `RepoSelector` with quick-open buttons
   - [x] Remove entry if path no longer exists

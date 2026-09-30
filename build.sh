@@ -76,43 +76,25 @@ assert_node_version() {
     fi
 }
 
-# Remove what GitGo keeps between runs so it starts like a first run: the
-# window size (app/window.go) and the WebView's storage, which holds the
-# recent repositories list.
+# Remove GitGo's config directory (os.UserConfigDir()/gitgo), which holds
+# everything it keeps between runs: settings.json and window.json.
 clear_saved_state() {
     if command -v pgrep >/dev/null 2>&1 && pgrep -x gitgo >/dev/null 2>&1; then
         echo "Close GitGo before using --new-run; it saves its window size when it closes." >&2
         exit 1
     fi
 
-    local paths=()
+    local path
     case "$(uname -s)" in
-        Darwin)
-            paths=(
-                "$HOME/Library/Application Support/gitgo/window.json"
-                "$HOME/Library/WebKit/com.wails.GitGo"
-                "$HOME/Library/Caches/com.wails.GitGo"
-            )
-            ;;
-        MINGW*|MSYS*|CYGWIN*)
-            paths=("$APPDATA/gitgo/window.json" "$APPDATA/gitgo.exe")
-            ;;
-        *)
-            paths=(
-                "${XDG_CONFIG_HOME:-$HOME/.config}/gitgo/window.json"
-                "${XDG_DATA_HOME:-$HOME/.local/share}/gitgo"
-                "${XDG_CACHE_HOME:-$HOME/.cache}/gitgo"
-            )
-            ;;
+        Darwin) path="$HOME/Library/Application Support/gitgo" ;;
+        MINGW*|MSYS*|CYGWIN*) path="$APPDATA/gitgo" ;;
+        *) path="${XDG_CONFIG_HOME:-$HOME/.config}/gitgo" ;;
     esac
 
-    local path
-    for path in "${paths[@]}"; do
-        if [[ -e "$path" ]]; then
-            rm -rf -- "$path"
-            echo "Removed: $path"
-        fi
-    done
+    if [[ -e "$path" ]]; then
+        rm -rf -- "$path"
+        echo "Removed: $path"
+    fi
 }
 
 echo "Checking prerequisites..."

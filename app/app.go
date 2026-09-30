@@ -15,7 +15,7 @@ import (
 
 // New creates a new App instance.
 func New() *App {
-	return &App{}
+	return &App{settingsPath: configFile("settings.json")}
 }
 
 // Startup is called when the Wails application starts and stores the context

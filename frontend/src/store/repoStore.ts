@@ -1,47 +1,64 @@
 import { create } from 'zustand'
-import { CanUndo, GetCommitLog, RefreshLog, ReloadRepository, UndoLastOperation } from '../../wailsjs/go/app/App'
+import {
+  CanUndo,
+  GetCommitLog,
+  GetSettings,
+  RefreshLog,
+  ReloadRepository,
+  SetRecentRepos,
+  UndoLastOperation,
+} from '../../wailsjs/go/app/App'
 import { errorText, friendlyError } from '../errors'
 
-const recentReposStorageKey = 'gitgo.recentRepos'
+// Where earlier versions kept the recent repositories, in the WebView's
+// localStorage. loadSettings moves the list to the backend's settings file.
+const legacyRecentReposStorageKey = 'gitgo.recentRepos'
 const maxRecentRepos = 10
 
 // Activity label used while reloadRepository runs; the header's reload button
 // compares against it to show its own spinner.
 export const reloadActivityLabel = 'Reloading repository…'
 
-function loadRecentRepos(): string[] {
-  if (typeof window === 'undefined') {
-    return []
-  }
-
+function loadLegacyRecentRepos(): string[] {
   try {
-    const raw = window.localStorage.getItem(recentReposStorageKey)
-    if (!raw) {
-      return []
-    }
-
-    const parsed = JSON.parse(raw)
+    const parsed = JSON.parse(window.localStorage.getItem(legacyRecentReposStorageKey) ?? '[]')
     if (!Array.isArray(parsed)) {
       return []
     }
-
     return parsed.filter((path): path is string => typeof path === 'string').slice(0, maxRecentRepos)
   } catch {
-    // If storage is corrupted, treat it as empty and continue safely.
     return []
   }
 }
 
-function persistRecentRepos(paths: string[]) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
+function removeLegacyRecentRepos() {
   try {
-    window.localStorage.setItem(recentReposStorageKey, JSON.stringify(paths))
+    window.localStorage.removeItem(legacyRecentReposStorageKey)
   } catch {
-    // Ignore storage write failures; app functionality should still work.
+    // Nothing to clean up without storage.
   }
+}
+
+// loadSettings reads the saved settings into the store. main.tsx awaits it
+// before the first render so the start screen never flashes an empty recent
+// list. A list left in localStorage by an earlier version is moved to the
+// settings file, unless the settings file already has one.
+export async function loadSettings(): Promise<void> {
+  const settings = await GetSettings()
+  let recentRepos = settings.recentRepos
+  const legacy = loadLegacyRecentRepos()
+  if (legacy.length > 0 && recentRepos.length === 0) {
+    await SetRecentRepos(legacy)
+    recentRepos = legacy
+  }
+  removeLegacyRecentRepos()
+  useRepoStore.setState({ recentRepos })
+}
+
+function persistRecentRepos(paths: string[]) {
+  // The list in the store is already up to date, so a failed save only loses
+  // it for the next run.
+  SetRecentRepos(paths).catch((error) => console.error('Saving recent repositories failed:', error))
 }
 
 function withRecentRepo(paths: string[], path: string): string[] {
@@ -132,7 +149,7 @@ interface RepoStore {
 export const useRepoStore = create<RepoStore>((set, get) => ({
   repoInfo: null,
   commits: [],
-  recentRepos: loadRecentRepos(),
+  recentRepos: [],
   selectedHash: null,
   selectedHashes: [],
   selectionAnchor: null,

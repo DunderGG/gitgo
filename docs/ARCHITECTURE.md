@@ -185,6 +185,8 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `UndoLastOperation() (OperationResult, error)` | Re-opens the repo and calls `git.ResetBranch` to move the branch from the post-rewrite tip back to the pre-rewrite tip. Only one level of undo is kept. Returns `ErrBranchMoved` (and drops the record) if the branch no longer points at the rewritten tip, e.g. a new commit was made. The worktree is not touched: rewrites only change metadata, so both tips have the same tree. |
 | `CanUndo() bool` | Reports whether `lastRewrite` is set. Used by the frontend to re-sync the Undo button after a failed undo. |
 | `OpenTerminal() error` | *(`app/terminal.go`)* Opens a terminal window in the repository root for running git by hand. Windows: Windows Terminal (`wt.exe -d`), else `cmd.exe` in a new console; macOS: `open -a Terminal`; Linux: `$TERMINAL`, then common emulators. The terminal is detached and outlives GitGo. |
+| `GetSettings() Settings` | *(`app/settings.go`)* Reads `settings.json` in GitGo's config directory (`os.UserConfigDir()/gitgo`). A missing or unreadable file gives the defaults, so it never fails. |
+| `SetRecentRepos(paths []string) error` | *(`app/settings.go`)* Saves the recent repositories list into `settings.json`, keeping the other settings. Files in the config directory are written to a temporary file and renamed, so a crash never leaves a half-written file. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
 
@@ -329,7 +331,7 @@ Choosing a branch calls `SwitchBranch(name)` then `GetCommitLog()` and writes bo
 
 The empty-state view shown before any repository is loaded. Contains a centred card with a heading, subtext, a one-line explanation of what GitGo does (edit unpushed commits; pushed commits are read-only), and an "Open Repository" button.
 
-It also renders a "Recent Repositories" list driven by `repoStore.recentRepos` (persisted in `localStorage`). Each entry can be quick-opened, and entries can be removed manually. When the list is empty, a hint says opened repositories will appear there.
+It also renders a "Recent Repositories" list driven by `repoStore.recentRepos` (saved in `settings.json` through `SetRecentRepos`). Each entry can be quick-opened, and entries can be removed manually. When the list is empty, a hint says opened repositories will appear there.
 
 When the button is clicked, `handleOpen` runs the following sequence over the Wails IPC bridge:
 
@@ -470,7 +472,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 |---|---|---|
 | `repoInfo` | `RepoInfo \| null` | `null` means no repo is open. Non-null switches the main view from `RepoSelector` to `CommitList`. |
 | `commits` | `CommitSummary[]` | The current log. Empty array while no repo is open. |
-| `recentRepos` | `string[]` | Most-recent repository paths, stored in `localStorage`, deduplicated, and capped to 10 entries. |
+| `recentRepos` | `string[]` | Most-recent repository paths, saved in `settings.json` through `SetRecentRepos` and loaded by `loadSettings()` before the first render (moving a list from an earlier version's `localStorage` there once), deduplicated, and capped to 10 entries. |
 | `selectedHash` | `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
 | `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
@@ -484,7 +486,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | Action | Effect |
 |---|---|
 | `setRepo(info, commits)` | Sets `repoInfo` and `commits` together, clears `selectedHash` and `error`, sets `status` to `"Opened: <path>"`. |
-| `removeRecentRepo(path)` | Removes one path from the recent list and persists the updated list to `localStorage`. |
+| `removeRecentRepo(path)` | Removes one path from the recent list and saves the updated list with `SetRecentRepos`. |
 | `selectCommit(hash)` | Sets `selectedHash` when a commit row is clicked or keyboard-selected. |
 | `setCanUndo(canUndo)` | Sets `canUndo`. `EditPanel` sets it to `true` after a rewrite. |
 | `reloadRepository()` | Async. Runs as `runGitOperation(reloadActivityLabel, …)`: calls `ReloadRepository` then `GetCommitLog` and writes both into the store directly (not via `setRepo`), keeping the selected commit if it still exists and keeping `canUndo` unless the branch changed. Sets `status` to `"Reloaded from disk"`, or explains the fallback when the branch was deleted. |
@@ -555,7 +557,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -580,6 +582,7 @@ GitGo/
 ├── app/
 │   ├── app.go               # App struct — bound methods exposed to frontend
 │   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
+│   ├── settings.go          # GetSettings / SetRecentRepos: settings.json in the config directory
 │   ├── window.go            # Window size saved between runs (lifecycle hooks, not bound)
 │   └── models.go            # DTOs shared across layers
 │

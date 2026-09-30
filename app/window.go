@@ -2,9 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -33,10 +30,7 @@ type Window struct {
 // LoadWindow reads the size saved by the previous run, falling back to
 // defaultSize when there is none, and never returns less than minimum.
 func LoadWindow(defaultSize, minimum WindowSize) *Window {
-	path := ""
-	if configDir, err := os.UserConfigDir(); err == nil {
-		path = filepath.Join(configDir, "gitgo", "window.json")
-	}
+	path := configFile("window.json")
 	return &Window{path: path, minimum: minimum, size: loadWindowSize(path, defaultSize, minimum)}
 }
 
@@ -91,11 +85,9 @@ func (window *Window) Save(ctx context.Context) bool {
 func loadWindowSize(path string, defaultSize, minimum WindowSize) WindowSize {
 	size := defaultSize
 	if path != "" {
-		if data, err := os.ReadFile(path); err == nil {
-			var saved WindowSize
-			if json.Unmarshal(data, &saved) == nil && saved.Width > 0 && saved.Height > 0 {
-				size = saved
-			}
+		var saved WindowSize
+		if readJSONFile(path, &saved) == nil && saved.Width > 0 && saved.Height > 0 {
+			size = saved
 		}
 	}
 	size.Width = max(size.Width, minimum.Width)
@@ -109,14 +101,7 @@ func saveWindowSize(path string, size WindowSize) {
 	if path == "" {
 		return
 	}
-	data, err := json.Marshal(size)
-	if err != nil {
-		return
-	}
-	if os.MkdirAll(filepath.Dir(path), 0o755) != nil {
-		return
-	}
-	_ = os.WriteFile(path, data, 0o644)
+	_ = writeJSONFile(path, size)
 }
 
 // fitWindowSize shrinks size to at most maxWidth by maxHeight, but not below

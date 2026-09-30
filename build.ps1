@@ -82,22 +82,16 @@ function Assert-NodeVersion {
 }
 
 function Clear-SavedState {
-    # Remove what GitGo keeps between runs so it starts like a first run: the
-    # window size (app/window.go) and the WebView's storage, which holds the
-    # recent repositories list.
+    # Remove GitGo's config directory (os.UserConfigDir()/gitgo), which holds
+    # everything it keeps between runs: settings.json and window.json.
     if (Get-Process -Name gitgo -ErrorAction SilentlyContinue) {
         throw "Close GitGo before using -NewRun; it saves its window size when it closes."
     }
 
-    $paths = @(
-        (Join-Path $env:APPDATA "gitgo\window.json"),
-        (Join-Path $env:APPDATA "gitgo.exe")
-    )
-    foreach ($path in $paths) {
-        if (Test-Path $path) {
-            Remove-Item -Path $path -Recurse -Force
-            Write-Host "Removed: $path"
-        }
+    $path = Join-Path $env:APPDATA "gitgo"
+    if (Test-Path $path) {
+        Remove-Item -Path $path -Recurse -Force
+        Write-Host "Removed: $path"
     }
 }
 
