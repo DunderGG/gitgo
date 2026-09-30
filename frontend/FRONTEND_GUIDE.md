@@ -190,10 +190,11 @@ Current behavior:
 - keeps local form state for message, date/time, author name, and author email
 - disables fields for pushed commits (pushed state comes from the commit list, so it updates after a reload)
 - tiny buttons under the date (DateShiftButtons plus Now) adjust it by ±1 hour / ±1 day or set the current time
+- "Use my identity" by the author name fills the author from the Git config
 - opens ConfirmDialog before applying a rewrite
 - calls UpdateCommit and then RefreshLog after confirmation
 
-### src/components/BulkDatePanel.tsx
+### src/components/BulkEditPanel.tsx
 
 Shown instead of EditPanel while several commits are selected.
 
@@ -201,12 +202,22 @@ Current behavior:
 
 - the ±1h / ±1d buttons add up to one shift, shown with a before/after author date for each selected commit
 - "Also shift committer dates" (on by default) moves the committer dates by the same amount
+- "Set Author" gives every selected commit the same author name and email (committers are kept); "Use my identity" fills them from the Git config
+- a shift, a new author, or both can be applied
 - warns when a selected commit has been pushed (Review Changes is disabled) or when the shift puts a commit before the one below it in the list
-- calls ShiftCommitDates (one rewrite, one undo) and then RefreshLog after confirmation
+- calls EditCommits (one rewrite, one undo) and then RefreshLog after confirmation
 
 ### src/components/DateShiftButtons.tsx
 
-The row of −1d / −1h / +1h / +1d buttons shared by EditPanel and BulkDatePanel.
+The row of −1d / −1h / +1h / +1d buttons shared by EditPanel and BulkEditPanel.
+
+### src/components/UseMyIdentityButton.tsx
+
+Tiny button shared by EditPanel and BulkEditPanel that fills the author fields with GetGitIdentity (user.name / user.email), or reports that none is set.
+
+### src/identity.ts
+
+Author name and email validation shared by the edit panels, mirroring validateIdentity in git/rewrite.go.
 
 ### src/dates.ts
 

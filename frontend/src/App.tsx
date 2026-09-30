@@ -6,7 +6,7 @@ import RepoSelector from './components/RepoSelector'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
-import BulkDatePanel from './components/BulkDatePanel'
+import BulkEditPanel from './components/BulkEditPanel'
 import HelpDialog from './components/HelpDialog'
 import Spinner from './components/Spinner'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -105,7 +105,7 @@ function App() {
         ) : (
           <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] overflow-hidden">
             <CommitList />
-            {isMultiSelect ? <BulkDatePanel /> : <EditPanel />}
+            {isMultiSelect ? <BulkEditPanel /> : <EditPanel />}
           </div>
         )}
       </main>

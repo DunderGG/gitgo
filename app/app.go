@@ -270,27 +270,49 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	})
 }
 
-// ShiftCommitDates moves the author date of each unpushed commit in req by
-// req.Minutes, in a single rewrite that one undo reverts. Each commit keeps
-// its own time zone offset; see UpdateCommit for what else is left alone.
-func (app *App) ShiftCommitDates(req ShiftRequest) (OperationResult, error) {
+// EditCommits applies the same change to each unpushed commit in req: its
+// author date moves by req.Minutes (keeping its own time zone offset) and,
+// with req.SetAuthor, its author name and email are replaced. It is a single
+// rewrite that one undo reverts; see UpdateCommit for what is left alone.
+func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 	hashes := make([]plumbing.Hash, len(req.Hashes))
 	for i, hash := range req.Hashes {
 		hashes[i] = plumbing.NewHash(hash)
 	}
-	opts := gitpkg.ShiftOptions{
+	opts := gitpkg.BulkEditOptions{
 		Shift:          time.Duration(req.Minutes) * time.Minute,
 		ShiftCommitter: req.ShiftCommitter,
+		SetAuthor:      req.SetAuthor,
+		AuthorName:     req.AuthorName,
+		AuthorEmail:    req.AuthorEmail,
 		MoveBranches:   req.MoveBranches,
 	}
 
-	message := fmt.Sprintf("%d commits shifted", len(hashes))
+	message := fmt.Sprintf("%d commits updated", len(hashes))
 	if len(hashes) == 1 {
-		message = "1 commit shifted"
+		message = "1 commit updated"
 	}
 	return app.runRewrite(hashes, req.MoveBranches, message, func(state *gitpkg.RepoState) error {
-		return gitpkg.ShiftDates(state, hashes, opts)
+		return gitpkg.EditCommits(state, hashes, opts)
 	})
+}
+
+// GetGitIdentity returns the author name and email git would use for a new
+// commit in the open repository (user.name / user.email).
+func (app *App) GetGitIdentity() (Identity, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return Identity{}, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	identity, err := gitpkg.ConfiguredIdentity(state)
+	if err != nil {
+		return Identity{}, err
+	}
+	return Identity{Name: identity.Name, Email: identity.Email}, nil
 }
 
 // runRewrite runs a history rewrite of the given commits against a freshly

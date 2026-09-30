@@ -173,8 +173,9 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetCommitLog() ([]CommitSummary, error)` | Reads `repoState` under the mutex; returns an error if no repo is open. Calls `git.Log(state, 0)` to walk up to 100 commits, then maps each `git.CommitEntry` to a `CommitSummary` DTO — including formatting the author date as an RFC 3339 string so the frontend can parse it with `new Date()`. |
 | `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, unpushed flag) for the edit UI. |
 | `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
-| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit via `RebaseRewrite`. Re-reads the repository, performs the server-side unpushed safety check, records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state (shared with `ShiftCommitDates` through `runRewrite`). |
-| `ShiftCommitDates(req ShiftRequest) (OperationResult, error)` | Moves the author date (optionally also the committer date) of several unpushed commits by `req.Minutes` in one `ShiftDates` rewrite, keeping each commit's offset. One undo reverts the whole batch. |
+| `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit via `RebaseRewrite`. Re-reads the repository, performs the server-side unpushed safety check, records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state (shared with `EditCommits` through `runRewrite`). |
+| `EditCommits(req BulkEditRequest) (OperationResult, error)` | Applies the same change to several unpushed commits in one `git.EditCommits` rewrite: moves each author date (optionally also the committer date) by `req.Minutes`, keeping each commit's offset, and with `req.SetAuthor` replaces the author name and email (committers are kept). One undo reverts the whole batch. |
+| `GetGitIdentity() (Identity, error)` | Returns the author identity git would use for a new commit (`GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`, then `user.name` / `user.email` from the repository and global config), for the "Use my identity" buttons. |
 | `GetAffectedRefs(hashes []string) ([]AffectedRef, error)` | Lists other branches and tags an edit of the given commits would leave behind, for the confirm dialog. |
 | `GetSignedCommits(hashes []string) ([]SignedCommit, error)` | Lists the signed commits an edit of the given commits would rebuild (the edited ones and those above them), which come out unsigned, for the confirm dialog's warning. |
 | `ReloadRepository() (RepoInfo, error)` | Re-opens the current repository and branch from disk (`git.OpenBranch`) and returns fresh `RepoInfo`, so upstream, remote and checked-out state are re-read too. If the branch no longer exists it falls back to the checked-out branch. Keeps `lastRewrite`; if the branch moved, `UndoLastOperation` reports it. |
@@ -356,7 +357,7 @@ Structure:
 - Unpushed commits render at full opacity with an indigo dot. Pushed commits render at 60% opacity with a grey dot, communicating they are read-only.
 - Rows are selectable by click. The selected row is highlighted with a darker indigo background and left border. Each row carries a `data-commit-hash` attribute so keyboard code can focus it.
 - Keyboard: `Enter` selects the focused row and calls `requestEditFocus()` so `EditPanel` focuses its message field once the commit has loaded (editable commits only). `↑` / `↓` move the selection and focus to the previous / next row.
-- Multi-selection: `Ctrl`/`Cmd`-click toggles a row (`toggleCommitSelection`), and `Shift`-click or `Shift+↑` / `↓` selects the range from the anchor row (`extendSelection`). Only unpushed commits join a multi-selection. All selected rows are highlighted, the one last clicked with a brighter border, and the legend shows the count. With more than one commit selected, `App` shows `BulkDatePanel` instead of `EditPanel`.
+- Multi-selection: `Ctrl`/`Cmd`-click toggles a row (`toggleCommitSelection`), and `Shift`-click or `Shift+↑` / `↓` selects the range from the anchor row (`extendSelection`). Only unpushed commits join a multi-selection. All selected rows are highlighted, the one last clicked with a brighter border, and the legend shows the count. With more than one commit selected, `App` shows `BulkEditPanel` instead of `EditPanel`.
 - The 7-character short hash is monospaced and `select-all` so users can copy it.
 - The commit message truncates with Tailwind `truncate` and the full message is in a `title` attribute on hover.
 - The date is localised via `toLocaleDateString` rather than shown as a raw ISO string.
@@ -370,7 +371,7 @@ The edit workspace for the currently selected commit. Reads `selectedHash` from 
 
 Behaviour:
 - With nothing selected, shows a hint: how to select a commit (click, or `↑` / `↓` and `Enter`), or, when the branch has no unpushed commits, that there is nothing to edit.
-- Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke.
+- Maintains local form state for message, date/time, author name, and author email so the user can edit fields without mutating shared store state on every keystroke. "Use my identity" (`UseMyIdentityButton`, via `GetGitIdentity`) fills the author fields from the Git config; the name and email are validated inline with `src/identity.ts`.
 - Tracks the originally loaded values separately from the current form values so it can detect changes, support reset, and feed the confirmation dialog with an explicit before/after comparison.
 - Disables all editable controls while commit details are loading (shown with a spinner), while a rewrite is being submitted, and for pushed commits. `isUnpushed` is read from the matching entry in the store's `commits` (not from the loaded detail), so a reload that finds the commit was pushed makes it read-only immediately without resetting the form. "Review Changes" is also disabled while any other git operation is running.
 - The rewrite (`UpdateCommit` + `RefreshLog`) runs inside `runGitOperation('Rewriting commit history…', …)`; the dialog's Apply button shows a spinner meanwhile.
@@ -382,24 +383,26 @@ The panel intentionally owns transient UI state (loading, local form values, dia
 
 ---
 
-#### `frontend/src/components/BulkDatePanel.tsx`
+#### `frontend/src/components/BulkEditPanel.tsx`
 
 Replaces `EditPanel` while several commits are selected (`selectedHashes.length > 1`). It works from the `CommitSummary` entries already in the store, so it loads nothing.
 
 Behaviour:
 - The shared `DateShiftButtons` (±1h / ±1d) add to one accumulated shift; nothing is written until the user confirms. Each selected commit shows its current and new author date in its own offset (helpers in `src/dates.ts`).
 - "Also shift committer dates" (on by default) keeps each commit's author/committer gap.
+- "Set Author" enables a name and email that replace every selected commit's author, validated with the same rules as `EditPanel` (`src/identity.ts`). "Use my identity" fills them from `GetGitIdentity` and ticks the checkbox. Committers are kept.
+- A shift, a new author, or both can be applied; "Review Changes" needs at least one.
 - Warns, and disables "Review Changes", when a selected commit has been pushed since it was selected; warns when the shift makes a commit older than the one listed below it.
-- On confirm, calls `ShiftCommitDates` inside `runGitOperation('Shifting commit dates…', …)`, then `RefreshLog` and `setRepo`, which clears the selection because every shifted commit has a new hash. One undo reverts the whole shift.
+- On confirm, calls `EditCommits` inside `runGitOperation('Rewriting commit history…', …)`, then `RefreshLog` and `setRepo`, which clears the selection because every edited commit has a new hash. One undo reverts the whole edit.
 
 ---
 
 #### `frontend/src/components/ConfirmDialog.tsx`
 
-A modal confirmation dialog rendered by `EditPanel` and `BulkDatePanel`. Its only responsibility is review and confirmation — it does not own any repository state itself.
+A modal confirmation dialog rendered by `EditPanel` and `BulkEditPanel`. Its only responsibility is review and confirmation — it does not own any repository state itself.
 
 Behaviour:
-- Renders the comparison it is given as children: `EditPanel` passes `<CommitComparison before after>` (a side-by-side comparison for message, dates, author name, and author email); `BulkDatePanel` passes a table of current and new author dates.
+- Renders the comparison it is given as children: `EditPanel` passes `<CommitComparison before after>` (a side-by-side comparison for message, dates, author name, and author email); `BulkEditPanel` passes a table of current and new author dates and authors.
 - Warns when signed commits will lose their signatures (from `GetSignedCommits`), marking each as edited or rebuilt above an edit.
 - Warns when signed commits will lose their signatures (from `GetSignedCommits`), marking each as edited or rebuilt above an edit.
 - Lists affected branches and tags (from `GetAffectedRefs`) with the option to move branches along.
@@ -550,12 +553,13 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `ShiftCommitDates`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
-| `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers and `ShiftDates` for bulk date shifts; commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author validation (`validateIdentity`) |
+| `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers and `EditCommits` for bulk date shifts and author changes; commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author validation (`validateIdentity`) |
+| `git/identity.go` | `ConfiguredIdentity`: the author name and email git would use for a new commit (environment, then repository and global config) |
 | `git/signed.go` | `FindSignedCommits`: the signed commits in the chain a rewrite rebuilds; checks the raw headers for `gpgsig-sha256`, which go-git drops |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
 | `git/branch_test.go` | *(Phase 3)* Tests for `ListBranches`, `OpenBranch`, and rewriting/undoing on a branch that is not checked out |
@@ -591,11 +595,13 @@ GitGo/
 │       ├── main.tsx
 │       ├── errors.ts               # (Phase 3) Friendly error messages
 │       ├── dates.ts                # Wall-clock + offset date helpers
+│       ├── identity.ts             # Author name/email validation
 │       ├── App.tsx
 │       ├── components/
 │       │   ├── BranchSelector.tsx  # (Phase 3)
-│       │   ├── BulkDatePanel.tsx   # Shift dates of several commits
+│       │   ├── BulkEditPanel.tsx   # Shift dates / set author of several commits
 │       │   ├── DateShiftButtons.tsx
+│       │   ├── UseMyIdentityButton.tsx
 │       │   ├── RepoSelector.tsx
 │       │   ├── Spinner.tsx         # (Phase 3)
 │       │   ├── CommitList.tsx

@@ -146,7 +146,8 @@ export default function HelpDialog() {
                 Its details load in the <Ui>Edit Commit</Ui> panel.
               </li>
               <li>
-                Change the <Ui>Message</Ui>, <Ui>Author Date</Ui>, <Ui>Author Name</Ui> or <Ui>Author Email</Ui>.
+                Change the <Ui>Message</Ui>, <Ui>Author Date</Ui>, <Ui>Author Name</Ui> or <Ui>Author Email</Ui>.{' '}
+                <Ui>Use my identity</Ui> fills in the author from your Git config (user.name and user.email).
               </li>
               <li>
                 For the date, type a new time (to the second) and pick a time zone, or use the quick buttons:{' '}
@@ -159,24 +160,30 @@ export default function HelpDialog() {
             </Steps>
           </Section>
 
-          <Section title="4. Shift the dates of several commits">
+          <Section title="4. Edit several commits at once">
             <Steps>
               <li>
                 Select several unpushed commits: <Kbd>Ctrl</Kbd>+click to add or remove one at a time,{' '}
                 <Kbd>Shift</Kbd>+click to select a range, or hold <Kbd>Shift</Kbd> and use <Kbd>↑</Kbd> <Kbd>↓</Kbd>.
-                The <Ui>Shift Commit Dates</Ui> panel replaces the edit panel.
+                The <Ui>Edit Several Commits</Ui> panel replaces the edit panel.
               </li>
               <li>
-                Use <Ui>−1d</Ui> <Ui>−1h</Ui> <Ui>+1h</Ui> <Ui>+1d</Ui> to build up the shift. Every selected commit
-                moves by the same amount and keeps its own time zone. The list below shows each new date.
+                Use <Ui>−1d</Ui> <Ui>−1h</Ui> <Ui>+1h</Ui> <Ui>+1d</Ui> to build up a date shift. Every selected
+                commit moves by the same amount and keeps its own time zone. Tick{' '}
+                <Ui>Also shift committer dates</Ui> if you want those moved too.
               </li>
               <li>
-                Tick <Ui>Also shift committer dates</Ui> if you want those moved too, then click{' '}
-                <Ui>Review Changes</Ui>.
+                To fix commits made with the wrong identity, tick <Ui>Set Author</Ui> and type a name and email, or
+                click <Ui>Use my identity</Ui> to fill in user.name and user.email from your Git config. The
+                committers are kept.
+              </li>
+              <li>
+                The list below shows each new date and author. Click <Ui>Review Changes</Ui>.
               </li>
             </Steps>
             <p className="text-gray-400">
-              Only dates can be changed for several commits at once; messages and authors stay as they are.
+              Messages cannot be changed for several commits at once. A shift and a new author can be applied
+              together, as one rewrite that one undo reverts.
             </p>
           </Section>
 

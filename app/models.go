@@ -103,18 +103,31 @@ type EditRequest struct {
 	MoveBranches []string `json:"moveBranches"`
 }
 
-// ShiftRequest describes a date shift applied to several unpushed commits.
-type ShiftRequest struct {
+// BulkEditRequest describes the same change applied to several unpushed
+// commits: a date shift, a new author, or both.
+type BulkEditRequest struct {
 	Hashes []string `json:"hashes"`
 	// Minutes is added to each commit's author date; negative moves it
-	// earlier. It must not be zero.
+	// earlier, zero keeps the dates.
 	Minutes int `json:"minutes"`
 	// ShiftCommitter also shifts each commit's committer date by Minutes.
 	// When false the committer dates are kept.
 	ShiftCommitter bool `json:"shiftCommitter"`
+	// SetAuthor replaces each commit's author name and email with
+	// AuthorName and AuthorEmail. When false the authors are kept.
+	SetAuthor   bool   `json:"setAuthor"`
+	AuthorName  string `json:"authorName"`
+	AuthorEmail string `json:"authorEmail"`
 	// MoveBranches names other local branches (from GetAffectedRefs) to move
 	// to the rewritten commits along with the edited branch.
 	MoveBranches []string `json:"moveBranches"`
+}
+
+// Identity is the author name and email git is configured to use for new
+// commits, for the "Use my identity" buttons. Either field may be empty.
+type Identity struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
 // AffectedRef is a branch or tag that an edit would leave pointing at old

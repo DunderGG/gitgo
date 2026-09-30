@@ -113,7 +113,7 @@ export default function CommitList() {
   const isMultiSelect = selectedHashes.length > 1
 
   // A plain click selects one commit; Ctrl/Cmd-click and Shift-click build a
-  // selection of unpushed commits for BulkDatePanel.
+  // selection of unpushed commits for BulkEditPanel.
   function handleRowClick(event: MouseEvent<HTMLDivElement>, hash: string) {
     if (event.ctrlKey || event.metaKey) {
       toggleCommitSelection(hash)

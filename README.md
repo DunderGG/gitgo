@@ -129,7 +129,7 @@ gitgo/
 ├── frontend/
 │   └── src/
 │       ├── App.tsx       # Root layout
-│       ├── components/   # CommitList, EditPanel, BulkDatePanel, ConfirmDialog, StatusBar, ...
+│       ├── components/   # CommitList, EditPanel, BulkEditPanel, ConfirmDialog, StatusBar, ...
 │       ├── hooks/        # useKeyboardShortcuts
 │       └── store/        # Zustand store (repoStore.ts)
 ├── docs/                 # Architecture, roadmap and PlantUML diagrams

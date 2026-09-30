@@ -25,7 +25,7 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 		return err
 	}
 
-	if err := validateIdentity(opts); err != nil {
+	if err := validateIdentity(opts.AuthorName, opts.AuthorEmail); err != nil {
 		return err
 	}
 	return RewriteCommits(state, map[plumbing.Hash]CommitEdit{head.Hash(): amendEdit(opts)}, opts.MoveBranches)
@@ -39,37 +39,49 @@ func AmendCommit(state *RepoState, opts AmendOptions) error {
 //
 // Returns ErrCommitNotUnpushed if targetHash is not in state.UnpushedHashes.
 func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions) error {
-	if err := validateIdentity(opts); err != nil {
+	if err := validateIdentity(opts.AuthorName, opts.AuthorEmail); err != nil {
 		return err
 	}
 	return RewriteCommits(state, map[plumbing.Hash]CommitEdit{targetHash: amendEdit(opts)}, opts.MoveBranches)
 }
 
-// ShiftDates moves the author date of each commit in hashes by opts.Shift, in
-// one rewrite (see RewriteCommits). Each commit keeps its own time zone offset,
-// identity and message. The committer date is shifted by the same amount when
-// opts.ShiftCommitter is set, and kept otherwise.
+// EditCommits applies the same change to each commit in hashes, in one rewrite
+// (see RewriteCommits): the author date moves by opts.Shift, and with
+// opts.SetAuthor the author name and email are replaced. Each commit keeps its
+// own time zone offset and message, and its committer, except that the
+// committer date is shifted too when opts.ShiftCommitter is set.
 //
-// Returns ErrCommitNotUnpushed if any commit is not in state.UnpushedHashes.
-func ShiftDates(state *RepoState, hashes []plumbing.Hash, opts ShiftOptions) error {
-	if opts.Shift == 0 {
-		return fmt.Errorf("the date shift is zero")
+// Returns ErrCommitNotUnpushed if any commit is not in state.UnpushedHashes,
+// ErrInvalidIdentity for an author that would produce a malformed commit, and
+// an error when opts changes nothing.
+func EditCommits(state *RepoState, hashes []plumbing.Hash, opts BulkEditOptions) error {
+	if opts.Shift == 0 && !opts.SetAuthor {
+		return fmt.Errorf("the edit changes nothing")
+	}
+	if opts.SetAuthor {
+		if err := validateIdentity(opts.AuthorName, opts.AuthorEmail); err != nil {
+			return err
+		}
 	}
 	edits := make(map[plumbing.Hash]CommitEdit, len(hashes))
 	for _, hash := range hashes {
-		edits[hash] = shiftEdit(opts)
+		edits[hash] = bulkEdit(opts)
 	}
 	return RewriteCommits(state, edits, opts.MoveBranches)
 }
 
-// shiftEdit is the CommitEdit that moves a commit's dates by opts.Shift.
-// time.Time.Add keeps the location, so the offset is unchanged.
-func shiftEdit(opts ShiftOptions) CommitEdit {
+// bulkEdit is the CommitEdit that applies opts to a commit. time.Time.Add
+// keeps the location, so the offsets are unchanged.
+func bulkEdit(opts BulkEditOptions) CommitEdit {
 	return func(original *object.Commit) (object.Signature, object.Signature, string) {
 		author, committer := original.Author, original.Committer
 		author.When = author.When.Add(opts.Shift)
 		if opts.ShiftCommitter {
 			committer.When = committer.When.Add(opts.Shift)
+		}
+		if opts.SetAuthor {
+			author.Name = opts.AuthorName
+			author.Email = opts.AuthorEmail
 		}
 		return author, committer, original.Message
 	}
@@ -241,14 +253,14 @@ func rebuildCommit(original *object.Commit, author, committer object.Signature, 
 // validateIdentity rejects an author name or email that would produce a
 // malformed commit header, which `git fsck` and many servers refuse on push:
 // an empty name, or angle brackets or line breaks in either field.
-func validateIdentity(opts AmendOptions) error {
-	if strings.TrimSpace(opts.AuthorName) == "" {
+func validateIdentity(name, email string) error {
+	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("%w: the author name is empty", ErrInvalidIdentity)
 	}
-	if strings.ContainsAny(opts.AuthorName, "<>\r\n") {
+	if strings.ContainsAny(name, "<>\r\n") {
 		return fmt.Errorf("%w: the author name contains <, > or a line break", ErrInvalidIdentity)
 	}
-	if strings.ContainsAny(opts.AuthorEmail, "<>\r\n") {
+	if strings.ContainsAny(email, "<>\r\n") {
 		return fmt.Errorf("%w: the author email contains <, > or a line break", ErrInvalidIdentity)
 	}
 	return nil

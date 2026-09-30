@@ -14,7 +14,9 @@ import {
   WALL_CLOCK_PATTERN,
 } from '../dates'
 import { errorText, friendlyError } from '../errors'
+import { identityErrors } from '../identity'
 import { useRepoStore } from '../store/repoStore'
+import UseMyIdentityButton from './UseMyIdentityButton'
 
 interface EditFormState {
   message: string
@@ -76,21 +78,6 @@ function localOffsetAt(dateLocal: string): string | null {
     return null
   }
   return formatOffset(-date.getTimezoneOffset())
-}
-
-// Mirrors validateIdentity in git/rewrite.go: these values would produce a
-// malformed commit header that `git fsck` and many servers reject on push.
-const IDENTITY_FORBIDDEN = /[<>\r\n]/
-
-function identityErrors(form: EditFormState): { name: string | null; email: string | null } {
-  let name: string | null = null
-  if (!form.authorName.trim()) {
-    name = 'Author name cannot be empty.'
-  } else if (IDENTITY_FORBIDDEN.test(form.authorName)) {
-    name = 'Author name cannot contain < or >.'
-  }
-  const email = IDENTITY_FORBIDDEN.test(form.authorEmail) ? 'Author email cannot contain < or >.' : null
-  return { name, email }
 }
 
 function formsEqual(left: EditFormState, right: EditFormState): boolean {
@@ -231,7 +218,7 @@ export default function EditPanel() {
     }
   }, [pendingEditFocus, isLoading, selectedHash, loadedHash, fieldsDisabled, loadError, consumeEditFocus])
   const hasChanges = originalForm !== null && !formsEqual(form, originalForm)
-  const fieldErrors = identityErrors(form)
+  const fieldErrors = identityErrors(form.authorName, form.authorEmail)
   const isValid = fieldErrors.name === null && fieldErrors.email === null
 
   const offsetOptions = [...COMMON_OFFSETS]
@@ -346,7 +333,8 @@ export default function EditPanel() {
             {hasUnpushedCommits ? (
               <>
                 No commit selected yet. Click a commit, or use <Kbd>↑</Kbd> <Kbd>↓</Kbd> and{' '}
-                <Kbd>Enter</Kbd>. Ctrl- or Shift-click to shift the dates of several unpushed commits at once.
+                <Kbd>Enter</Kbd>. Ctrl- or Shift-click to shift the dates or set the author of several unpushed commits at
+                once.
               </>
             ) : (
               'There are no unpushed commits on this branch. Pushed commits can be viewed but not edited.'
@@ -475,9 +463,17 @@ export default function EditPanel() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">
-              Author Name
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">
+                Author Name
+              </label>
+              <UseMyIdentityButton
+                disabled={fieldsDisabled}
+                onIdentity={(authorName, authorEmail) =>
+                  setForm((current) => ({ ...current, authorName, authorEmail }))
+                }
+              />
+            </div>
             <input
               type="text"
               value={form.authorName}

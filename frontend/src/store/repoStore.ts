@@ -85,7 +85,7 @@ interface RepoStore {
   selectedHash: string | null
   // Every selected commit, in list order: [selectedHash] for a single
   // selection, or several unpushed commits selected with Ctrl/Shift-click or
-  // Shift+arrow keys, which BulkDatePanel shifts together.
+  // Shift+arrow keys, which BulkEditPanel edits together.
   selectedHashes: string[]
   // Commit a Shift-click or Shift+arrow range starts from.
   selectionAnchor: string | null

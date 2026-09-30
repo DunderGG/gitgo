@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { GetAffectedRefs, GetCommitLog, GetSignedCommits, RefreshLog, ShiftCommitDates } from '../../wailsjs/go/app/App'
+import { EditCommits, GetAffectedRefs, GetCommitLog, GetSignedCommits, RefreshLog } from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
+import UseMyIdentityButton from './UseMyIdentityButton'
 import { formatShift, shiftWallClock, splitRfc3339, toPreviewDateText } from '../dates'
 import { errorText } from '../errors'
+import { identityErrors } from '../identity'
 import { useRepoStore, type CommitSummary } from '../store/repoStore'
 
 interface ShiftPreview {
@@ -43,10 +45,13 @@ function breaksDateOrder(commits: CommitSummary[], selected: Set<string>, minute
   })
 }
 
+const INPUT_CLASS =
+  'mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60'
+
 // Shown instead of EditPanel while several commits are selected: moves their
-// author dates (and optionally committer dates) by the same amount in one
-// rewrite, which a single undo reverts.
-export default function BulkDatePanel() {
+// author dates (and optionally committer dates) by the same amount and/or
+// gives them the same author, in one rewrite which a single undo reverts.
+export default function BulkEditPanel() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
   const commits = useRepoStore((s) => s.commits)
   const selectedHashes = useRepoStore((s) => s.selectedHashes)
@@ -61,6 +66,9 @@ export default function BulkDatePanel() {
   // The shift adds up across button clicks and is only applied on confirm.
   const [shiftMinutes, setShiftMinutes] = useState(0)
   const [shiftCommitter, setShiftCommitter] = useState(true)
+  const [setAuthor, setSetAuthor] = useState(false)
+  const [authorName, setAuthorName] = useState('')
+  const [authorEmail, setAuthorEmail] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [affectedRefs, setAffectedRefs] = useState<app.AffectedRef[]>([])
@@ -73,7 +81,11 @@ export default function BulkDatePanel() {
   const hasPushed = selected.some((commit) => !commit.isUnpushed)
   const previews = shiftPreviews(selected, shiftMinutes)
   const outOfOrder = breaksDateOrder(commits, selectedSet, shiftMinutes)
-  const canReview = shiftMinutes !== 0 && !hasPushed && !isSubmitting && activity === null
+  const fieldErrors = setAuthor ? identityErrors(authorName, authorEmail) : { name: null, email: null }
+  const isValid = fieldErrors.name === null && fieldErrors.email === null
+  const hasChanges = shiftMinutes !== 0 || setAuthor
+  const canReview = hasChanges && isValid && !hasPushed && !isSubmitting && activity === null
+  const newAuthorText = `${authorName} <${authorEmail}>`
 
   async function openConfirmDialog() {
     try {
@@ -95,13 +107,16 @@ export default function BulkDatePanel() {
     setIsSubmitting(true)
 
     try {
-      await runGitOperation('Shifting commit dates…', async () => {
+      await runGitOperation('Rewriting commit history…', async () => {
         let result
         try {
-          result = await ShiftCommitDates({
+          result = await EditCommits({
             hashes: selectedHashes,
             minutes: shiftMinutes,
             shiftCommitter,
+            setAuthor,
+            authorName: setAuthor ? authorName : '',
+            authorEmail: setAuthor ? authorEmail : '',
             moveBranches: moveBranches
               ? affectedRefs.filter((ref) => ref.kind === 'branch').map((ref) => ref.name)
               : [],
@@ -140,19 +155,29 @@ export default function BulkDatePanel() {
     }
   }
 
+  // What the confirm dialog says is left alone.
+  const keptNote = [
+    shiftMinutes === 0
+      ? 'Dates are kept.'
+      : shiftCommitter
+        ? `Committer dates are shifted by ${formatShift(shiftMinutes)} as well.`
+        : 'Committer dates are kept.',
+    setAuthor ? 'Messages and committers are not changed.' : 'Messages and authors are not changed.',
+  ].join(' ')
+
   return (
     <>
       <aside className="h-full border-t lg:border-t-0 lg:border-l border-gray-800 bg-gray-900/60">
         <div className="h-full overflow-y-auto p-4 sm:p-5">
-          <h2 className="text-base font-semibold text-gray-100">Shift Commit Dates</h2>
+          <h2 className="text-base font-semibold text-gray-100">Edit Several Commits</h2>
           <p className="mt-1 text-xs text-gray-400">
-            Move the dates of the {selected.length} selected commits by the same amount. Each commit keeps its own
-            time zone.
+            Shift the dates or set the author of the {selected.length} selected commits in one rewrite. Each commit
+            keeps its own time zone and message.
           </p>
 
           <div className="mt-5">
             <div className="flex items-baseline justify-between">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Shift</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Date Shift</span>
               <span
                 className={`font-mono text-sm ${shiftMinutes === 0 ? 'text-gray-500' : 'text-indigo-300'}`}
                 aria-live="polite"
@@ -188,6 +213,50 @@ export default function BulkDatePanel() {
             </label>
           </div>
 
+          <div className="mt-5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={setAuthor}
+                  onChange={(e) => setSetAuthor(e.target.checked)}
+                  disabled={isSubmitting}
+                  className="accent-indigo-500 disabled:cursor-not-allowed"
+                />
+                Set Author
+              </label>
+              <UseMyIdentityButton
+                disabled={isSubmitting}
+                onIdentity={(name, email) => {
+                  setAuthorName(name)
+                  setAuthorEmail(email)
+                  setSetAuthor(true)
+                }}
+              />
+            </div>
+            <input
+              type="text"
+              value={authorName}
+              onChange={(e) => setAuthorName(e.target.value)}
+              disabled={isSubmitting || !setAuthor}
+              aria-label="Author name"
+              className={INPUT_CLASS}
+              placeholder="Author name"
+            />
+            {fieldErrors.name && <p className="mt-1 text-xs text-red-300">{fieldErrors.name}</p>}
+            <input
+              type="email"
+              value={authorEmail}
+              onChange={(e) => setAuthorEmail(e.target.value)}
+              disabled={isSubmitting || !setAuthor}
+              aria-label="Author email"
+              className={INPUT_CLASS}
+              placeholder="author@example.com"
+            />
+            {fieldErrors.email && <p className="mt-1 text-xs text-red-300">{fieldErrors.email}</p>}
+            <p className="mt-1 text-xs text-gray-500">The committers are kept.</p>
+          </div>
+
           {hasPushed && (
             <div className="mt-4 rounded-lg border border-yellow-900/60 bg-yellow-950/30 px-3 py-2 text-sm text-yellow-300">
               Some selected commits have been pushed and cannot be edited. Ctrl-click them to remove them from the
@@ -210,8 +279,11 @@ export default function BulkDatePanel() {
                     {commit.message}
                   </span>
                 </div>
-                <div className="mt-1 text-gray-400">{before}</div>
+                <div className="mt-1 text-gray-400">
+                  {before} · {commit.author}
+                </div>
                 {shiftMinutes !== 0 && <div className="text-indigo-300">→ {after}</div>}
+                {setAuthor && <div className="break-words text-indigo-300">→ {newAuthorText}</div>}
               </li>
             ))}
           </ul>
@@ -240,7 +312,7 @@ export default function BulkDatePanel() {
       <ConfirmDialog
         isOpen={showConfirmDialog}
         isSubmitting={isSubmitting}
-        title={`Shift ${selected.length} Commits ${formatShift(shiftMinutes)}`}
+        title={`Update ${selected.length} Commits`}
         signedCommits={signedCommits}
         affectedRefs={affectedRefs}
         moveBranches={moveBranches}
@@ -249,7 +321,13 @@ export default function BulkDatePanel() {
         onConfirm={handleConfirmApply}
       >
         <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-gray-400">Author Dates</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            {shiftMinutes !== 0 && setAuthor
+              ? `Author Dates (${formatShift(shiftMinutes)}) and Authors`
+              : shiftMinutes !== 0
+                ? `Author Dates (${formatShift(shiftMinutes)})`
+                : 'Authors'}
+          </div>
           <table className="mt-2 w-full text-left text-sm">
             <thead className="text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
@@ -265,18 +343,19 @@ export default function BulkDatePanel() {
                     <span className="font-mono text-xs text-gray-500">{commit.shortHash}</span>{' '}
                     <span className="text-gray-300">{commit.message}</span>
                   </td>
-                  <td className="py-1.5 pr-3 text-gray-400">{before}</td>
-                  <td className="py-1.5 text-indigo-200">{after}</td>
+                  <td className="py-1.5 pr-3 text-gray-400">
+                    {shiftMinutes !== 0 && <div>{before}</div>}
+                    {setAuthor && <div>{commit.author}</div>}
+                  </td>
+                  <td className="break-words py-1.5 text-indigo-200">
+                    {shiftMinutes !== 0 && <div>{after}</div>}
+                    {setAuthor && <div>{newAuthorText}</div>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-gray-400">
-            {shiftCommitter
-              ? `Committer dates are shifted by ${formatShift(shiftMinutes)} as well.`
-              : 'Committer dates are kept.'}{' '}
-            Messages and authors are not changed.
-          </p>
+          <p className="mt-2 text-xs text-gray-400">{keptNote}</p>
           {outOfOrder && (
             <p className="mt-2 text-xs text-yellow-300">
               Some commits will be dated earlier than the commit below them in the list.

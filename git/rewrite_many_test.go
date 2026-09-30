@@ -2,6 +2,7 @@ package git_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,19 +145,19 @@ func TestRewriteCommits_RejectsNoEdits(test *testing.T) {
 	}
 }
 
-// TestShiftDates_KeepsOffsetAndOptionallyShiftsCommitter verifies that a
+// TestEditCommits_KeepsOffsetAndOptionallyShiftsCommitter verifies that a
 // shift keeps each commit's own time zone offset, and moves the committer
 // date only when asked.
-func TestShiftDates_KeepsOffsetAndOptionallyShiftsCommitter(test *testing.T) {
+func TestEditCommits_KeepsOffsetAndOptionallyShiftsCommitter(test *testing.T) {
 	for _, shiftCommitter := range []bool{false, true} {
 		dir := test.TempDir()
 		gitCmd := initRepo(test, dir)
 		addCommit(test, dir, "first", gitCmd)
 		gitCmd("commit", "--amend", "--no-edit", "--date=2024-01-01T12:00:00+05:30")
 
-		opts := git.ShiftOptions{Shift: -90 * time.Minute, ShiftCommitter: shiftCommitter}
-		if err := git.ShiftDates(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, opts); err != nil {
-			test.Fatalf("git.ShiftDates: %v", err)
+		opts := git.BulkEditOptions{Shift: -90 * time.Minute, ShiftCommitter: shiftCommitter}
+		if err := git.EditCommits(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, opts); err != nil {
+			test.Fatalf("git.EditCommits: %v", err)
 		}
 
 		wantCommitter := testCommitDate.Format(time.RFC3339)
@@ -170,15 +171,109 @@ func TestShiftDates_KeepsOffsetAndOptionallyShiftsCommitter(test *testing.T) {
 	}
 }
 
-// TestShiftDates_RejectsZeroShift verifies that a zero shift is an error
-// rather than a rewrite that only changes hashes.
-func TestShiftDates_RejectsZeroShift(test *testing.T) {
+// TestEditCommits_RejectsNoChange verifies that a zero shift without a new
+// author is an error rather than a rewrite that only changes hashes.
+func TestEditCommits_RejectsNoChange(test *testing.T) {
 	dir := test.TempDir()
 	gitCmd := initRepo(test, dir)
 	addCommit(test, dir, "only", gitCmd)
 
-	err := git.ShiftDates(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, git.ShiftOptions{})
+	err := git.EditCommits(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, git.BulkEditOptions{})
 	if err == nil {
-		test.Fatal("expected an error for a zero shift")
+		test.Fatal("expected an error for an edit that changes nothing")
+	}
+}
+
+// TestEditCommits_SetsAuthorKeepingDatesAndCommitter verifies that setting
+// the author on several commits replaces only the author name and email,
+// keeping the dates, messages and committers.
+func TestEditCommits_SetsAuthorKeepingDatesAndCommitter(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "base", gitCmd)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+
+	format := "--format=%an <%ae> %aI | %cn <%ce> %cI | %s"
+	before := gitOutputFromDir(test, dir, "git", "log", format)
+
+	opts := git.BulkEditOptions{SetAuthor: true, AuthorName: "New Name", AuthorEmail: "new@example.com"}
+	hashes := []plumbing.Hash{revHash(test, dir, "HEAD"), revHash(test, dir, "HEAD~1")}
+	if err := git.EditCommits(mustOpen(test, dir), hashes, opts); err != nil {
+		test.Fatalf("git.EditCommits: %v", err)
+	}
+
+	beforeLines := strings.Split(before, "\n")
+	afterLines := strings.Split(gitOutputFromDir(test, dir, "git", "log", format), "\n")
+	for i, line := range afterLines {
+		want := beforeLines[i]
+		if i < 2 {
+			_, rest, _ := strings.Cut(want, "> ")
+			want = "New Name <new@example.com> " + rest
+		}
+		if line != want {
+			test.Errorf("commit %d = %q, want %q", i, line, want)
+		}
+	}
+}
+
+// TestEditCommits_ShiftsAndSetsAuthorTogether verifies that a shift and a new
+// author are applied in the same rewrite.
+func TestEditCommits_ShiftsAndSetsAuthorTogether(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "only", gitCmd)
+
+	opts := git.BulkEditOptions{Shift: time.Hour, SetAuthor: true, AuthorName: "New Name", AuthorEmail: "new@example.com"}
+	if err := git.EditCommits(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, opts); err != nil {
+		test.Fatalf("git.EditCommits: %v", err)
+	}
+
+	want := "New Name <new@example.com> " + testCommitDate.Add(time.Hour).Format(time.RFC3339)
+	if got := gitOutputFromDir(test, dir, "git", "log", "-1", "--format=%an <%ae> %aI"); got != want {
+		test.Errorf("author = %q, want %q", got, want)
+	}
+}
+
+// TestEditCommits_RejectsInvalidAuthor verifies that an author that would
+// produce a malformed commit is refused before anything is rewritten.
+func TestEditCommits_RejectsInvalidAuthor(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "only", gitCmd)
+	before := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD")
+
+	for _, opts := range []git.BulkEditOptions{
+		{SetAuthor: true, AuthorName: " ", AuthorEmail: "new@example.com"},
+		{SetAuthor: true, AuthorName: "New Name", AuthorEmail: "<new@example.com>"},
+	} {
+		err := git.EditCommits(mustOpen(test, dir), []plumbing.Hash{revHash(test, dir, "HEAD")}, opts)
+		if !errors.Is(err, git.ErrInvalidIdentity) {
+			test.Errorf("%+v: expected ErrInvalidIdentity, got %v", opts, err)
+		}
+	}
+	if got := gitOutputFromDir(test, dir, "git", "rev-parse", "HEAD"); got != before {
+		test.Errorf("branch moved: %s -> %s", before, got)
+	}
+}
+
+// TestConfiguredIdentity_ReadsRepositoryConfig verifies that the identity
+// comes from the repository's user.name / user.email.
+func TestConfiguredIdentity_ReadsRepositoryConfig(test *testing.T) {
+	test.Setenv("GIT_AUTHOR_NAME", "")
+	test.Setenv("GIT_AUTHOR_EMAIL", "")
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "only", gitCmd)
+	gitCmd("config", "user.name", "Configured Name")
+	gitCmd("config", "user.email", "configured@example.com")
+
+	identity, err := git.ConfiguredIdentity(mustOpen(test, dir))
+	if err != nil {
+		test.Fatalf("git.ConfiguredIdentity: %v", err)
+	}
+	want := git.Identity{Name: "Configured Name", Email: "configured@example.com"}
+	if identity != want {
+		test.Errorf("identity = %+v, want %+v", identity, want)
 	}
 }

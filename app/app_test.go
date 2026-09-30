@@ -274,10 +274,10 @@ func TestUpdateCommit_RejectsInvalidAuthor(test *testing.T) {
 	}
 }
 
-// TestShiftCommitDates_ShiftsAndUndoRestores verifies that several unpushed
+// TestEditCommits_ShiftsAndUndoRestores verifies that several unpushed
 // commits are shifted in one rewrite, keeping their committer dates, and
 // that a single undo restores the original branch tip.
-func TestShiftCommitDates_ShiftsAndUndoRestores(test *testing.T) {
+func TestEditCommits_ShiftsAndUndoRestores(test *testing.T) {
 	dir, app := setupRepoWithUnpushedCommit(test)
 	commitFile(test, dir, "second")
 	if _, err := app.ReloadRepository(); err != nil {
@@ -286,12 +286,12 @@ func TestShiftCommitDates_ShiftsAndUndoRestores(test *testing.T) {
 	before := runGit(test, dir, "rev-parse", "HEAD")
 	datesBefore := runGit(test, dir, "log", "-2", "--format=%at %ct")
 
-	result, err := app.ShiftCommitDates(ShiftRequest{
+	result, err := app.EditCommits(BulkEditRequest{
 		Hashes:  []string{before, runGit(test, dir, "rev-parse", "HEAD~1")},
 		Minutes: 90,
 	})
-	if err != nil || !result.Success || result.Message != "2 commits shifted" {
-		test.Fatalf("ShiftCommitDates = %+v, %v", result, err)
+	if err != nil || !result.Success || result.Message != "2 commits updated" {
+		test.Fatalf("EditCommits = %+v, %v", result, err)
 	}
 
 	beforeLines := strings.Split(datesBefore, "\n")
@@ -316,13 +316,13 @@ func TestShiftCommitDates_ShiftsAndUndoRestores(test *testing.T) {
 	}
 }
 
-// TestShiftCommitDates_RejectsPushedCommit verifies that including a pushed
-// commit refuses the whole shift.
-func TestShiftCommitDates_RejectsPushedCommit(test *testing.T) {
+// TestEditCommits_RejectsPushedCommit verifies that including a pushed
+// commit refuses the whole edit.
+func TestEditCommits_RejectsPushedCommit(test *testing.T) {
 	dir, app := setupRepoWithUnpushedCommit(test)
 	head := runGit(test, dir, "rev-parse", "HEAD")
 
-	_, err := app.ShiftCommitDates(ShiftRequest{
+	_, err := app.EditCommits(BulkEditRequest{
 		Hashes:  []string{head, runGit(test, dir, "rev-parse", "HEAD~1")},
 		Minutes: 60,
 	})
@@ -331,5 +331,58 @@ func TestShiftCommitDates_RejectsPushedCommit(test *testing.T) {
 	}
 	if got := runGit(test, dir, "rev-parse", "HEAD"); got != head {
 		test.Errorf("HEAD moved from %s to %s", head, got)
+	}
+}
+
+// TestEditCommits_SetsAuthorAndUndoRestores verifies that the author of
+// several unpushed commits is replaced in one rewrite, keeping their dates,
+// and that a single undo restores the original branch tip.
+func TestEditCommits_SetsAuthorAndUndoRestores(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	commitFile(test, dir, "second")
+	if _, err := app.ReloadRepository(); err != nil {
+		test.Fatalf("ReloadRepository: %v", err)
+	}
+	before := runGit(test, dir, "rev-parse", "HEAD")
+	datesBefore := runGit(test, dir, "log", "-2", "--format=%at %ct")
+
+	result, err := app.EditCommits(BulkEditRequest{
+		Hashes:      []string{before, runGit(test, dir, "rev-parse", "HEAD~1")},
+		SetAuthor:   true,
+		AuthorName:  "Right Person",
+		AuthorEmail: "right@example.com",
+	})
+	if err != nil || !result.Success {
+		test.Fatalf("EditCommits = %+v, %v", result, err)
+	}
+
+	if got := runGit(test, dir, "log", "-3", "--format=%an <%ae>"); got != "Right Person <right@example.com>\nRight Person <right@example.com>\nTest Author <test@example.com>" {
+		test.Errorf("authors = %q", got)
+	}
+	if got := runGit(test, dir, "log", "-2", "--format=%at %ct"); got != datesBefore {
+		test.Errorf("dates changed: %q -> %q", datesBefore, got)
+	}
+
+	if result, err := app.UndoLastOperation(); err != nil || !result.Success {
+		test.Fatalf("UndoLastOperation = %+v, %v", result, err)
+	}
+	if got := runGit(test, dir, "rev-parse", "HEAD"); got != before {
+		test.Errorf("HEAD = %s after undo, want %s", got, before)
+	}
+}
+
+// TestGetGitIdentity_ReturnsConfiguredIdentity verifies that the identity
+// comes from the open repository's config.
+func TestGetGitIdentity_ReturnsConfiguredIdentity(test *testing.T) {
+	test.Setenv("GIT_AUTHOR_NAME", "")
+	test.Setenv("GIT_AUTHOR_EMAIL", "")
+	_, app := setupRepoWithUnpushedCommit(test)
+
+	identity, err := app.GetGitIdentity()
+	if err != nil {
+		test.Fatalf("GetGitIdentity: %v", err)
+	}
+	if want := (Identity{Name: "Test Author", Email: "test@example.com"}); identity != want {
+		test.Errorf("identity = %+v, want %+v", identity, want)
 	}
 }

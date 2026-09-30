@@ -237,11 +237,15 @@ Found in the follow-up review (2026-09-25):
 
 ### Commit editing
 
-Editing commit metadata in `EditPanel` and `BulkDatePanel`.
+Editing commit metadata in `EditPanel` and `BulkEditPanel`.
 
-- [ ] **Use my identity** button by the author fields in `EditPanel`, filling in `user.name` / `user.email` from the Git config (the lookup already exists for reflog entries in `git/reflog.go`). The most common reason to change an author is a commit made with the wrong identity
-- [ ] **Set author on several commits** in `BulkDatePanel`, next to the date shift, with the same Use my identity button, so a batch of wrongly attributed commits is fixed in one rewrite
-- [ ] **Spread dates evenly** in `BulkDatePanel`: set a first and last date and space the selected commits between them, for backdating a series without making every commit share the same shift
+- [x] **Use my identity** button by the author fields in `EditPanel`, filling in `user.name` / `user.email` from the Git config. The most common reason to change an author is a commit made with the wrong identity
+  - [x] `ConfiguredIdentity` in `git/identity.go` (`GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`, then repository and global config) and the `GetGitIdentity` bound method (`TestConfiguredIdentity_*`, `TestGetGitIdentity_*`)
+  - [x] `UseMyIdentityButton`, shared with `BulkEditPanel`; identity validation moved to `src/identity.ts`
+- [x] **Set author on several commits** in `BulkEditPanel` (renamed from `BulkDatePanel`), next to the date shift, with the same Use my identity button, so a batch of wrongly attributed commits is fixed in one rewrite
+  - [x] `ShiftDates` / `ShiftCommitDates` generalised to `git.EditCommits` / `EditCommits` (`BulkEditOptions` / `BulkEditRequest`): a date shift, a new author, or both in one rewrite; committers are kept (`TestEditCommits_*`)
+  - [x] "Set Author" checkbox with name and email fields, validated like `EditPanel`; per-commit author preview in the panel and `ConfirmDialog`
+- [ ] **Spread dates evenly** in `BulkEditPanel`: set a first and last date and space the selected commits between them, for backdating a series without making every commit share the same shift
 - [ ] **Keep dates within a time window**: move the selected commits' times into a daily window (for example 09:00–17:00), keeping their order and days (like `git-redate` and similar scripts)
 - [ ] **Change time zone, keeping the moment**: convert the selected commits' dates to another offset (for example "my time zone") without changing the actual point in time, unlike the offset menu in `EditPanel`, which keeps the wall-clock time
 - [ ] **Edit the committer**: an option to set the committer name and email too, or to reset them to the author, since a wrong identity usually affects both. Today the committer is always kept
@@ -253,8 +257,8 @@ Editing commit metadata in `EditPanel` and `BulkDatePanel`.
   - [x] `EditPanel` has −1d, −1h, +1h, +1d (shift the wall-clock time, keeping the offset) and Now (current time and this computer's offset)
 - [x] Shift the dates of several selected commits at once (multi-select in `CommitList`, ±1h/±1d in a bulk panel)
   - [x] `RewriteCommits`: edit any set of unpushed commits in one chain rebuild, so one undo and one reflog entry cover the batch (`TestRewriteCommits_*`); `AmendCommit` / `RebaseRewrite` now wrap it
-  - [x] `ShiftCommitDates` bound method (relative shift per commit, keeping each commit's offset; optionally shift committer dates) and `GetAffectedRefs` for several commits (`TestShiftDates_*`, `TestShiftCommitDates_*`)
-  - [x] Multi-select in `CommitList` (Ctrl/Shift-click, Shift+↑/↓; unpushed commits only) and `BulkDatePanel` with a per-commit preview in `ConfirmDialog` (now a generic frame; `CommitComparison` holds the single-commit rows)
+  - [x] `ShiftCommitDates` bound method (relative shift per commit, keeping each commit's offset; optionally shift committer dates) and `GetAffectedRefs` for several commits *(now `EditCommits`, see Set author on several commits)*
+  - [x] Multi-select in `CommitList` (Ctrl/Shift-click, Shift+↑/↓; unpushed commits only) and `BulkDatePanel` (now `BulkEditPanel`) with a per-commit preview in `ConfirmDialog` (now a generic frame; `CommitComparison` holds the single-commit rows)
 
 ### Commit list and selection
 

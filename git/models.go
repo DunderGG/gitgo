@@ -26,17 +26,28 @@ type AmendOptions struct {
 	MoveBranches []string
 }
 
-// ShiftOptions describes a date shift applied to several commits (see
-// ShiftDates).
-type ShiftOptions struct {
-	// Shift is added to each commit's author date. It must not be zero.
+// BulkEditOptions describes the same change applied to several commits (see
+// EditCommits): a date shift, a new author, or both.
+type BulkEditOptions struct {
+	// Shift is added to each commit's author date. Zero keeps the dates.
 	Shift time.Duration
 	// ShiftCommitter also adds Shift to each commit's committer date. When
 	// false the committer dates are kept.
 	ShiftCommitter bool
+	// SetAuthor replaces each commit's author name and email with AuthorName
+	// and AuthorEmail. The author dates are only changed by Shift.
+	SetAuthor   bool
+	AuthorName  string
+	AuthorEmail string
 	// MoveBranches names other local branches to move along with the
 	// rewrite, as in AmendOptions.
 	MoveBranches []string
+}
+
+// Identity is a name and email as used in a commit's author or committer.
+type Identity struct {
+	Name  string
+	Email string
 }
 
 // CommitEntry is the git-layer representation of a single commit.
