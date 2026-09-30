@@ -4,6 +4,7 @@ param(
     [switch]$NewRun,
     [switch]$Test,
     [switch]$FullOutput,
+    [switch]$Help,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$WailsArgs
 )
@@ -14,6 +15,38 @@ $ErrorActionPreference = "Stop"
 # Without this PowerShell uses the system ANSI code page (e.g. Windows-1252),
 # which corrupts multi-byte characters like • and ♥ in Wails' output.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+function Show-Help {
+    Write-Host @"
+Usage: .\build.ps1 [options] [wails build args...]
+
+Checks prerequisites (Go 1.25+, Node.js 20+, npm, Wails), then runs 'wails build'.
+
+Options:
+  -SkipBuild    Only check prerequisites; do not build.
+  -Run          Build, then launch the app.
+  -NewRun       Build, delete GitGo's saved settings and window state, then
+                launch the app as a new user. GitGo must be closed.
+  -Test         Build, then run the Go tests (go test ./...).
+  -FullOutput   Show all Wails output, including INFO lines.
+  -Help         Show this help and exit.
+
+Any other arguments are passed through to 'wails build'.
+
+-SkipBuild cannot be combined with -Run, -NewRun or -Test.
+-Test cannot be combined with -Run or -NewRun.
+
+Examples:
+  .\build.ps1 -Run
+  .\build.ps1 -Test
+  .\build.ps1 -clean -Run
+"@
+}
+
+if ($Help) {
+    Show-Help
+    exit 0
+}
 
 function Sync-PathFromRegistry {
     # Refresh the current session PATH so newly installed tools are visible

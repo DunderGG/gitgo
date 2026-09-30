@@ -9,8 +9,39 @@ RUN_TESTS=0
 VERBOSE=0
 WAILS_ARGS=()
 
+show_help() {
+    cat <<'EOF'
+Usage: ./build.sh [options] [wails build args...]
+
+Checks prerequisites (Go 1.25+, Node.js 20+, npm, Wails), then runs 'wails build'.
+
+Options:
+  --skip-build  Only check prerequisites; do not build.
+  --run         Build, then launch the app.
+  --new-run     Build, delete GitGo's saved settings and window state, then
+                launch the app as a new user. GitGo must be closed.
+  --test        Build, then run the Go tests (go test ./...).
+  --verbose     Show all Wails output, including INFO lines.
+  -h, --help    Show this help and exit.
+
+Any other arguments are passed through to 'wails build'.
+
+--skip-build cannot be combined with --run, --new-run or --test.
+--test cannot be combined with --run or --new-run.
+
+Examples:
+  ./build.sh --run
+  ./build.sh --test
+  ./build.sh -clean --run
+EOF
+}
+
 for arg in "$@"; do
     case "$arg" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
         --skip-build)
             SKIP_BUILD=1
             ;;
