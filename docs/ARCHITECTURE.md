@@ -147,9 +147,10 @@ See [diagrams/layer-diagram.puml](diagrams/layer-diagram.puml).
 The Wails entry point. Its only responsibilities are:
 
 1. **Embed the frontend** — the `//go:embed all:frontend/dist` directive bundles the compiled Vite output into the binary at build time so the app ships as a single executable with no external assets.
-2. **Configure the window** — title (`"GitGo"`), initial size (1200×800), minimum size (900×600, below which the header and commit columns no longer fit), and background colour (the same `gray-900` used by Tailwind, preventing a flash of white on startup). Platform options keep the native chrome dark to match the dark-only UI: `windows.Dark` theme on Windows, `NSAppearanceNameDarkAqua` plus an About panel (title, description, icon) on macOS, and the window icon and program name on Linux. The icon comes from `build/appicon.png`, embedded with `//go:embed` because Linux and the macOS About panel need it at runtime.
-3. **Wire lifecycle hooks** — `OnStartup: app.Startup` passes the Wails context into the `App` struct so bound methods can use it for dialogs and events.
-4. **Register bindings** — `Bind: []interface{}{app}` exposes all exported methods on `*App` to the frontend IPC bridge.
+2. **Configure the window** — title (`"GitGo"`), initial size (the size saved by the last run, else 1300×880, which fits the edit panel without scrolling), minimum size (900×600, below which the header and commit columns no longer fit), and background colour (the same `gray-900` used by Tailwind, preventing a flash of white on startup). Platform options keep the native chrome dark to match the dark-only UI: `windows.Dark` theme on Windows, `NSAppearanceNameDarkAqua` plus an About panel (title, description, icon) on macOS, and the window icon and program name on Linux. The icon comes from `build/appicon.png`, embedded with `//go:embed` because Linux and the macOS About panel need it at runtime.
+3. **Wire lifecycle hooks** — `OnStartup: application.Startup` passes the Wails context into the `App` struct so bound methods can use it for dialogs and events.
+   `OnDomReady: window.FitToScreen` shrinks the window when it is larger than the screen, and `OnBeforeClose: window.Save` stores its size and maximised state in `gitgo/window.json` under the user config directory (`app/window.go`). `Window` is not bound to the frontend.
+4. **Register bindings** — `Bind: []interface{}{application}` exposes all exported methods on `*App` to the frontend IPC bridge.
 
 Nothing else belongs here. All application logic lives in `app/` and `git/`.
 
@@ -579,6 +580,7 @@ GitGo/
 ├── app/
 │   ├── app.go               # App struct — bound methods exposed to frontend
 │   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
+│   ├── window.go            # Window size saved between runs (lifecycle hooks, not bound)
 │   └── models.go            # DTOs shared across layers
 │
 ├── git/

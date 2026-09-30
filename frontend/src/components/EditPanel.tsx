@@ -57,6 +57,16 @@ const EMPTY_FORM: EditFormState = {
   committerEmail: '',
 }
 
+// Outer box of the edit panels. On wide windows it fits a 72-character line
+// of the monospace message field, the usual wrap width for commit message
+// bodies, but never takes more than half the window. The panel uses the
+// message field's font so 72ch measures the same characters; PANEL_BODY_CLASS
+// switches its content back to the normal font. 5rem covers the paddings,
+// borders and scrollbars.
+export const PANEL_CLASS =
+  'h-full min-h-0 border-t lg:border-t-0 lg:border-l border-gray-800 bg-gray-900/60 font-mono text-sm lg:w-[calc(72ch_+_5rem)] lg:max-w-[50vw]'
+export const PANEL_BODY_CLASS = 'h-full overflow-y-auto p-4 sm:p-5 font-sans text-base'
+
 // UTC offsets in use around the world. The commit's original offset is added
 // to the list when it is not one of these.
 const COMMON_OFFSETS = [
@@ -365,8 +375,8 @@ export default function EditPanel() {
 
   return (
     <>
-      <aside className="h-full min-h-0 border-t lg:border-t-0 lg:border-l border-gray-800 bg-gray-900/60">
-        <div className="h-full overflow-y-auto p-4 sm:p-5">
+      <aside className={PANEL_CLASS}>
+        <div className={PANEL_BODY_CLASS}>
         <h2 className="text-base font-semibold text-gray-100">Edit Commit</h2>
         <p className="mt-1 text-xs text-gray-400">
           Select a commit to load its metadata, then review changes before applying them.
@@ -430,7 +440,7 @@ export default function EditPanel() {
               onChange={(e) => setForm((current) => ({ ...current, message: e.target.value }))}
               disabled={fieldsDisabled}
               rows={5}
-              className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 font-mono text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Commit message"
             />
           </div>

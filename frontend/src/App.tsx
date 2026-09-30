@@ -103,7 +103,7 @@ function App() {
         {!repoInfo ? (
           <RepoSelector />
         ) : (
-          <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] overflow-hidden">
+          <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] overflow-hidden">
             <CommitList />
             {isMultiSelect ? <BulkEditPanel /> : <EditPanel />}
           </div>

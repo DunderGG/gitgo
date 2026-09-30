@@ -23,25 +23,43 @@ var assets embed.FS
 //go:embed build/appicon.png
 var icon []byte
 
+var (
+	// defaultWindowSize fits the edit panel without scrolling: 72 characters
+	// of the message field next to the commit list, and the panel's usual
+	// fields (839px of page) under the title bar. FitToScreen shrinks it on
+	// smaller screens.
+	defaultWindowSize = app.WindowSize{Width: 1300, Height: 880}
+	// Below this size the header (path + branch selector) and the commit
+	// list columns no longer fit.
+	minimumWindowSize = app.WindowSize{Width: 900, Height: 600}
+)
+
 func main() {
-	app := app.New()
+	application := app.New()
+	window := app.LoadWindow(defaultWindowSize, minimumWindowSize)
+	size := window.Size()
+	startState := options.Normal
+	if size.Maximised {
+		startState = options.Maximised
+	}
 
 	err := wails.Run(&options.App{
-		Title:  "GitGo",
-		Width:  1200,
-		Height: 800,
-		// Below this size the header (path + branch selector) and the commit
-		// list columns no longer fit.
-		MinWidth:  900,
-		MinHeight: 600,
+		Title:            "GitGo",
+		Width:            size.Width,
+		Height:           size.Height,
+		WindowStartState: startState,
+		MinWidth:         minimumWindowSize.Width,
+		MinHeight:        minimumWindowSize.Height,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		// Matches the frontend's bg-gray-900 so there is no flash while loading.
 		BackgroundColour: &options.RGBA{R: 17, G: 24, B: 39, A: 1},
-		OnStartup:        app.Startup,
+		OnStartup:        application.Startup,
+		OnDomReady:       window.FitToScreen,
+		OnBeforeClose:    window.Save,
 		Bind: []interface{}{
-			app,
+			application,
 		},
 		// The UI is dark-only, so use a dark title bar on every platform.
 		Windows: &windows.Options{

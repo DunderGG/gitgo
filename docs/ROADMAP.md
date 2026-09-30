@@ -323,7 +323,10 @@ Handing the repository or its data to other programs.
 
 ### App settings and help
 
-- [ ] Persistent app preferences (window size, warning visibility, default UI behavior)
+- [ ] Persistent app preferences
+  - [x] Window size and maximised state, saved on close to `gitgo/window.json` in the user config directory and shrunk to fit a smaller screen at startup
+  - [ ] Window position
+  - [ ] Warning visibility and default UI behavior
 - [ ] **Command palette** (`Ctrl+Shift+P`) listing every action with its shortcut, as in Sublime Merge and GitKraken
 - [ ] **Light theme** and following the system theme; the app is dark only today (`windows.Dark` in `main.go`, dark Tailwind classes throughout)
 - [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens

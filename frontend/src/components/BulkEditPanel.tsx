@@ -3,6 +3,7 @@ import { EditCommits, GetAffectedRefs, GetCommitLog, GetSignedCommits, RefreshLo
 import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
+import { PANEL_BODY_CLASS, PANEL_CLASS } from './EditPanel'
 import UseMyIdentityButton from './UseMyIdentityButton'
 import { formatShift, shiftWallClock, splitRfc3339, toPreviewDateText } from '../dates'
 import { errorText } from '../errors'
@@ -198,8 +199,8 @@ export default function BulkEditPanel() {
 
   return (
     <>
-      <aside className="h-full min-h-0 border-t lg:border-t-0 lg:border-l border-gray-800 bg-gray-900/60">
-        <div className="h-full overflow-y-auto p-4 sm:p-5">
+      <aside className={PANEL_CLASS}>
+        <div className={PANEL_BODY_CLASS}>
           <h2 className="text-base font-semibold text-gray-100">Edit Several Commits</h2>
           <p className="mt-1 text-xs text-gray-400">
             Shift the dates or set the author and committer of the {selected.length} selected commits in one rewrite. Each commit
