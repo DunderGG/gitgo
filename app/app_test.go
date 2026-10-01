@@ -444,3 +444,70 @@ func TestGetGitIdentity_ReturnsConfiguredIdentity(test *testing.T) {
 		test.Errorf("identity = %+v, want %+v", identity, want)
 	}
 }
+
+// TestSpreadDates_PreviewIsApplied verifies that the dates SpreadDates
+// returns are the ones EditCommits writes, oldest commit first, and that
+// nothing is written by the preview itself.
+func TestSpreadDates_PreviewIsApplied(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	commitFile(test, dir, "second")
+	commitFile(test, dir, "third")
+	if _, err := app.ReloadRepository(); err != nil {
+		test.Fatalf("ReloadRepository: %v", err)
+	}
+	hashes := strings.Split(runGit(test, dir, "log", "-3", "--format=%H"), "\n")
+	before := hashes[0]
+
+	spread, err := app.SpreadDates(SpreadRequest{
+		Hashes:        hashes,
+		First:         "2024-03-01T09:00:00+02:00",
+		Last:          "2024-03-03T09:00:00+02:00",
+		Spacing:       "random",
+		MinGapMinutes: 30,
+		Seed:          42,
+	})
+	if err != nil {
+		test.Fatalf("SpreadDates: %v", err)
+	}
+	if got := runGit(test, dir, "rev-parse", "HEAD"); got != before {
+		test.Fatalf("SpreadDates moved HEAD from %s to %s", before, got)
+	}
+
+	result, err := app.EditCommits(BulkEditRequest{Hashes: hashes, Dates: spread.Dates})
+	if err != nil || !result.Success {
+		test.Fatalf("EditCommits = %+v, %v", result, err)
+	}
+
+	// The log is newest first, like hashes, so each line is the rewritten
+	// copy of hashes[i].
+	dates := strings.Split(runGit(test, dir, "log", "-3", "--format=%aI"), "\n")
+	for i, hash := range hashes {
+		if dates[i] != spread.Dates[hash] {
+			test.Errorf("commit %d date = %s, previewed %s", i, dates[i], spread.Dates[hash])
+		}
+	}
+	// 09:00 at +02:00, whatever offset the commits have.
+	moments := strings.Split(runGit(test, dir, "log", "-3", "--format=%at"), "\n")
+	if moments[2] != "1709276400" || moments[0] != "1709449200" {
+		test.Errorf("first and last author dates (Unix) = %s and %s, want 1709276400 and 1709449200", moments[2], moments[0])
+	}
+}
+
+// TestSpreadDates_RejectsInvalidRange verifies that a last date before the
+// first is reported as an error.
+func TestSpreadDates_RejectsInvalidRange(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	commitFile(test, dir, "second")
+	if _, err := app.ReloadRepository(); err != nil {
+		test.Fatalf("ReloadRepository: %v", err)
+	}
+
+	_, err := app.SpreadDates(SpreadRequest{
+		Hashes: strings.Split(runGit(test, dir, "log", "-2", "--format=%H"), "\n"),
+		First:  "2024-03-02T09:00:00Z",
+		Last:   "2024-03-01T09:00:00Z",
+	})
+	if !errors.Is(err, gitpkg.ErrInvalidSpreadRange) {
+		test.Errorf("err = %v, want ErrInvalidSpreadRange", err)
+	}
+}

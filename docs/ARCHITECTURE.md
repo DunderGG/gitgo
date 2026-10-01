@@ -177,7 +177,8 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetCommitDetail(hash string) (CommitDetail, error)` | Looks up a commit object by hash in the currently opened repository and returns full metadata (message, author name/email, date, committer name/email/date, unpushed flag) for the edit UI. |
 | `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
 | `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit via `RebaseRewrite`. Re-reads the repository, performs the server-side unpushed safety check, records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state (shared with `EditCommits` through `runRewrite`). |
-| `EditCommits(req BulkEditRequest) (OperationResult, error)` | Applies the same change to several unpushed commits in one `git.EditCommits` rewrite: moves each author date (optionally also the committer date) by `req.Minutes`, keeping each commit's offset, and with `req.SetAuthor` replaces the author name and email. `req.Committer` keeps the committer names and emails, sets them all to `req.CommitterName` / `req.CommitterEmail`, or copies each commit's (new) author. One undo reverts the whole batch. |
+| `EditCommits(req BulkEditRequest) (OperationResult, error)` | Applies the same change to several unpushed commits in one `git.EditCommits` rewrite: moves each author date by `req.Minutes` or sets it to its entry in `req.Dates` (from `SpreadDates`), keeping each commit's offset (with `req.ShiftCommitter` the committer date moves by as much), and with `req.SetAuthor` replaces the author name and email. `req.Committer` keeps the committer names and emails, sets them all to `req.CommitterName` / `req.CommitterEmail`, or copies each commit's (new) author. One undo reverts the whole batch. |
+| `SpreadDates(req SpreadRequest) (SpreadResult, error)` | Computes, without writing anything, new author dates that fit the selected commits between `req.First` and `req.Last` (`git.SpreadDates`), for the bulk panel's preview. `req.Spacing` is `"keep"`, `"even"` or `"random"`; random spacing keeps at least `req.MinGapMinutes` between commits and is repeatable with `req.Seed`. The panel sends the returned dates back as `BulkEditRequest.Dates`, so what is applied is exactly what was shown. |
 | `GetGitIdentity() (Identity, error)` | Returns the author identity git would use for a new commit (`GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`, then `user.name` / `user.email` from the repository and global config), for the "Use my identity" buttons. |
 | `GetAffectedRefs(hashes []string) ([]AffectedRef, error)` | Lists other branches and tags an edit of the given commits would leave behind, for the confirm dialog. |
 | `GetSignedCommits(hashes []string) ([]SignedCommit, error)` | Lists the signed commits an edit of the given commits would rebuild (the edited ones and those above them), which come out unsigned, for the confirm dialog's warning. |
@@ -397,12 +398,14 @@ The panel intentionally owns transient UI state (loading, local form values, dia
 Replaces `EditPanel` while several commits are selected (`selectedHashes.length > 1`). It works from the `CommitSummary` entries already in the store, so it loads nothing.
 
 Behaviour:
-- The shared `DateShiftButtons` (±1h / ±1d) add to one accumulated shift; nothing is written until the user confirms. Each selected commit shows its current and new author date in its own offset (helpers in `src/dates.ts`).
-- "Also shift committer dates" (on by default) keeps each commit's author/committer gap.
+- A "Dates" switch picks Shift or Spread; each keeps its inputs while the other is shown, and only the selected one is applied. Nothing is written until the user confirms. Each selected commit shows its current and new author date in its own offset (helpers in `src/dates.ts`).
+- Shift: the shared `DateShiftButtons` (±1h / ±1d) add to one accumulated shift.
+- Spread: First and Last (`DateTimeField`, shared with `EditPanel`) start as the oldest and newest selected commit's dates (`null` state follows the selection until edited). "Keep relative spacing", "Even" or "Random", with a "Minimum gap" in minutes (default 10, validated before calling the backend) and "Re-roll" (a new random seed) for Random. Every input change calls `SpreadDates`; the answer is stored with a key of its inputs, so a stale answer is never shown or applied, and "Review Changes" stays disabled until the current answer has arrived. The list shows each new date with the gap to the next older selected commit (`formatGap`). A line under the options describes the chosen spacing; notices cover the even-spacing fallback, other time zones, and invalid ranges (the backend's error text).
+- "Also move committer dates" (on by default) moves each committer date by as much as its author date, keeping the gap between them.
 - "Set Author" enables a name and email that replace every selected commit's author, validated with the same rules as `EditPanel` (`src/identity.ts`). "Use my identity" fills them from `GetGitIdentity` and ticks the checkbox.
 - The Committer section (`CommitterFields`, shared with `EditPanel`) keeps the committers (the default), makes each one the same as its commit's author, or gives them all the same name and email. The current committer names come from `CommitSummary.committer`.
-- A shift, a new author and a new committer can be applied together; "Review Changes" needs at least one.
-- Warns, and disables "Review Changes", when a selected commit has been pushed since it was selected; warns when the shift makes a commit older than the one listed below it.
+- New dates, a new author and a new committer can be applied together; "Review Changes" needs at least one change.
+- Warns, and disables "Review Changes", when a selected commit has been pushed since it was selected; warns when the new dates make a commit older than the one listed below it.
 - On confirm, calls `EditCommits` inside `runGitOperation('Rewriting commit history…', …)`, then `RefreshLog` and `setRepo`, which clears the selection because every edited commit has a new hash. One undo reverts the whole edit.
 
 ---
@@ -425,7 +428,7 @@ Behaviour:
 
 A modal with usage instructions, opened with the **?** button in the header (shown on every screen) or `F1`. Its open state is the store's `isHelpOpen`, so the shortcut hook and the header button share it. Wails v2 only supports one native window, so the help is a modal overlay rather than a separate window.
 
-- Static content: a numbered walkthrough (open a repository, pushed vs unpushed, edit one commit, shift several dates, review and apply, undo), the keyboard shortcut table, and a "Good to know" list of safety rules.
+- Static content: a numbered walkthrough (open a repository, pushed vs unpushed, edit one commit, shift or spread the dates of several, review and apply, undo), the keyboard shortcut table, and a "Good to know" list of safety rules.
 - Closes on `Escape`, `F1`, the **×** button or a click on the backdrop; like `ConfirmDialog`, a capture-phase listener also swallows `Ctrl+Z` while it is open.
 - Focuses its close button on open and restores the previous focus on close.
 
@@ -579,12 +582,13 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetTerminalCommand` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetTerminalCommand` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
-| `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers and `EditCommits` for bulk date shifts and author and committer changes; committer changes (`changeCommitter`: keep, set, or copy the author), commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author and committer validation (`validateIdentity`) |
+| `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers and `EditCommits` for bulk date changes (a shift or per-commit dates) and author and committer changes; committer changes (`changeCommitter`: keep, set, or copy the author), commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author and committer validation (`validateIdentity`) |
+| `git/spread.go` | `SpreadDates`: new author dates that fit commits between a first and last date, in first-parent history order, keeping relative spacing (falling back to even when the current dates are equal or out of order) even spacing, or seeded random spacing with a minimum gap (the gaps are set aside, the rest is placed uniformly, so it never retries); `ErrInvalidSpreadRange` |
 | `git/identity.go` | `ConfiguredIdentity`: the author name and email git would use for a new commit (environment, then repository and global config) |
 | `git/signed.go` | `FindSignedCommits`: the signed commits in the chain a rewrite rebuilds; checks the raw headers for `gpgsig-sha256`, which go-git drops |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
@@ -614,6 +618,7 @@ GitGo/
 │   ├── log.go               # Commit log walking
 │   ├── git_test.go          # Unit tests (real on-disk repos via t.TempDir)
 │   ├── rewrite.go           # (Phase 2) Amend + rebase-based rewriting
+│   ├── spread.go            # New dates that fit commits between a first and last date
 │   └── undo.go              # (Phase 3) Reset branch to pre-rewrite tip
 │
 ├── frontend/
@@ -628,9 +633,10 @@ GitGo/
 │       ├── App.tsx
 │       ├── components/
 │       │   ├── BranchSelector.tsx  # (Phase 3)
-│       │   ├── BulkEditPanel.tsx   # Shift dates / set author and committer of several commits
+│       │   ├── BulkEditPanel.tsx   # Shift or spread dates / set author and committer of several commits
 │       │   ├── CommitterFields.tsx # Committer section shared by the edit panels
 │       │   ├── DateShiftButtons.tsx
+│       │   ├── DateTimeField.tsx
 │       │   ├── UseMyIdentityButton.tsx
 │       │   ├── RepoSelector.tsx
 │       │   ├── Spinner.tsx         # (Phase 3)

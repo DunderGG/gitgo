@@ -3,10 +3,10 @@ import { GetAffectedRefs, GetCommitDetail, GetCommitLog, GetSignedCommits, Refre
 import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog, { CommitComparison, ConfirmValues } from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
+import DateTimeField from './DateTimeField'
 import Kbd from './Kbd'
 import Spinner from './Spinner'
 import {
-  formatOffset,
   nowWallClock,
   shiftWallClock,
   splitRfc3339,
@@ -67,37 +67,6 @@ const EMPTY_FORM: EditFormState = {
 export const PANEL_CLASS =
   'h-full min-h-0 border-t lg:border-t-0 lg:border-l border-gray-800 bg-gray-900/60 font-mono text-sm lg:w-[calc(72ch_+_5rem)] lg:max-w-[50vw]'
 export const PANEL_BODY_CLASS = 'h-full overflow-y-auto p-4 sm:p-5 font-sans text-base'
-
-// UTC offsets in use around the world. The commit's original offset is added
-// to the list when it is not one of these.
-const COMMON_OFFSETS = [
-  '-12:00', '-11:00', '-10:00', '-09:30', '-09:00', '-08:00', '-07:00', '-06:00',
-  '-05:00', '-04:00', '-03:30', '-03:00', '-02:00', '-01:00', '+00:00', '+01:00',
-  '+02:00', '+03:00', '+03:30', '+04:00', '+04:30', '+05:00', '+05:30', '+05:45',
-  '+06:00', '+06:30', '+07:00', '+08:00', '+08:45', '+09:00', '+09:30', '+10:00',
-  '+10:30', '+11:00', '+12:00', '+12:45', '+13:00', '+14:00',
-]
-
-// datetime-local inputs leave out ":00" seconds in their value, so add them back.
-function normalizeWallClock(inputValue: string): string {
-  return inputValue.length === 16 ? `${inputValue}:00` : inputValue.slice(0, 19)
-}
-
-function offsetMinutes(offset: string): number {
-  const sign = offset.startsWith('-') ? -1 : 1
-  const [hours, minutes] = offset.slice(1).split(':').map(Number)
-  return sign * (hours * 60 + minutes)
-}
-
-// Offset of this computer's time zone at the given wall-clock time, used to
-// label the matching option.
-function localOffsetAt(dateLocal: string): string | null {
-  const date = new Date(dateLocal)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-  return formatOffset(-date.getTimezoneOffset())
-}
 
 // The committer name and email the form would give the commit.
 function newCommitter(form: EditFormState, committer: CommitterInfo): { name: string; email: string } {
@@ -282,15 +251,6 @@ export default function EditPanel() {
   const committerPreview = committer ? newCommitter(form, committer) : null
   const subjectLength = lineLength(form.message.split('\n')[0])
   const messageHints = messageGuideHints(form.message, messageGuides)
-
-  const offsetOptions = [...COMMON_OFFSETS]
-  for (const offset of [originalForm?.offset, form.offset]) {
-    if (offset && !offsetOptions.includes(offset)) {
-      offsetOptions.push(offset)
-    }
-  }
-  offsetOptions.sort((left, right) => offsetMinutes(left) - offsetMinutes(right))
-  const localOffset = localOffsetAt(form.dateLocal)
 
   async function openConfirmDialog() {
     if (!selectedHash) {
@@ -497,32 +457,12 @@ export default function EditPanel() {
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-400">
               Author Date
             </label>
-            <div className="mt-1 flex flex-wrap gap-2">
-              <input
-                type="datetime-local"
-                step={1}
-                value={form.dateLocal}
-                onChange={(e) =>
-                  setForm((current) => ({ ...current, dateLocal: normalizeWallClock(e.target.value) }))
-                }
-                disabled={fieldsDisabled}
-                className="min-w-[13rem] flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-              />
-              <select
-                value={form.offset}
-                onChange={(e) => setForm((current) => ({ ...current, offset: e.target.value }))}
-                disabled={fieldsDisabled}
-                aria-label="Time zone offset"
-                className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {offsetOptions.map((offset) => (
-                  <option key={offset} value={offset}>
-                    UTC{offset}
-                    {offset === localOffset ? ' (local)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <DateTimeField
+              value={{ dateLocal: form.dateLocal, offset: form.offset }}
+              onChange={({ dateLocal, offset }) => setForm((current) => ({ ...current, dateLocal, offset }))}
+              disabled={fieldsDisabled}
+              extraOffsets={originalForm ? [originalForm.offset] : []}
+            />
             <div className="mt-1.5">
               <DateShiftButtons
                 disabled={fieldsDisabled || !WALL_CLOCK_PATTERN.test(form.dateLocal)}

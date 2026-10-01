@@ -140,8 +140,12 @@ type BulkEditRequest struct {
 	// Minutes is added to each commit's author date; negative moves it
 	// earlier, zero keeps the dates.
 	Minutes int `json:"minutes"`
-	// ShiftCommitter also shifts each commit's committer date by Minutes.
-	// When false the committer dates are kept.
+	// Dates sets each commit's author date, by hash, as RFC 3339 (the dates
+	// returned by SpreadDates). It needs every hash and cannot be combined
+	// with Minutes. Empty keeps the dates (or applies Minutes).
+	Dates map[string]string `json:"dates"`
+	// ShiftCommitter moves each commit's committer date by as much as its
+	// author date moved. When false the committer dates are kept.
 	ShiftCommitter bool `json:"shiftCommitter"`
 	// SetAuthor replaces each commit's author name and email with
 	// AuthorName and AuthorEmail. When false the authors are kept.
@@ -157,6 +161,31 @@ type BulkEditRequest struct {
 	// MoveBranches names other local branches (from GetAffectedRefs) to move
 	// to the rewritten commits along with the edited branch.
 	MoveBranches []string `json:"moveBranches"`
+}
+
+// SpreadRequest asks SpreadDates for new author dates that fit several
+// unpushed commits between a first and last date.
+type SpreadRequest struct {
+	Hashes []string `json:"hashes"`
+	// First and Last are RFC 3339 dates for the oldest and newest commit.
+	First string `json:"first"`
+	Last  string `json:"last"`
+	// Spacing is "keep" to scale the current gaps between the commits,
+	// "even" for equal gaps, or "random" for random gaps of at least
+	// MinGapMinutes, repeatable with Seed.
+	Spacing       string `json:"spacing"`
+	MinGapMinutes int    `json:"minGapMinutes"`
+	Seed          uint32 `json:"seed"`
+}
+
+// SpreadResult is the outcome of SpreadDates.
+type SpreadResult struct {
+	// Dates is each commit's new author date by hash, as RFC 3339 in the
+	// commit's own offset; pass it on as BulkEditRequest.Dates.
+	Dates map[string]string `json:"dates"`
+	// FellBack is set when "keep" was asked for but the commits were spaced
+	// evenly, because their current dates are all equal or out of order.
+	FellBack bool `json:"fellBack"`
 }
 
 // Identity is the author name and email git is configured to use for new

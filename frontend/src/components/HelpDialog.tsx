@@ -176,9 +176,20 @@ export default function HelpDialog() {
                 The <Ui>Edit Several Commits</Ui> panel replaces the edit panel.
               </li>
               <li>
-                Use <Ui>−1d</Ui> <Ui>−1h</Ui> <Ui>+1h</Ui> <Ui>+1d</Ui> to build up a date shift. Every selected
-                commit moves by the same amount and keeps its own time zone. Tick{' '}
-                <Ui>Also shift committer dates</Ui> if you want those moved too.
+                Under <Ui>Dates</Ui>, pick <Ui>Shift</Ui> and use <Ui>−1d</Ui> <Ui>−1h</Ui> <Ui>+1h</Ui> <Ui>+1d</Ui>{' '}
+                to move every selected commit by the same amount. Each commit keeps its own time zone.
+              </li>
+              <li>
+                Or pick <Ui>Spread</Ui> to fit the commits between a <Ui>First</Ui> and <Ui>Last</Ui> date: the
+                oldest commit gets the first date and the newest the last, exactly, and the commits keep their order.{' '}
+                <Ui>Keep relative spacing</Ui> stretches or squeezes the current gaps to fit, so commits made close
+                together stay close. <Ui>Even</Ui> puts the same time between every commit. <Ui>Random</Ui> places
+                them at random, never closer than the <Ui>Minimum gap</Ui> (<Ui>Re-roll</Ui> for other dates). The
+                list shows the time between the new dates before you apply.
+              </li>
+              <li>
+                <Ui>Also move committer dates</Ui> moves each committer date by as much as its author date, keeping
+                the gap between the two.
               </li>
               <li>
                 To fix commits made with the wrong identity, tick <Ui>Set Author</Ui> and type a name and email, or
@@ -191,7 +202,7 @@ export default function HelpDialog() {
               </li>
             </Steps>
             <p className="text-gray-400">
-              Messages cannot be changed for several commits at once. A shift, a new author and a new committer can
+              Messages cannot be changed for several commits at once. New dates, a new author and a new committer can
               be applied together, as one rewrite that one undo reverts.
             </p>
           </Section>

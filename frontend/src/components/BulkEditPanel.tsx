@@ -1,50 +1,116 @@
-import { useState } from 'react'
-import { EditCommits, GetAffectedRefs, GetCommitLog, GetSignedCommits, RefreshLog } from '../../wailsjs/go/app/App'
+import { useEffect, useState } from 'react'
+import {
+  EditCommits,
+  GetAffectedRefs,
+  GetCommitLog,
+  GetSignedCommits,
+  RefreshLog,
+  SpreadDates,
+} from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
+import DateTimeField from './DateTimeField'
 import { PANEL_BODY_CLASS, PANEL_CLASS } from './EditPanel'
 import UseMyIdentityButton from './UseMyIdentityButton'
-import { formatShift, shiftWallClock, splitRfc3339, toPreviewDateText } from '../dates'
+import {
+  formatGap,
+  formatShift,
+  shiftWallClock,
+  splitRfc3339,
+  toPreviewDateText,
+  WALL_CLOCK_PATTERN,
+  type WallClockDate,
+} from '../dates'
 import { errorText } from '../errors'
 import { identityErrors, NO_IDENTITY_ERRORS, type CommitterMode } from '../identity'
 import CommitterFields from './CommitterFields'
 import { useRepoStore, type CommitSummary } from '../store/repoStore'
 
-interface ShiftPreview {
+// How the dates change: every commit moves by the same amount, or the
+// commits are fitted between a first and last date (see SpreadDates).
+type DateMode = 'shift' | 'spread'
+type Spacing = 'keep' | 'even' | 'random'
+
+// The latest SpreadDates answer, for the request in key. A changed input
+// gives a new key, so an answer for older inputs is never shown as current.
+interface SpreadAnswer {
+  key: string
+  dates: Record<string, string>
+  fellBack: boolean
+  error: string | null
+}
+
+interface DatePreview {
   commit: CommitSummary
   before: string
+  // Empty when the date does not change (or is not known yet).
   after: string
+  // Time since the next older selected commit, after the change; spread only.
+  gap: string
 }
 
-// Author dates of the selected commits before and after the shift, each in
-// its own time zone.
-function shiftPreviews(selected: CommitSummary[], minutes: number): ShiftPreview[] {
-  return selected.map((commit) => {
+// A random seed for random spacing, which Re-roll replaces.
+const newSeed = () => Math.floor(Math.random() * 2 ** 32)
+
+// What the spacing options do, shown under them so the result is never a
+// surprise.
+const SPACING_DESCRIPTIONS: Record<Spacing, string> = {
+  keep: 'Keeps the gaps between the commits, scaled to fit between the first and last date: commits made close together stay close together.',
+  even: 'Puts the same time between every commit.',
+  random:
+    'Places the commits at random, never closer together than the minimum gap, so some end up close together and others far apart. The time of day is not considered, so a commit can land at night. Re-roll for other dates.',
+}
+
+// Default minimum gap for random spacing, in minutes.
+const DEFAULT_MIN_GAP_MINUTES = 10
+
+// Author dates of the selected commits before and after the change, each in
+// its own time zone. newDates holds the spread's dates by hash; without it
+// the dates are shifted by minutes.
+function datePreviews(
+  selected: CommitSummary[],
+  minutes: number,
+  newDates: Record<string, string> | null,
+): DatePreview[] {
+  return selected.map((commit, index) => {
     const date = splitRfc3339(commit.date)
-    const shifted = shiftWallClock(date.dateLocal, minutes)
-    return {
-      commit,
-      before: toPreviewDateText(date),
-      after: shifted ? toPreviewDateText({ dateLocal: shifted, offset: date.offset }) : '',
+    let after = ''
+    let gap = ''
+    if (newDates) {
+      const newDate = newDates[commit.hash]
+      const older = selected[index + 1]
+      after = newDate ? toPreviewDateText(splitRfc3339(newDate)) : ''
+      if (newDate && older && newDates[older.hash]) {
+        gap = formatGap((Date.parse(newDate) - Date.parse(newDates[older.hash])) / 1000)
+      }
+    } else if (minutes !== 0) {
+      const shifted = shiftWallClock(date.dateLocal, minutes)
+      after = shifted ? toPreviewDateText({ dateLocal: shifted, offset: date.offset }) : ''
     }
+    return { commit, before: toPreviewDateText(date), after, gap }
   })
 }
 
-// Reports whether the shift makes a commit older than the one listed below
-// it, where it was not before. The list is newest first, so this is usually
-// a commit dated before its parent, which Git allows but `git log` shows
-// out of order.
-function breaksDateOrder(commits: CommitSummary[], selected: Set<string>, minutes: number): boolean {
-  const instant = (commit: CommitSummary, shift: number) =>
-    Date.parse(commit.date) + (selected.has(commit.hash) ? shift * 60_000 : 0)
+// Reports whether the change makes a commit older than the one listed below
+// it, where it was not before. newInstant gives each commit's new date in
+// milliseconds. The list is newest first, so this is usually a commit dated
+// before its parent, which Git allows but `git log` shows out of order.
+function breaksDateOrder(commits: CommitSummary[], newInstant: (commit: CommitSummary) => number): boolean {
   return commits.slice(0, -1).some((newer, index) => {
     const older = commits[index + 1]
-    if (!selected.has(newer.hash) && !selected.has(older.hash)) {
-      return false
-    }
-    return instant(newer, 0) >= instant(older, 0) && instant(newer, minutes) < instant(older, minutes)
+    return Date.parse(newer.date) >= Date.parse(older.date) && newInstant(newer) < newInstant(older)
   })
+}
+
+// The time since the next older selected commit, after a spread, so the
+// spacing can be checked before applying.
+function GapNote({ gap }: { gap: string }) {
+  return (
+    <span className="ml-1.5 font-mono text-gray-500" title="Time since the next older selected commit">
+      ({gap})
+    </span>
+  )
 }
 
 // Joins the given words as "a", "a and b" or "a, b and c", skipping false.
@@ -56,9 +122,21 @@ function joinWords(words: (string | false)[]): string {
 const INPUT_CLASS =
   'mt-1 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60'
 
+const DATE_MODES: { mode: DateMode; label: string }[] = [
+  { mode: 'shift', label: 'Shift' },
+  { mode: 'spread', label: 'Spread' },
+]
+
+const SPACINGS: { spacing: Spacing; label: string }[] = [
+  { spacing: 'keep', label: 'Keep relative spacing' },
+  { spacing: 'even', label: 'Even' },
+  { spacing: 'random', label: 'Random' },
+]
+
 // Shown instead of EditPanel while several commits are selected: moves their
-// author dates (and optionally committer dates) by the same amount and/or
-// gives them the same author, in one rewrite which a single undo reverts.
+// author dates (and optionally committer dates) by the same amount or spreads
+// them over a range, and/or gives them the same author or committer, in one
+// rewrite which a single undo reverts.
 export default function BulkEditPanel() {
   const repoInfo = useRepoStore((s) => s.repoInfo)
   const commits = useRepoStore((s) => s.commits)
@@ -71,8 +149,17 @@ export default function BulkEditPanel() {
   const activity = useRepoStore((s) => s.activity)
   const runGitOperation = useRepoStore((s) => s.runGitOperation)
 
+  const [dateMode, setDateMode] = useState<DateMode>('shift')
   // The shift adds up across button clicks and is only applied on confirm.
   const [shiftMinutes, setShiftMinutes] = useState(0)
+  // The first and last dates of the spread; null follows the oldest and
+  // newest selected commit until the user changes them.
+  const [firstInput, setFirstInput] = useState<WallClockDate | null>(null)
+  const [lastInput, setLastInput] = useState<WallClockDate | null>(null)
+  const [spacing, setSpacing] = useState<Spacing>('keep')
+  const [minGapText, setMinGapText] = useState(String(DEFAULT_MIN_GAP_MINUTES))
+  const [seed, setSeed] = useState(newSeed)
+  const [spreadAnswer, setSpreadAnswer] = useState<SpreadAnswer | null>(null)
   const [shiftCommitter, setShiftCommitter] = useState(true)
   const [setAuthor, setSetAuthor] = useState(false)
   const [authorName, setAuthorName] = useState('')
@@ -87,18 +174,86 @@ export default function BulkEditPanel() {
   const [moveBranches, setMoveBranches] = useState(true)
 
   const selectedSet = new Set(selectedHashes)
+  // Newest first, like the commit list.
   const selected = commits.filter((commit) => selectedSet.has(commit.hash))
   // Commits can be pushed from a terminal after they were selected.
   const hasPushed = selected.some((commit) => !commit.isUnpushed)
-  const previews = shiftPreviews(selected, shiftMinutes)
-  const outOfOrder = breaksDateOrder(commits, selectedSet, shiftMinutes)
+
+  const isSpread = dateMode === 'spread'
+  const first = firstInput ?? splitRfc3339(selected[selected.length - 1]?.date ?? '')
+  const last = lastInput ?? splitRfc3339(selected[0]?.date ?? '')
+  const minGapMinutes = /^\d+$/.test(minGapText.trim()) ? Number(minGapText.trim()) : null
+  // Why the spread cannot be computed yet, checked before asking the backend.
+  const inputError =
+    !WALL_CLOCK_PATTERN.test(first.dateLocal) || !WALL_CLOCK_PATTERN.test(last.dateLocal)
+      ? 'Enter a complete first and last date.'
+      : spacing === 'random' && minGapMinutes === null
+        ? 'Enter the minimum gap as a whole number of minutes.'
+        : null
+  const inputsReady = inputError === null
+  const spreadKey = JSON.stringify({
+    hashes: selected.map((commit) => commit.hash),
+    first: first.dateLocal + first.offset,
+    last: last.dateLocal + last.offset,
+    spacing,
+    minGapMinutes: spacing === 'random' ? minGapMinutes : 0,
+    seed,
+  })
+
+  // Asks the backend for the spread's dates whenever its inputs change. The
+  // answer is kept with its key, so a slow answer for older inputs is ignored.
+  useEffect(() => {
+    if (!isSpread || !inputsReady) {
+      return
+    }
+    let isCurrent = true
+    SpreadDates(JSON.parse(spreadKey))
+      .then((result) => {
+        if (isCurrent) {
+          setSpreadAnswer({ key: spreadKey, dates: result.dates, fellBack: result.fellBack, error: null })
+        }
+      })
+      .catch((error) => {
+        if (isCurrent) {
+          setSpreadAnswer({ key: spreadKey, dates: {}, fellBack: false, error: errorText(error) })
+        }
+      })
+    return () => {
+      isCurrent = false
+    }
+  }, [isSpread, inputsReady, spreadKey])
+
+  const spread = isSpread && inputsReady && spreadAnswer?.key === spreadKey ? spreadAnswer : null
+  const spreadDates = spread && spread.error === null ? spread.dates : null
+  const spreadError = isSpread ? (inputError ?? spread?.error ?? null) : null
+  const datesChange = isSpread
+    ? spreadDates !== null &&
+      selected.some((commit) => Date.parse(spreadDates[commit.hash] ?? commit.date) !== Date.parse(commit.date))
+    : shiftMinutes !== 0
+  // Spread dates are moments, so a commit in another time zone than the
+  // range shows them at its own clock time.
+  const otherTimeZones =
+    isSpread && selected.some((commit) => ![first.offset, last.offset].includes(splitRfc3339(commit.date).offset))
+
+  const previews = datePreviews(selected, isSpread ? 0 : shiftMinutes, isSpread ? spreadDates : null)
+  const outOfOrder =
+    datesChange &&
+    breaksDateOrder(commits, (commit) => {
+      if (!selectedSet.has(commit.hash)) {
+        return Date.parse(commit.date)
+      }
+      return spreadDates ? Date.parse(spreadDates[commit.hash]) : Date.parse(commit.date) + shiftMinutes * 60_000
+    })
   const fieldErrors = setAuthor ? identityErrors(authorName, authorEmail) : NO_IDENTITY_ERRORS
   const committerErrors =
     committerMode === 'set' ? identityErrors(committerName, committerEmail, 'Committer') : NO_IDENTITY_ERRORS
   const isValid = [fieldErrors, committerErrors].every((errors) => errors.name === null && errors.email === null)
   const changesCommitter = committerMode !== 'keep'
-  const hasChanges = shiftMinutes !== 0 || setAuthor || changesCommitter
-  const canReview = hasChanges && isValid && !hasPushed && !isSubmitting && activity === null
+  const hasChanges = datesChange || setAuthor || changesCommitter
+  // Nothing can be reviewed while the spread's dates are loading or invalid:
+  // the dates sent must be the ones shown.
+  const spreadPending = isSpread && spreadDates === null
+  const canReview = hasChanges && isValid && !spreadPending && !hasPushed && !isSubmitting && activity === null
   const newAuthorText = `${authorName} <${authorEmail}>`
   // The new committer of commit. The list only has names, so a committer
   // copied from an unchanged author is shown by name alone.
@@ -134,7 +289,8 @@ export default function BulkEditPanel() {
         try {
           result = await EditCommits({
             hashes: selectedHashes,
-            minutes: shiftMinutes,
+            minutes: isSpread ? 0 : shiftMinutes,
+            dates: isSpread && datesChange && spreadDates ? spreadDates : {},
             shiftCommitter,
             setAuthor,
             authorName: setAuthor ? authorName : '',
@@ -182,17 +338,19 @@ export default function BulkEditPanel() {
 
   // What the confirm dialog says is left alone.
   const keptNote = [
-    shiftMinutes === 0
+    !datesChange
       ? 'Dates are kept.'
-      : shiftCommitter
-        ? `Committer dates are shifted by ${formatShift(shiftMinutes)} as well.`
-        : 'Committer dates are kept.',
+      : !shiftCommitter
+        ? 'Committer dates are kept.'
+        : isSpread
+          ? 'Committer dates move by as much as their author dates.'
+          : `Committer dates are shifted by ${formatShift(shiftMinutes)} as well.`,
     `${joinWords(['Messages', !setAuthor && 'authors', !changesCommitter && 'committers'])} are not changed.`,
   ].join(' ')
 
   // Heading of the confirm dialog's table.
   const changedLabel = joinWords([
-    shiftMinutes !== 0 && `Author Dates (${formatShift(shiftMinutes)})`,
+    datesChange && (isSpread ? 'Author Dates (spread)' : `Author Dates (${formatShift(shiftMinutes)})`),
     setAuthor && 'Authors',
     changesCommitter && 'Committers',
   ])
@@ -203,36 +361,132 @@ export default function BulkEditPanel() {
         <div className={PANEL_BODY_CLASS}>
           <h2 className="text-base font-semibold text-gray-100">Edit Several Commits</h2>
           <p className="mt-1 text-xs text-gray-400">
-            Shift the dates or set the author and committer of the {selected.length} selected commits in one rewrite. Each commit
-            keeps its own time zone and message.
+            Change the dates or set the author and committer of the {selected.length} selected commits in one rewrite.
+            Each commit keeps its own time zone and message.
           </p>
 
           <div className="mt-5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Date Shift</span>
-              <span
-                className={`font-mono text-sm ${shiftMinutes === 0 ? 'text-gray-500' : 'text-indigo-300'}`}
-                aria-live="polite"
-              >
-                {formatShift(shiftMinutes)}
+            <div className="flex items-center justify-between gap-2">
+              <span id="bulk-date-mode" className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                Dates
               </span>
+              <div role="group" aria-labelledby="bulk-date-mode" className="flex rounded-md border border-gray-700">
+                {DATE_MODES.map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={dateMode === mode}
+                    disabled={isSubmitting}
+                    onClick={() => setDateMode(mode)}
+                    className={`px-3 py-1 text-sm transition first:rounded-l-md last:rounded-r-md disabled:cursor-not-allowed ${
+                      dateMode === mode ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="mt-1.5">
-              <DateShiftButtons
-                disabled={isSubmitting}
-                onShift={(minutes) => setShiftMinutes((current) => current + minutes)}
-              >
-                <button
-                  type="button"
-                  title="Back to no shift"
-                  disabled={isSubmitting || shiftMinutes === 0}
-                  onClick={() => setShiftMinutes(0)}
-                  className={DATE_BUTTON_CLASS}
-                >
-                  Reset
-                </button>
-              </DateShiftButtons>
-            </div>
+
+            {isSpread ? (
+              <div className="mt-2 space-y-3">
+                <p className="text-xs text-gray-400">
+                  The oldest commit gets the first date and the newest the last date, exactly. The commits in between
+                  keep their order.
+                </p>
+                <div>
+                  <span className="text-xs text-gray-400">First (oldest commit)</span>
+                  <DateTimeField value={first} onChange={setFirstInput} disabled={isSubmitting} label="First date" />
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400">Last (newest commit)</span>
+                  <DateTimeField value={last} onChange={setLastInput} disabled={isSubmitting} label="Last date" />
+                </div>
+                <div role="radiogroup" aria-label="Spacing" className="space-y-1">
+                  {SPACINGS.map((option) => (
+                    <label key={option.spacing} className="flex items-center gap-2 text-sm text-gray-300">
+                      <input
+                        type="radio"
+                        name="bulk-spacing"
+                        checked={spacing === option.spacing}
+                        onChange={() => setSpacing(option.spacing)}
+                        disabled={isSubmitting}
+                        className="accent-indigo-500 disabled:cursor-not-allowed"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+                {spacing === 'random' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label htmlFor="bulk-min-gap" className="text-sm text-gray-300">
+                      Minimum gap
+                    </label>
+                    <input
+                      id="bulk-min-gap"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={minGapText}
+                      onChange={(e) => setMinGapText(e.target.value)}
+                      disabled={isSubmitting}
+                      className="w-20 rounded-md border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                    <span className="text-sm text-gray-400">minutes</span>
+                    <button
+                      type="button"
+                      title="Draw new random dates"
+                      disabled={isSubmitting}
+                      onClick={() => setSeed(newSeed())}
+                      className={`ml-auto ${DATE_BUTTON_CLASS}`}
+                    >
+                      Re-roll
+                    </button>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400">{SPACING_DESCRIPTIONS[spacing]}</p>
+                {spreadError && <p className="text-xs text-red-300">{spreadError}</p>}
+                {spread?.fellBack && (
+                  <p className="text-xs text-yellow-300">
+                    The current dates are all the same or out of order, so their gaps cannot be kept. The commits are
+                    spaced evenly instead.
+                  </p>
+                )}
+                {otherTimeZones && (
+                  <p className="text-xs text-gray-400">
+                    Commits in another time zone get the same moments, shown at their own clock time.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="mt-2 flex items-baseline justify-between">
+                  <span className="text-xs text-gray-400">Move every commit by the same amount</span>
+                  <span
+                    className={`font-mono text-sm ${shiftMinutes === 0 ? 'text-gray-500' : 'text-indigo-300'}`}
+                    aria-live="polite"
+                  >
+                    {formatShift(shiftMinutes)}
+                  </span>
+                </div>
+                <div className="mt-1.5">
+                  <DateShiftButtons
+                    disabled={isSubmitting}
+                    onShift={(minutes) => setShiftMinutes((current) => current + minutes)}
+                  >
+                    <button
+                      type="button"
+                      title="Back to no shift"
+                      disabled={isSubmitting || shiftMinutes === 0}
+                      onClick={() => setShiftMinutes(0)}
+                      className={DATE_BUTTON_CLASS}
+                    >
+                      Reset
+                    </button>
+                  </DateShiftButtons>
+                </div>
+              </>
+            )}
             <label className="mt-2 flex items-center gap-2 text-sm text-gray-300">
               <input
                 type="checkbox"
@@ -241,7 +495,7 @@ export default function BulkEditPanel() {
                 disabled={isSubmitting}
                 className="accent-indigo-500 disabled:cursor-not-allowed"
               />
-              Also shift committer dates
+              Also move committer dates
             </label>
           </div>
 
@@ -312,13 +566,13 @@ export default function BulkEditPanel() {
           )}
           {outOfOrder && !hasPushed && (
             <div className="mt-4 rounded-lg border border-yellow-900/60 bg-yellow-950/30 px-3 py-2 text-sm text-yellow-300">
-              After this shift, some commits will be dated earlier than the commit below them in the list. Git allows
+              After this change, some commits will be dated earlier than the commit below them in the list. Git allows
               this, but tools that sort by date will show them out of order.
             </div>
           )}
 
           <ul className="mt-4 space-y-2">
-            {previews.map(({ commit, before, after }) => (
+            {previews.map(({ commit, before, after, gap }) => (
               <li key={commit.hash} className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-xs">
                 <div className="flex gap-2">
                   <span className="font-mono text-gray-500">{commit.shortHash}</span>
@@ -329,7 +583,12 @@ export default function BulkEditPanel() {
                 <div className="mt-1 text-gray-400">
                   {before} · {commit.author}
                 </div>
-                {shiftMinutes !== 0 && <div className="text-indigo-300">→ {after}</div>}
+                {datesChange && (
+                  <div className="text-indigo-300">
+                    → {after}
+                    {gap && <GapNote gap={gap} />}
+                  </div>
+                )}
                 {setAuthor && <div className="break-words text-indigo-300">→ {newAuthorText}</div>}
                 {changesCommitter && (
                   <div className="break-words text-indigo-300">→ committed by {newCommitterText(commit)}</div>
@@ -383,19 +642,24 @@ export default function BulkEditPanel() {
               </tr>
             </thead>
             <tbody>
-              {previews.map(({ commit, before, after }) => (
+              {previews.map(({ commit, before, after, gap }) => (
                 <tr key={commit.hash} className="border-t border-gray-800 align-top">
                   <td className="py-1.5 pr-3">
                     <span className="font-mono text-xs text-gray-500">{commit.shortHash}</span>{' '}
                     <span className="text-gray-300">{commit.message}</span>
                   </td>
                   <td className="py-1.5 pr-3 text-gray-400">
-                    {shiftMinutes !== 0 && <div>{before}</div>}
+                    {datesChange && <div>{before}</div>}
                     {setAuthor && <div>{commit.author}</div>}
                     {changesCommitter && <div>Committer: {commit.committer}</div>}
                   </td>
                   <td className="break-words py-1.5 text-indigo-200">
-                    {shiftMinutes !== 0 && <div>{after}</div>}
+                    {datesChange && (
+                      <div>
+                        {after}
+                        {gap && <GapNote gap={gap} />}
+                      </div>
+                    )}
                     {setAuthor && <div>{newAuthorText}</div>}
                     {changesCommitter && <div>Committer: {newCommitterText(commit)}</div>}
                   </td>

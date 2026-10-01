@@ -31,20 +31,25 @@ type AmendOptions struct {
 }
 
 // BulkEditOptions describes the same change applied to several commits (see
-// EditCommits): a date shift, a new author, a new committer, or a mix.
+// EditCommits): new dates, a new author, a new committer, or a mix.
 type BulkEditOptions struct {
 	// Shift is added to each commit's author date. Zero keeps the dates.
 	Shift time.Duration
-	// ShiftCommitter also adds Shift to each commit's committer date. When
-	// false the committer dates are kept.
+	// Dates sets each commit's author date, for example from SpreadDates.
+	// It needs an entry for every edited commit and cannot be combined with
+	// Shift. Nil keeps the dates (or applies Shift).
+	Dates map[plumbing.Hash]time.Time
+	// ShiftCommitter moves each commit's committer date by as much as its
+	// author date moved, keeping the gap between them. When false the
+	// committer dates are kept.
 	ShiftCommitter bool
 	// SetAuthor replaces each commit's author name and email with AuthorName
-	// and AuthorEmail. The author dates are only changed by Shift.
+	// and AuthorEmail. The author dates are only changed by Shift or Dates.
 	SetAuthor   bool
 	AuthorName  string
 	AuthorEmail string
 	// Committer says what happens to each commit's committer name and email,
-	// as in AmendOptions. The committer dates are only changed by Shift.
+	// as in AmendOptions. The committer dates are only changed by ShiftCommitter.
 	Committer      CommitterChange
 	CommitterName  string
 	CommitterEmail string

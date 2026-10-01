@@ -3,6 +3,7 @@ package git
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -46,18 +47,22 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 }
 
 // EditCommits applies the same change to each commit in hashes, in one rewrite
-// (see RewriteCommits): the author date moves by opts.Shift, and with
-// opts.SetAuthor the author name and email are replaced; opts.Committer does
-// the same for the committer. Each commit keeps its own time zone offset and
-// message, and its committer date, except that it is shifted too when
-// opts.ShiftCommitter is set.
+// (see RewriteCommits): the author date moves by opts.Shift or is set to the
+// commit's entry in opts.Dates, and with opts.SetAuthor the author name and
+// email are replaced; opts.Committer does the same for the committer. Each
+// commit keeps its message, and its committer date, except that with
+// opts.ShiftCommitter the committer date moves by as much as the author date.
 //
 // Returns ErrCommitNotUnpushed if any commit is not in state.UnpushedHashes,
 // ErrInvalidIdentity for an author or committer that would produce a
-// malformed commit, and an error when opts changes nothing.
+// malformed commit, and an error when opts changes nothing, sets both Shift
+// and Dates, or has no date for one of the commits.
 func EditCommits(state *RepoState, hashes []plumbing.Hash, opts BulkEditOptions) error {
-	if opts.Shift == 0 && !opts.SetAuthor && opts.Committer == KeepCommitter {
+	if opts.Shift == 0 && opts.Dates == nil && !opts.SetAuthor && opts.Committer == KeepCommitter {
 		return fmt.Errorf("the edit changes nothing")
+	}
+	if opts.Shift != 0 && opts.Dates != nil {
+		return fmt.Errorf("a date shift and new dates cannot be applied together")
 	}
 	if opts.SetAuthor {
 		if err := validateIdentity("author", opts.AuthorName, opts.AuthorEmail); err != nil {
@@ -69,19 +74,28 @@ func EditCommits(state *RepoState, hashes []plumbing.Hash, opts BulkEditOptions)
 	}
 	edits := make(map[plumbing.Hash]CommitEdit, len(hashes))
 	for _, hash := range hashes {
-		edits[hash] = bulkEdit(opts)
+		date, hasDate := opts.Dates[hash]
+		if opts.Dates != nil && !hasDate {
+			return fmt.Errorf("no new date for commit %s", hash)
+		}
+		edits[hash] = bulkEdit(opts, date)
 	}
 	return RewriteCommits(state, edits, opts.MoveBranches)
 }
 
-// bulkEdit is the CommitEdit that applies opts to a commit. time.Time.Add
-// keeps the location, so the offsets are unchanged.
-func bulkEdit(opts BulkEditOptions) CommitEdit {
+// bulkEdit is the CommitEdit that applies opts to a commit, with date as its
+// new author date when opts.Dates is set. time.Time.Add keeps the location,
+// so a shift keeps the offsets.
+func bulkEdit(opts BulkEditOptions, date time.Time) CommitEdit {
 	return func(original *object.Commit) (object.Signature, object.Signature, string) {
 		author, committer := original.Author, original.Committer
-		author.When = author.When.Add(opts.Shift)
+		if opts.Dates != nil {
+			author.When = date
+		} else {
+			author.When = author.When.Add(opts.Shift)
+		}
 		if opts.ShiftCommitter {
-			committer.When = committer.When.Add(opts.Shift)
+			committer.When = committer.When.Add(author.When.Sub(original.Author.When))
 		}
 		if opts.SetAuthor {
 			author.Name = opts.AuthorName

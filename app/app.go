@@ -280,10 +280,11 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 }
 
 // EditCommits applies the same change to each unpushed commit in req: its
-// author date moves by req.Minutes (keeping its own time zone offset) and,
-// with req.SetAuthor, its author name and email are replaced, and
-// req.Committer can replace its committer name and email. It is a single
-// rewrite that one undo reverts; see UpdateCommit for what is left alone.
+// author date moves by req.Minutes (keeping its own time zone offset) or is
+// set to its entry in req.Dates and, with req.SetAuthor, its author name and
+// email are replaced, and req.Committer can replace its committer name and
+// email. It is a single rewrite that one undo reverts; see UpdateCommit for
+// what is left alone.
 func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 	hashes := make([]plumbing.Hash, len(req.Hashes))
 	for i, hash := range req.Hashes {
@@ -293,8 +294,20 @@ func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 	if err != nil {
 		return OperationResult{}, err
 	}
+	var dates map[plumbing.Hash]time.Time
+	if len(req.Dates) > 0 {
+		dates = make(map[plumbing.Hash]time.Time, len(req.Dates))
+		for hash, text := range req.Dates {
+			date, err := time.Parse(time.RFC3339, text)
+			if err != nil {
+				return OperationResult{}, fmt.Errorf("invalid date %q: %w", text, err)
+			}
+			dates[plumbing.NewHash(hash)] = date
+		}
+	}
 	opts := gitpkg.BulkEditOptions{
 		Shift:          time.Duration(req.Minutes) * time.Minute,
+		Dates:          dates,
 		ShiftCommitter: req.ShiftCommitter,
 		SetAuthor:      req.SetAuthor,
 		AuthorName:     req.AuthorName,
@@ -312,6 +325,61 @@ func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 	return app.runRewrite(hashes, req.MoveBranches, message, func(state *gitpkg.RepoState) error {
 		return gitpkg.EditCommits(state, hashes, opts)
 	})
+}
+
+// SpreadDates computes new author dates that fit the unpushed commits in req
+// between req.First and req.Last, for the bulk panel's preview. Nothing is
+// written: the panel sends the dates back with EditCommits, so what is
+// applied is exactly what was shown. See git.SpreadDates.
+func (app *App) SpreadDates(req SpreadRequest) (SpreadResult, error) {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return SpreadResult{}, fmt.Errorf("no repository is open; call OpenRepository first")
+	}
+
+	first, err := time.Parse(time.RFC3339, req.First)
+	if err != nil {
+		return SpreadResult{}, fmt.Errorf("invalid first date %q: %w", req.First, err)
+	}
+	last, err := time.Parse(time.RFC3339, req.Last)
+	if err != nil {
+		return SpreadResult{}, fmt.Errorf("invalid last date %q: %w", req.Last, err)
+	}
+	var spacing gitpkg.Spacing
+	switch req.Spacing {
+	case "", "keep":
+		spacing = gitpkg.KeepSpacing
+	case "even":
+		spacing = gitpkg.EvenSpacing
+	case "random":
+		spacing = gitpkg.RandomSpacing
+	default:
+		return SpreadResult{}, fmt.Errorf("invalid spacing %q", req.Spacing)
+	}
+
+	hashes := make([]plumbing.Hash, len(req.Hashes))
+	for i, hash := range req.Hashes {
+		hashes[i] = plumbing.NewHash(hash)
+	}
+	spread, err := gitpkg.SpreadDates(state, hashes, gitpkg.SpreadOptions{
+		First:   first,
+		Last:    last,
+		Spacing: spacing,
+		MinGap:  time.Duration(req.MinGapMinutes) * time.Minute,
+		Seed:    uint64(req.Seed),
+	})
+	if err != nil {
+		return SpreadResult{}, err
+	}
+
+	dates := make(map[string]string, len(spread.Dates))
+	for hash, date := range spread.Dates {
+		dates[hash.String()] = date.Format(time.RFC3339)
+	}
+	return SpreadResult{Dates: dates, FellBack: spread.FellBack}, nil
 }
 
 // parseCommitterChange maps the Committer field of EditRequest and

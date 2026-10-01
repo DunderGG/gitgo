@@ -342,3 +342,90 @@ func TestConfiguredIdentity_ReadsRepositoryConfig(test *testing.T) {
 		test.Errorf("identity = %+v, want %+v", identity, want)
 	}
 }
+
+// TestSpreadDates_OrdersByHistory verifies that the commits are spread in
+// history order, not by their current dates: the older commit gets the first
+// date even though it is dated later, and relative spacing falls back to even
+// spacing because the dates are out of order.
+func TestSpreadDates_OrdersByHistory(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "base", gitCmd)
+	addCommit(test, dir, "older", gitCmd)
+	gitCmd("commit", "--amend", "--no-edit", "--date=2024-01-01T15:00:00+00:00")
+	addCommit(test, dir, "newer", gitCmd)
+	gitCmd("commit", "--amend", "--no-edit", "--date=2024-01-01T10:00:00+00:00")
+
+	older, newer := revHash(test, dir, "HEAD~1"), revHash(test, dir, "HEAD")
+	first := time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC)
+	result, err := git.SpreadDates(mustOpen(test, dir), []plumbing.Hash{newer, older},
+		git.SpreadOptions{First: first, Last: first.Add(time.Hour)})
+	if err != nil {
+		test.Fatalf("git.SpreadDates: %v", err)
+	}
+	if !result.FellBack {
+		test.Error("FellBack = false, want true for dates out of history order")
+	}
+	if got := result.Dates[older]; !got.Equal(first) {
+		test.Errorf("older commit date = %v, want %v", got, first)
+	}
+	if got := result.Dates[newer]; !got.Equal(first.Add(time.Hour)) {
+		test.Errorf("newer commit date = %v, want %v", got, first.Add(time.Hour))
+	}
+}
+
+// TestEditCommits_SetsDatesAndMovesCommitterDates verifies that each commit
+// gets its own new author date and, with ShiftCommitter, its committer date
+// moves by the same amount, keeping its own offset.
+func TestEditCommits_SetsDatesAndMovesCommitterDates(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "base", gitCmd)
+	addCommit(test, dir, "first", gitCmd)
+	addCommit(test, dir, "second", gitCmd)
+
+	head, parent := revHash(test, dir, "HEAD"), revHash(test, dir, "HEAD~1")
+	opts := git.BulkEditOptions{
+		Dates: map[plumbing.Hash]time.Time{
+			parent: time.Date(2024, 3, 1, 9, 0, 0, 0, time.FixedZone("", 2*3600)),
+			head:   time.Date(2024, 3, 2, 9, 0, 0, 0, time.UTC),
+		},
+		ShiftCommitter: true,
+	}
+	if err := git.EditCommits(mustOpen(test, dir), []plumbing.Hash{head, parent}, opts); err != nil {
+		test.Fatalf("git.EditCommits: %v", err)
+	}
+
+	// The committer dates started equal to the author dates (testCommitDate)
+	// and the base commit is not edited.
+	want := "2024-03-02T09:00:00Z 2024-03-02T09:00:00Z\n" +
+		"2024-03-01T09:00:00+02:00 2024-03-01T07:00:00Z\n" +
+		"2024-01-01T12:00:00Z 2024-01-01T12:00:00Z"
+	if got := gitOutputFromDir(test, dir, "git", "log", "--format=%aI %cI"); got != want {
+		test.Errorf("author/committer dates =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// TestEditCommits_RejectsInvalidDates verifies that new dates are refused
+// together with a shift, or when a commit has no new date.
+func TestEditCommits_RejectsInvalidDates(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "base", gitCmd)
+	addCommit(test, dir, "only", gitCmd)
+
+	head, parent := revHash(test, dir, "HEAD"), revHash(test, dir, "HEAD~1")
+	dates := map[plumbing.Hash]time.Time{head: testCommitDate.Add(time.Hour)}
+	cases := map[string]git.BulkEditOptions{
+		"shift and dates": {Shift: time.Hour, Dates: dates},
+		"missing date":    {Dates: dates},
+	}
+	for name, opts := range cases {
+		if err := git.EditCommits(mustOpen(test, dir), []plumbing.Hash{head, parent}, opts); err == nil {
+			test.Errorf("%s: expected an error", name)
+		}
+	}
+	if got := revHash(test, dir, "HEAD"); got != head {
+		test.Errorf("HEAD moved from %s to %s", head, got)
+	}
+}

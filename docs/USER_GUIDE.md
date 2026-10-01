@@ -67,13 +67,33 @@ Select several unpushed commits:
 
 The **Edit Several Commits** panel replaces the edit panel. All of its changes are applied as one rewrite, which one undo reverts. Messages can't be changed for several commits at once.
 
-### Date shift
+### Dates
+
+The **Dates** switch chooses how the author dates change: **Shift** moves every commit by the same amount, and **Spread** fits the commits between a first and last date. You can switch back and forth: each mode keeps what you entered, and only the selected mode is applied.
+
+**Also move committer dates** (on by default) moves each commit's committer date by as much as its author date moves, so the gap between the two stays the same. When it is off, the committer dates are kept.
+
+If the new dates would date a commit earlier than the commit below it in the list, the panel warns you. This can happen at the edges of the selection, next to commits you didn't select. The edit is still allowed.
+
+#### Shift
 
 Use **−1d**, **−1h**, **+1h** and **+1d** to build up a shift. Every selected commit moves by the same amount and keeps its own time zone. **Reset** goes back to no shift.
 
-**Also shift committer dates** (on by default) moves the committer dates by the same amount, so each commit keeps the gap between its author and committer dates.
+#### Spread over a range
 
-If the shift would date a commit earlier than the commit below it in the list, the panel warns you. The edit is still allowed.
+Use this to backdate a series of commits, or to space them out, without every commit sharing the same shift.
+
+- **First** is the new date of the oldest selected commit and **Last** the new date of the newest. Both are applied exactly. They start at those commits' current dates, so nothing changes until you edit them.
+- Commits are ordered by their place in the history, not by their current dates, and stay in that order.
+- **Keep relative spacing** (the default) keeps the pattern of the current dates and stretches or squeezes it to fit the range. Commits made minutes apart stay close together, and a long break stays long. For example, three commits made at 09:00, 09:10 and 10:00, spread from 13:00 to 15:00, become 13:00, 13:20 and 15:00.
+- **Even** puts the same time between every commit. Three commits from 13:00 to 15:00 become 13:00, 14:00 and 15:00.
+- **Random** places the commits between the first and last date at random, like real work: some end up close together, others far apart. No two commits are ever closer than the **Minimum gap** (10 minutes unless you change it), the order is kept, and the first and last dates stay exact. The random dates are drawn once and shown in the list, and those exact dates are applied. **Re-roll** draws new ones. Random doesn't consider the time of day, so a commit can land in the middle of the night; check the list before applying.
+- If the current dates are all the same, or out of order (for example after an earlier edit), their pattern can't be kept. **Keep relative spacing** then spaces the commits evenly instead, and the panel tells you so. **Random** is often the better choice in that case.
+- Dates are whole seconds, as Git stores them, so a gap that doesn't divide evenly is rounded to the nearest second.
+- The last date must be after the first. With **Even**, the range needs at least one second per gap. With **Random**, it needs room for the minimum gaps: 5 commits at least 10 minutes apart need at least 40 minutes between the first and last date. If the range is exactly that long, the commits end up evenly spaced.
+- **Time zones:** First and Last are moments in time, entered with their own UTC offset. Each commit keeps its own time zone, so a commit in a different zone gets the same moment shown at its own clock time. For example, a First of `09:00 +02:00` becomes `07:00 +00:00` on a commit made in UTC. The panel notes when this applies.
+
+The list at the bottom of the panel shows each commit's new date, with the time since the next older selected commit in brackets, for example `(+1d 4h 53m)`. The confirmation dialog shows the same.
 
 ### Author and committer
 

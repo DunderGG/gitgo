@@ -18,7 +18,7 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 ## Features
 
 - **Edit commit metadata:** message, author name and email, committer name and email, and author date (to the second, in the commit's own time zone), with quick −1d / −1h / +1h / +1d / Now buttons
-- **Edit several commits at once:** select multiple unpushed commits and move all their dates, or set their author and committer, in one rewrite
+- **Edit several commits at once:** select multiple unpushed commits and shift their dates or spread them over a range, or set their author and committer, in one rewrite
 - **Preview before applying:** every change is shown old-vs-new in a confirmation dialog
 - **One-step undo:** revert the last rewrite with `Ctrl+Z`
 - **Work on any branch:** view and edit other local branches without checking them out

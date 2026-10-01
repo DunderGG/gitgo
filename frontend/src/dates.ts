@@ -82,6 +82,15 @@ export function formatShift(minutes: number): string {
   return `${minutes < 0 ? '−' : '+'}${parts.join(' ')}`
 }
 
+// Formats the time between two commits, in seconds, as e.g. "+1d 4h 53m".
+// Seconds are only shown for gaps under a minute.
+export function formatGap(seconds: number): string {
+  if (Math.abs(seconds) < 60) {
+    return `${seconds < 0 ? '−' : '+'}${Math.abs(seconds)}s`
+  }
+  return formatShift(Math.trunc(seconds / 60))
+}
+
 export function toPreviewDateText({ dateLocal, offset }: WallClockDate): string {
   if (!dateLocal) {
     return ''
