@@ -87,11 +87,23 @@ Use this to backdate a series of commits, or to space them out, without every co
 - Commits are ordered by their place in the history, not by their current dates, and stay in that order.
 - **Keep relative spacing** (the default) keeps the pattern of the current dates and stretches or squeezes it to fit the range. Commits made minutes apart stay close together, and a long break stays long. For example, three commits made at 09:00, 09:10 and 10:00, spread from 13:00 to 15:00, become 13:00, 13:20 and 15:00.
 - **Even** puts the same time between every commit. Three commits from 13:00 to 15:00 become 13:00, 14:00 and 15:00.
-- **Random** places the commits between the first and last date at random, like real work: some end up close together, others far apart. No two commits are ever closer than the **Minimum gap** (10 minutes unless you change it), the order is kept, and the first and last dates stay exact. The random dates are drawn once and shown in the list, and those exact dates are applied. **Re-roll** draws new ones. Random doesn't consider the time of day, so a commit can land in the middle of the night; check the list before applying.
+- **Random** places the commits between the first and last date at random, like real work: some end up close together, others far apart. No two commits are ever closer than the **Minimum gap** (10 minutes unless you change it), the order is kept, and the first and last dates stay exact. The random dates are drawn once and shown in the list, and those exact dates are applied. **Re-roll** draws new ones.
 - If the current dates are all the same, or out of order (for example after an earlier edit), their pattern can't be kept. **Keep relative spacing** then spaces the commits evenly instead, and the panel tells you so. **Random** is often the better choice in that case.
 - Dates are whole seconds, as Git stores them, so a gap that doesn't divide evenly is rounded to the nearest second.
 - The last date must be after the first. With **Even**, the range needs at least one second per gap. With **Random**, it needs room for the minimum gaps: 5 commits at least 10 minutes apart need at least 40 minutes between the first and last date. If the range is exactly that long, the commits end up evenly spaced.
 - **Time zones:** First and Last are moments in time, entered with their own UTC offset. Each commit keeps its own time zone, so a commit in a different zone gets the same moment shown at its own clock time. For example, a First of `09:00 +02:00` becomes `07:00 +00:00` on a commit made in UTC. The panel notes when this applies.
+
+##### Only office hours
+
+Without it, every hour of the range counts, so a spread over several days can put commits at night or at the weekend. Tick **Only office hours** to keep every commit within your working hours. The label shows the hours in use, for example `(Mon–Fri, 09:00–17:00)`, and **Change** opens the settings where you set them (see [Settings](#settings)).
+
+- Time outside office hours is skipped, as if the range were only the office hours joined together. This applies to all three spacings: **Even** puts the same amount of *office* time between commits, **Random** never places a commit outside office hours and counts the minimum gap in office time, and **Keep relative spacing** fits the current pattern into office time.
+- For example, with Mon–Fri 09:00–17:00, five commits spread evenly from Friday 16:00 to Monday 10:00 have two hours of office time, so they land at Friday 16:00, 16:30 and 17:00, then Monday 09:30 and 10:00. The night and the weekend are skipped.
+- A gap can therefore run across a night: the list shows the real time between commits, for example `(+16h 30m)` from 17:00 to 09:30 the next morning.
+- Commits can land exactly at the opening or closing time.
+- **First** and **Last** must be within office hours, on a working day. They are applied exactly, so GitGo won't move them; the panel tells you if one is outside.
+- The office hours are read in the time zone of **First**. A commit in another time zone still gets the same moment, shown at its own clock time.
+- A range that is too short in office time is refused, just as for a range that is too short overall, for example "5 commits at least 10m apart need at least 40m of office hours between the first and last date".
 
 The list at the bottom of the panel shows each commit's new date, with the time since the next older selected commit in brackets, for example `(+1d 4h 53m)`. The confirmation dialog shows the same.
 
@@ -133,4 +145,5 @@ Open the settings with the **⚙** button in the header or `Ctrl+,`. Changes app
 
 - **Theme:** System (follows your operating system's setting), Light or Dark. The **◐** button in the header switches between them too.
 - **Commit message guides:** the subject line length (default 50) draws a ruler in the message field and warns about longer subjects. The body line length (default 72) warns about longer body lines. 0 turns either one off.
+- **Office hours:** your working hours, From and to, and the working days (default Mon–Fri, 09:00–17:00). They are used by **Only office hours** when [spreading dates](#only-office-hours). The start must be before the end, on the same day, so hours that run past midnight aren't supported, and at least one day must be picked.
 - **Terminal command:** what the **>_** button in the header runs. `{dir}` stands for the repository folder. Leave it empty to use the default: Windows Terminal (or cmd) on Windows, Terminal on macOS, and `$TERMINAL` or the first common terminal found on Linux. Running git in that terminal needs git installed; GitGo itself doesn't.

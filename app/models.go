@@ -51,6 +51,18 @@ type Settings struct {
 	// the repository folder (for example `wt.exe -d {dir} pwsh`). Empty picks
 	// a terminal automatically.
 	TerminalCommand string `json:"terminalCommand"`
+	// OfficeHours are the user's working hours, for spreading commits with
+	// "Only office hours".
+	OfficeHours OfficeHours `json:"officeHours"`
+}
+
+// OfficeHours is a daily window of working time on chosen weekdays.
+type OfficeHours struct {
+	// Start and End are times of day as "HH:MM", with Start before End.
+	Start string `json:"start"`
+	End   string `json:"end"`
+	// Days are the working days, 0 for Sunday to 6 for Saturday.
+	Days []int `json:"days"`
 }
 
 // rewriteRecord captures the branch tip before and after a rewrite. Undo moves
@@ -176,6 +188,9 @@ type SpreadRequest struct {
 	Spacing       string `json:"spacing"`
 	MinGapMinutes int    `json:"minGapMinutes"`
 	Seed          uint32 `json:"seed"`
+	// OfficeHours, when set, keeps the commits within them, read in First's
+	// time zone; First and Last must be within them. Nil uses all the time.
+	OfficeHours *OfficeHours `json:"officeHours"`
 }
 
 // SpreadResult is the outcome of SpreadDates.

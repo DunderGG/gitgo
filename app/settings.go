@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	gitpkg "gitgo/git"
 )
 
 // configFile is the path of the named file in GitGo's config directory
@@ -125,6 +128,48 @@ func (app *App) SetTerminalCommand(command string) error {
 	return app.saveSettings(settings)
 }
 
+// SetOfficeHours saves the user's working hours, used by "Only office hours"
+// when spreading commits.
+func (app *App) SetOfficeHours(hours OfficeHours) error {
+	if _, err := parseOfficeHours(hours); err != nil {
+		return err
+	}
+	app.settingsMutex.Lock()
+	defer app.settingsMutex.Unlock()
+
+	settings := app.loadSettings()
+	settings.OfficeHours = hours
+	return app.saveSettings(settings)
+}
+
+// defaultOfficeHours are Monday to Friday, 09:00 to 17:00.
+func defaultOfficeHours() OfficeHours {
+	return OfficeHours{Start: "09:00", End: "17:00", Days: []int{1, 2, 3, 4, 5}}
+}
+
+// parseOfficeHours converts hours to git.OfficeHours, checking that the
+// times are "HH:MM", the days are 0 (Sunday) to 6, and the result is valid.
+func parseOfficeHours(hours OfficeHours) (gitpkg.OfficeHours, error) {
+	var parsed gitpkg.OfficeHours
+	for _, field := range []struct {
+		text   string
+		target *time.Duration
+	}{{hours.Start, &parsed.Start}, {hours.End, &parsed.End}} {
+		clock, err := time.Parse("15:04", field.text)
+		if err != nil {
+			return gitpkg.OfficeHours{}, fmt.Errorf("invalid office hours time %q, want HH:MM", field.text)
+		}
+		*field.target = time.Duration(clock.Hour())*time.Hour + time.Duration(clock.Minute())*time.Minute
+	}
+	for _, day := range hours.Days {
+		if day < 0 || day > 6 {
+			return gitpkg.OfficeHours{}, fmt.Errorf("invalid office hours day %d, want 0 (Sunday) to 6", day)
+		}
+		parsed.Days[day] = true
+	}
+	return parsed, parsed.Validate()
+}
+
 // The usual limits for commit messages: a 50-character subject and a body
 // wrapped at 72, as git's own documentation and most GUIs suggest.
 const (
@@ -142,6 +187,7 @@ func defaultSettings() Settings {
 		Theme:        ThemeSystem,
 		SubjectGuide: defaultSubjectGuide,
 		BodyGuide:    defaultBodyGuide,
+		OfficeHours:  defaultOfficeHours(),
 	}
 }
 
@@ -162,6 +208,9 @@ func (app *App) loadSettings() Settings {
 	}
 	if !validGuide(settings.SubjectGuide) {
 		settings.SubjectGuide = defaultSubjectGuide
+	}
+	if _, err := parseOfficeHours(settings.OfficeHours); err != nil {
+		settings.OfficeHours = defaultOfficeHours()
 	}
 	if !validGuide(settings.BodyGuide) {
 		settings.BodyGuide = defaultBodyGuide

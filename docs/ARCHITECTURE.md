@@ -178,7 +178,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `RefreshLog() ([]CommitSummary, error)` | Re-opens the current repository path, refreshes `repoState` (including the unpushed set), and returns an updated commit summary list. |
 | `UpdateCommit(req EditRequest) (OperationResult, error)` | Applies metadata edits for an unpushed commit via `RebaseRewrite`. Re-reads the repository, performs the server-side unpushed safety check, records the pre/post-rewrite tips in `lastRewrite`, then refreshes in-memory state (shared with `EditCommits` through `runRewrite`). |
 | `EditCommits(req BulkEditRequest) (OperationResult, error)` | Applies the same change to several unpushed commits in one `git.EditCommits` rewrite: moves each author date by `req.Minutes` or sets it to its entry in `req.Dates` (from `SpreadDates`), keeping each commit's offset (with `req.ShiftCommitter` the committer date moves by as much), and with `req.SetAuthor` replaces the author name and email. `req.Committer` keeps the committer names and emails, sets them all to `req.CommitterName` / `req.CommitterEmail`, or copies each commit's (new) author. One undo reverts the whole batch. |
-| `SpreadDates(req SpreadRequest) (SpreadResult, error)` | Computes, without writing anything, new author dates that fit the selected commits between `req.First` and `req.Last` (`git.SpreadDates`), for the bulk panel's preview. `req.Spacing` is `"keep"`, `"even"` or `"random"`; random spacing keeps at least `req.MinGapMinutes` between commits and is repeatable with `req.Seed`. The panel sends the returned dates back as `BulkEditRequest.Dates`, so what is applied is exactly what was shown. |
+| `SpreadDates(req SpreadRequest) (SpreadResult, error)` | Computes, without writing anything, new author dates that fit the selected commits between `req.First` and `req.Last` (`git.SpreadDates`), for the bulk panel's preview. `req.Spacing` is `"keep"`, `"even"` or `"random"`; random spacing keeps at least `req.MinGapMinutes` between commits and is repeatable with `req.Seed`. With `req.OfficeHours` the time outside them is skipped (see `git/officehours.go`). The panel sends the returned dates back as `BulkEditRequest.Dates`, so what is applied is exactly what was shown. |
 | `GetGitIdentity() (Identity, error)` | Returns the author identity git would use for a new commit (`GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`, then `user.name` / `user.email` from the repository and global config), for the "Use my identity" buttons. |
 | `GetAffectedRefs(hashes []string) ([]AffectedRef, error)` | Lists other branches and tags an edit of the given commits would leave behind, for the confirm dialog. |
 | `GetSignedCommits(hashes []string) ([]SignedCommit, error)` | Lists the signed commits an edit of the given commits would rebuild (the edited ones and those above them), which come out unsigned, for the confirm dialog's warning. |
@@ -192,6 +192,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `SetRecentRepos(paths []string) error` | *(`app/settings.go`)* Saves the recent repositories list into `settings.json`, keeping the other settings. Files in the config directory are written to a temporary file and renamed, so a crash never leaves a half-written file. |
 | `SetTheme(theme string) error` | *(`app/settings.go`)* Saves the colour theme (`system`, `light` or `dark`) into `settings.json`. `GetSettings` gives `system` for a missing or unknown value. |
 | `SetMessageGuides(subject, body int) error` | *(`app/settings.go`)* Saves the commit message guide columns, for the subject ruler and length hint and for the body line length hint (0–200, 0 turns a guide off), into `settings.json`. `GetSettings` gives 50 and 72 for missing or out-of-range values. |
+| `SetOfficeHours(hours OfficeHours) error` | *(`app/settings.go`)* Saves the working hours used by "Only office hours" (`start` / `end` as `HH:MM`, start before end, and `days`, 0 for Sunday to 6, at least one) into `settings.json`. Invalid hours are rejected; `GetSettings` gives Mon–Fri 09:00–17:00 for missing or invalid ones. |
 | `SetTerminalCommand(command string) error` | *(`app/settings.go`)* Saves the command `OpenTerminal` runs into `settings.json`, trimmed; `{dir}` stands for the repository folder, and double or single quotes keep spaces in one argument (backslashes are literal, for Windows paths). Rejects an unclosed quote or an empty program name. An empty command goes back to the automatic choice. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
@@ -401,6 +402,7 @@ Behaviour:
 - A "Dates" switch picks Shift or Spread; each keeps its inputs while the other is shown, and only the selected one is applied. Nothing is written until the user confirms. Each selected commit shows its current and new author date in its own offset (helpers in `src/dates.ts`).
 - Shift: the shared `DateShiftButtons` (±1h / ±1d) add to one accumulated shift.
 - Spread: First and Last (`DateTimeField`, shared with `EditPanel`) start as the oldest and newest selected commit's dates (`null` state follows the selection until edited). "Keep relative spacing", "Even" or "Random", with a "Minimum gap" in minutes (default 10, validated before calling the backend) and "Re-roll" (a new random seed) for Random. Every input change calls `SpreadDates`; the answer is stored with a key of its inputs, so a stale answer is never shown or applied, and "Review Changes" stays disabled until the current answer has arrived. The list shows each new date with the gap to the next older selected commit (`formatGap`). A line under the options describes the chosen spacing; notices cover the even-spacing fallback, other time zones, and invalid ranges (the backend's error text).
+- "Only office hours" (Spread) sends the store's `officeHours` with the request; its label shows them (`formatOfficeHours`) and "Change" opens the settings. The description under the spacing says whether time outside office hours is skipped.
 - "Also move committer dates" (on by default) moves each committer date by as much as its author date, keeping the gap between them.
 - "Set Author" enables a name and email that replace every selected commit's author, validated with the same rules as `EditPanel` (`src/identity.ts`). "Use my identity" fills them from `GetGitIdentity` and ticks the checkbox.
 - The Committer section (`CommitterFields`, shared with `EditPanel`) keeps the committers (the default), makes each one the same as its commit's author, or gives them all the same name and email. The current committer names come from `CommitSummary.committer`.
@@ -438,6 +440,7 @@ A modal with the user's preferences, opened with the **⚙** button in the heade
 
 - **Theme**: System / Light / Dark buttons calling the store's `setTheme`, the same setting the header's theme button cycles.
 - **Commit message guides**: number fields for the subject and body columns (0–200, 0 turns a guide off), and a button that restores 50 / 72. A valid value calls `setMessageGuides` at once, so `EditPanel` follows while the dialog is open; an invalid one is marked and not saved.
+- **Office hours**: From and to time inputs and a button per weekday. Valid hours (`officeHoursError` in `src/officeHours.ts`) call `setOfficeHours` at once; invalid ones are marked and not saved. A button restores Mon–Fri 09:00–17:00.
 - **Terminal**: the command the `>_` button runs (`setTerminalCommand`), with this platform's automatic choice as the placeholder and two example commands. Each change is saved at once; the store chains the saves so the last one typed wins, and a rejected command is marked with the backend's message.
 - There is no Save or Cancel: every change is applied and saved as it is made, like the theme button. The content is mounted only while the dialog is open, so the fields start from the saved values each time.
 - Closes on `Escape`, `Ctrl+,`, the **×** button or a click on the backdrop; `Ctrl+Z` is swallowed outside its fields, and focus is handled like `HelpDialog`.
@@ -495,6 +498,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `recentRepos` | `string[]` | Most-recent repository paths, saved in `settings.json` through `SetRecentRepos` and loaded by `loadSettings()` before the first render (moving a list from an earlier version's `localStorage` there once), deduplicated, and capped to 10 entries. |
 | `theme` | `ThemePreference` | `'system'`, `'light'` or `'dark'`, saved in `settings.json` through `SetTheme` and applied by `loadSettings()` before the first render. |
 | `messageGuides` | `MessageGuides` | Commit message guide columns, `{ subject, body }`: the subject ruler and length hint, and the body line length hint (0 turns a guide off), saved in `settings.json` through `SetMessageGuides` and loaded by `loadSettings()`. |
+| `officeHours` | `OfficeHours` | Working hours, `{ start, end, days }`, for spreading commits with "Only office hours", saved in `settings.json` through `SetOfficeHours` and loaded by `loadSettings()`. |
 | `terminalCommand` | `string` | Command the `>_` button runs, with `{dir}` for the repository folder; empty picks a terminal automatically. Saved in `settings.json` through `SetTerminalCommand`. |
 | `selectedHash` | `string | null` | Currently selected `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
@@ -582,13 +586,14 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetTerminalCommand` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetTerminalCommand` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
 | `git/git_test.go` | 14 unit tests covering `Open` and `Log` using real on-disk repos |
 | `git/rewrite.go` | *(Phase 2)* `RewriteCommits` (edits any set of unpushed commits in one first-parent chain rebuild, one branch move and one reflog entry), with `AmendCommit` / `RebaseRewrite` as single-commit wrappers and `EditCommits` for bulk date changes (a shift or per-commit dates) and author and committer changes; committer changes (`changeCommitter`: keep, set, or copy the author), commit rebuilding (`rebuildCommit`, which keeps encoding and extra headers but drops signatures) and author and committer validation (`validateIdentity`) |
 | `git/spread.go` | `SpreadDates`: new author dates that fit commits between a first and last date, in first-parent history order, keeping relative spacing (falling back to even when the current dates are equal or out of order) even spacing, or seeded random spacing with a minimum gap (the gaps are set aside, the rest is placed uniformly, so it never retries); `ErrInvalidSpreadRange` |
+| `git/officehours.go` | `OfficeHours` (a daily window on chosen weekdays, with `Validate`) and the `timeAxis` that `SpreadDates` places commits on: the seconds from the first to the last date, or only those within office hours, read in the first date's location |
 | `git/identity.go` | `ConfiguredIdentity`: the author name and email git would use for a new commit (environment, then repository and global config) |
 | `git/signed.go` | `FindSignedCommits`: the signed commits in the chain a rewrite rebuilds; checks the raw headers for `gpgsig-sha256`, which go-git drops |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
@@ -619,6 +624,7 @@ GitGo/
 │   ├── git_test.go          # Unit tests (real on-disk repos via t.TempDir)
 │   ├── rewrite.go           # (Phase 2) Amend + rebase-based rewriting
 │   ├── spread.go            # New dates that fit commits between a first and last date
+│   ├── officehours.go       # Office hours and the timeline spreads are placed on
 │   └── undo.go              # (Phase 3) Reset branch to pre-rewrite tip
 │
 ├── frontend/
@@ -630,6 +636,7 @@ GitGo/
 │       ├── errors.ts               # (Phase 3) Friendly error messages
 │       ├── dates.ts                # Wall-clock + offset date helpers
 │       ├── identity.ts             # Author and committer name/email validation
+│       ├── officeHours.ts          # Office hours type, validation and description
 │       ├── App.tsx
 │       ├── components/
 │       │   ├── BranchSelector.tsx  # (Phase 3)
@@ -646,7 +653,7 @@ GitGo/
 │       │   ├── ConfirmDialog.tsx   # (Phase 2)
 │       │   ├── HelpDialog.tsx      # In-app help (? button / F1)
 │       │   ├── Kbd.tsx             # Keyboard key label
-│       │   ├── SettingsDialog.tsx  # Theme and message guides (⚙ button / Ctrl+,)
+│       │   ├── SettingsDialog.tsx  # Theme, message guides, office hours, terminal (⚙ button / Ctrl+,)
 │       │   └── StatusBar.tsx
 │       ├── hooks/
 │       │   └── useKeyboardShortcuts.ts  # (Phase 3)

@@ -217,3 +217,56 @@ func TestSetTerminalCommand_RejectsUnclosedQuote(test *testing.T) {
 		test.Fatalf("TerminalCommand = %q, want it unchanged", got)
 	}
 }
+
+func TestGetSettings_OfficeHoursDefaults(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+	want := OfficeHours{Start: "09:00", End: "17:00", Days: []int{1, 2, 3, 4, 5}}
+
+	if got := app.GetSettings().OfficeHours; !reflect.DeepEqual(got, want) {
+		test.Fatalf("office hours without a file = %+v, want %+v", got, want)
+	}
+
+	// Invalid hours, edited by hand, fall back to the defaults.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		test.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"officeHours": {"start": "18:00", "end": "08:00", "days": [1]}}`), 0o644); err != nil {
+		test.Fatal(err)
+	}
+	if got := app.GetSettings().OfficeHours; !reflect.DeepEqual(got, want) {
+		test.Fatalf("invalid office hours = %+v, want the defaults %+v", got, want)
+	}
+}
+
+func TestSetOfficeHours_SavedForNextRun(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+	want := OfficeHours{Start: "07:30", End: "22:00", Days: []int{0, 6}}
+
+	if err := app.SetOfficeHours(want); err != nil {
+		test.Fatalf("SetOfficeHours: %v", err)
+	}
+
+	nextRun := &App{settingsPath: path}
+	if got := nextRun.GetSettings().OfficeHours; !reflect.DeepEqual(got, want) {
+		test.Fatalf("office hours = %+v, want %+v", got, want)
+	}
+}
+
+func TestSetOfficeHours_RejectsInvalidHours(test *testing.T) {
+	app, _ := appWithSettingsFile(test)
+
+	invalid := []OfficeHours{
+		{Start: "17:00", End: "09:00", Days: []int{1}},
+		{Start: "9", End: "17:00", Days: []int{1}},
+		{Start: "09:00", End: "17:00", Days: []int{}},
+		{Start: "09:00", End: "17:00", Days: []int{7}},
+	}
+	for _, hours := range invalid {
+		if err := app.SetOfficeHours(hours); err == nil {
+			test.Errorf("SetOfficeHours(%+v) accepted invalid hours", hours)
+		}
+	}
+	if got := app.GetSettings().OfficeHours; got.Start != "09:00" || got.End != "17:00" {
+		test.Fatalf("office hours = %+v, want the defaults", got)
+	}
+}

@@ -184,8 +184,9 @@ export default function HelpDialog() {
                 oldest commit gets the first date and the newest the last, exactly, and the commits keep their order.{' '}
                 <Ui>Keep relative spacing</Ui> stretches or squeezes the current gaps to fit, so commits made close
                 together stay close. <Ui>Even</Ui> puts the same time between every commit. <Ui>Random</Ui> places
-                them at random, never closer than the <Ui>Minimum gap</Ui> (<Ui>Re-roll</Ui> for other dates). The
-                list shows the time between the new dates before you apply.
+                them at random, never closer than the <Ui>Minimum gap</Ui> (<Ui>Re-roll</Ui> for other dates). Tick{' '}
+                <Ui>Only office hours</Ui> to skip nights and non-working days; set your hours in the settings (
+                <Kbd>Ctrl</Kbd>+<Kbd>,</Kbd>). The list shows the time between the new dates before you apply.
               </li>
               <li>
                 <Ui>Also move committer dates</Ui> moves each committer date by as much as its author date, keeping

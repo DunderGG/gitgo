@@ -6,6 +6,7 @@ import {
   RefreshLog,
   ReloadRepository,
   SetMessageGuides,
+  SetOfficeHours,
   SetRecentRepos,
   SetTerminalCommand,
   SetTheme,
@@ -14,6 +15,7 @@ import {
 import { errorText, friendlyError } from '../errors'
 import { applyTheme, isThemePreference, type ThemePreference } from '../theme'
 import { DEFAULT_MESSAGE_GUIDES, type MessageGuides } from '../messageGuides'
+import { DEFAULT_OFFICE_HOURS, type OfficeHours } from '../officeHours'
 
 // Where earlier versions kept the recent repositories, in the WebView's
 // localStorage. loadSettings moves the list to the backend's settings file.
@@ -61,7 +63,8 @@ export async function loadSettings(): Promise<void> {
   applyTheme(theme)
   const messageGuides = { subject: settings.subjectGuide, body: settings.bodyGuide }
   const terminalCommand = settings.terminalCommand
-  useRepoStore.setState({ recentRepos, theme, messageGuides, terminalCommand })
+  const officeHours = settings.officeHours
+  useRepoStore.setState({ recentRepos, theme, messageGuides, terminalCommand, officeHours })
 }
 
 // The last SetTerminalCommand call; see setTerminalCommand.
@@ -117,6 +120,9 @@ interface RepoStore {
   // Command the header's terminal button runs, with {dir} for the repository
   // folder; empty picks a terminal automatically. Saved in the settings file.
   terminalCommand: string
+  // Working hours for spreading commits with "Only office hours". Saved in
+  // the settings file.
+  officeHours: OfficeHours
   // Hash of the commit currently selected in CommitList; null when nothing is
   // selected. EditPanel reads this to know which commit to load. With several
   // commits selected it is the one last clicked or moved to.
@@ -152,6 +158,7 @@ interface RepoStore {
   removeRecentRepo: (path: string) => void
   setTheme: (theme: ThemePreference) => void
   setMessageGuides: (messageGuides: MessageGuides) => void
+  setOfficeHours: (officeHours: OfficeHours) => void
   // Saves the terminal command. Resolves to an error message when the backend
   // rejects it (for example an unclosed quote), or null.
   setTerminalCommand: (command: string) => Promise<string | null>
@@ -184,6 +191,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   theme: 'system',
   messageGuides: DEFAULT_MESSAGE_GUIDES,
   terminalCommand: '',
+  officeHours: DEFAULT_OFFICE_HOURS,
   selectedHash: null,
   selectedHashes: [],
   selectionAnchor: null,
@@ -236,6 +244,13 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     SetMessageGuides(messageGuides.subject, messageGuides.body).catch((error) =>
       console.error('Saving the message guides failed:', error),
     )
+  },
+
+  setOfficeHours: (officeHours) => {
+    set({ officeHours })
+    // Like the guides, the hours already apply, so a failed save only loses
+    // them for the next run.
+    SetOfficeHours(officeHours).catch((error) => console.error('Saving the office hours failed:', error))
   },
 
   setTerminalCommand: (command) => {

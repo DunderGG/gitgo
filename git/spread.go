@@ -13,7 +13,8 @@ import (
 )
 
 // ErrInvalidSpreadRange is returned by SpreadDates when the last date is not
-// after the first, or when even spacing would need gaps under one second.
+// after the first, when the range is too short for the commits, or when the
+// first or last date is outside the office hours asked for.
 var ErrInvalidSpreadRange = errors.New("invalid date range")
 
 // Spacing says how SpreadDates places the commits between the first and
@@ -45,6 +46,11 @@ type SpreadOptions struct {
 	// Seed makes RandomSpacing repeatable, so the preview shown to the user
 	// and the dates applied are the same.
 	Seed uint64
+	// OfficeHours, when set, keeps the commits within them: the time outside
+	// office hours counts as nothing, so every spacing is measured in office
+	// time. They are read in First's location, and First and Last must be
+	// within them. Nil uses all the time between First and Last.
+	OfficeHours *OfficeHours
 }
 
 // SpreadResult holds the new author dates computed by SpreadDates.
@@ -109,78 +115,84 @@ func SpreadDates(state *RepoState, hashes []plumbing.Hash, opts SpreadOptions) (
 // spreadTimes is the calculation behind SpreadDates, for original author
 // dates listed oldest commit first. Each result keeps the location (offset)
 // of its original date.
+//
+// The commits are placed on a timeline of whole seconds from opts.First to
+// opts.Last (see timeAxis), which leaves out the time outside office hours
+// when opts.OfficeHours is set, and then mapped back to dates.
 func spreadTimes(original []time.Time, opts SpreadOptions) ([]time.Time, bool, error) {
 	count := len(original)
-	first, last := opts.First.Unix(), opts.Last.Unix()
-	if count == 1 {
-		return []time.Time{time.Unix(first, 0).In(original[0].Location())}, false, nil
+	axis, err := newTimeAxis(opts.First, opts.Last, opts.OfficeHours, count > 1)
+	if err != nil {
+		return nil, false, err
 	}
-	if last <= first {
-		return nil, false, fmt.Errorf("%w: the last date must be after the first", ErrInvalidSpreadRange)
+	if count == 1 {
+		return []time.Time{axis.at(0).In(original[0].Location())}, false, nil
 	}
 
-	span := last - first
-	seconds := make([]int64, count)
+	span := axis.span
+	positions := make([]int64, count)
 	fellBack := false
 	switch {
 	case opts.Spacing == KeepSpacing && inHistoryOrder(original):
 		// Scale each commit's distance from the oldest one to the new range.
 		oldest, originalSpan := original[0].Unix(), float64(original[count-1].Unix()-original[0].Unix())
 		for i, date := range original {
-			seconds[i] = first + int64(math.Round(float64(date.Unix()-oldest)/originalSpan*float64(span)))
+			positions[i] = int64(math.Round(float64(date.Unix()-oldest) / originalSpan * float64(span)))
 		}
 	case opts.Spacing == RandomSpacing:
-		if err := randomSeconds(seconds, first, span, opts); err != nil {
+		if err := randomPositions(positions, span, opts.MinGap, opts.Seed, axis.unit); err != nil {
 			return nil, false, err
 		}
 	default:
 		fellBack = opts.Spacing == KeepSpacing
 		if span < int64(count-1) {
-			return nil, false, fmt.Errorf("%w: %d commits need at least %s between the first and last date",
-				ErrInvalidSpreadRange, count, formatSpan(int64(count-1)))
+			return nil, false, fmt.Errorf("%w: %d commits need at least %s %s",
+				ErrInvalidSpreadRange, count, formatSpan(int64(count-1)), axis.unit)
 		}
 		gap := float64(span) / float64(count-1)
-		for i := range seconds {
-			seconds[i] = first + int64(math.Round(float64(i)*gap))
+		for i := range positions {
+			positions[i] = int64(math.Round(float64(i) * gap))
 		}
 	}
 	// The ends are exact even where rounding could have moved them.
-	seconds[0], seconds[count-1] = first, last
+	positions[0], positions[count-1] = 0, span
 
 	result := make([]time.Time, count)
-	for i, second := range seconds {
-		result[i] = time.Unix(second, 0).In(original[i].Location())
+	for i, position := range positions {
+		result[i] = axis.at(position).In(original[i].Location())
 	}
 	return result, fellBack, nil
 }
 
-// randomSeconds fills seconds with random dates from first to first+span,
-// at least opts.MinGap apart. The minimum gaps are set aside first, the
-// commits in between are placed at random in the time that is left, and each
-// one is then pushed later by the gaps before it. That keeps them in order and
-// apart without retrying, and spreads them uniformly over the time that is
-// left.
-func randomSeconds(seconds []int64, first, span int64, opts SpreadOptions) error {
-	count := len(seconds)
-	minGap := int64(opts.MinGap / time.Second)
-	if minGap < 0 {
+// randomPositions fills positions with random points from 0 to span, at
+// least minGap apart, with the first at 0 and the last at span. The minimum
+// gaps are set aside first, the points in between are placed at random in
+// the time that is left, and each one is then pushed later by the gaps
+// before it. That keeps them in order and apart without retrying, and
+// spreads them uniformly over the time that is left. unit describes span in
+// error messages.
+func randomPositions(positions []int64, span int64, minGap time.Duration, seed uint64, unit string) error {
+	count := len(positions)
+	gap := int64(minGap / time.Second)
+	if gap < 0 {
 		return fmt.Errorf("%w: the minimum gap cannot be negative", ErrInvalidSpreadRange)
 	}
-	free := span - int64(count-1)*minGap
+	free := span - int64(count-1)*gap
 	if free < 0 {
-		return fmt.Errorf("%w: %d commits at least %s apart need at least %s between the first and last date",
-			ErrInvalidSpreadRange, count, formatSpan(minGap), formatSpan(int64(count-1)*minGap))
+		return fmt.Errorf("%w: %d commits at least %s apart need at least %s %s",
+			ErrInvalidSpreadRange, count, formatSpan(gap), formatSpan(int64(count-1)*gap), unit)
 	}
 
-	random := rand.New(rand.NewPCG(opts.Seed, opts.Seed))
+	random := rand.New(rand.NewPCG(seed, seed))
 	inner := make([]int64, count-2)
 	for i := range inner {
 		inner[i] = random.Int64N(free + 1)
 	}
 	slices.Sort(inner)
 	for i, position := range inner {
-		seconds[i+1] = first + position + int64(i+1)*minGap
+		positions[i+1] = position + int64(i+1)*gap
 	}
+	positions[0], positions[count-1] = 0, span
 	return nil
 }
 

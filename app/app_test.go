@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	gitpkg "gitgo/git"
 )
@@ -509,5 +510,48 @@ func TestSpreadDates_RejectsInvalidRange(test *testing.T) {
 	})
 	if !errors.Is(err, gitpkg.ErrInvalidSpreadRange) {
 		test.Errorf("err = %v, want ErrInvalidSpreadRange", err)
+	}
+}
+
+// TestSpreadDates_OfficeHours verifies that office hours in the request keep
+// the dates within them, and that a first date outside them is refused.
+func TestSpreadDates_OfficeHours(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	commitFile(test, dir, "second")
+	commitFile(test, dir, "third")
+	if _, err := app.ReloadRepository(); err != nil {
+		test.Fatalf("ReloadRepository: %v", err)
+	}
+	hashes := strings.Split(runGit(test, dir, "log", "-3", "--format=%H"), "\n")
+	hours := &OfficeHours{Start: "09:00", End: "17:00", Days: []int{1, 2, 3, 4, 5}}
+
+	// Monday 16:00 to Tuesday 10:00 is two hours of office time, so the
+	// middle commit lands at Monday's closing time.
+	spread, err := app.SpreadDates(SpreadRequest{
+		Hashes:      hashes,
+		First:       "2024-02-05T16:00:00Z",
+		Last:        "2024-02-06T10:00:00Z",
+		Spacing:     "even",
+		OfficeHours: hours,
+	})
+	if err != nil {
+		test.Fatalf("SpreadDates: %v", err)
+	}
+	want, err := time.Parse(time.RFC3339, "2024-02-05T17:00:00Z")
+	if err != nil {
+		test.Fatal(err)
+	}
+	if got, err := time.Parse(time.RFC3339, spread.Dates[hashes[1]]); err != nil || !got.Equal(want) {
+		test.Errorf("middle date = %s, want %s", spread.Dates[hashes[1]], want)
+	}
+
+	_, err = app.SpreadDates(SpreadRequest{
+		Hashes:      hashes,
+		First:       "2024-02-05T07:00:00Z",
+		Last:        "2024-02-06T10:00:00Z",
+		OfficeHours: hours,
+	})
+	if !errors.Is(err, gitpkg.ErrInvalidSpreadRange) {
+		test.Errorf("first date at 07:00: err = %v, want ErrInvalidSpreadRange", err)
 	}
 }

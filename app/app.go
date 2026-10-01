@@ -360,16 +360,26 @@ func (app *App) SpreadDates(req SpreadRequest) (SpreadResult, error) {
 		return SpreadResult{}, fmt.Errorf("invalid spacing %q", req.Spacing)
 	}
 
+	var officeHours *gitpkg.OfficeHours
+	if req.OfficeHours != nil {
+		parsed, err := parseOfficeHours(*req.OfficeHours)
+		if err != nil {
+			return SpreadResult{}, err
+		}
+		officeHours = &parsed
+	}
+
 	hashes := make([]plumbing.Hash, len(req.Hashes))
 	for i, hash := range req.Hashes {
 		hashes[i] = plumbing.NewHash(hash)
 	}
 	spread, err := gitpkg.SpreadDates(state, hashes, gitpkg.SpreadOptions{
-		First:   first,
-		Last:    last,
-		Spacing: spacing,
-		MinGap:  time.Duration(req.MinGapMinutes) * time.Minute,
-		Seed:    uint64(req.Seed),
+		First:       first,
+		Last:        last,
+		Spacing:     spacing,
+		MinGap:      time.Duration(req.MinGapMinutes) * time.Minute,
+		Seed:        uint64(req.Seed),
+		OfficeHours: officeHours,
 	})
 	if err != nil {
 		return SpreadResult{}, err

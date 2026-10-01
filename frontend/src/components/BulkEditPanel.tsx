@@ -26,6 +26,7 @@ import { errorText } from '../errors'
 import { identityErrors, NO_IDENTITY_ERRORS, type CommitterMode } from '../identity'
 import CommitterFields from './CommitterFields'
 import { useRepoStore, type CommitSummary } from '../store/repoStore'
+import { formatOfficeHours } from '../officeHours'
 
 // How the dates change: every commit moves by the same amount, or the
 // commits are fitted between a first and last date (see SpreadDates).
@@ -59,7 +60,7 @@ const SPACING_DESCRIPTIONS: Record<Spacing, string> = {
   keep: 'Keeps the gaps between the commits, scaled to fit between the first and last date: commits made close together stay close together.',
   even: 'Puts the same time between every commit.',
   random:
-    'Places the commits at random, never closer together than the minimum gap, so some end up close together and others far apart. The time of day is not considered, so a commit can land at night. Re-roll for other dates.',
+    'Places the commits at random, never closer together than the minimum gap, so some end up close together and others far apart. Re-roll for other dates.',
 }
 
 // Default minimum gap for random spacing, in minutes.
@@ -148,6 +149,8 @@ export default function BulkEditPanel() {
   const setCanUndo = useRepoStore((s) => s.setCanUndo)
   const activity = useRepoStore((s) => s.activity)
   const runGitOperation = useRepoStore((s) => s.runGitOperation)
+  const officeHours = useRepoStore((s) => s.officeHours)
+  const setSettingsOpen = useRepoStore((s) => s.setSettingsOpen)
 
   const [dateMode, setDateMode] = useState<DateMode>('shift')
   // The shift adds up across button clicks and is only applied on confirm.
@@ -158,6 +161,7 @@ export default function BulkEditPanel() {
   const [lastInput, setLastInput] = useState<WallClockDate | null>(null)
   const [spacing, setSpacing] = useState<Spacing>('keep')
   const [minGapText, setMinGapText] = useState(String(DEFAULT_MIN_GAP_MINUTES))
+  const [onlyOfficeHours, setOnlyOfficeHours] = useState(false)
   const [seed, setSeed] = useState(newSeed)
   const [spreadAnswer, setSpreadAnswer] = useState<SpreadAnswer | null>(null)
   const [shiftCommitter, setShiftCommitter] = useState(true)
@@ -197,6 +201,7 @@ export default function BulkEditPanel() {
     last: last.dateLocal + last.offset,
     spacing,
     minGapMinutes: spacing === 'random' ? minGapMinutes : 0,
+    officeHours: onlyOfficeHours ? officeHours : null,
     seed,
   })
 
@@ -444,7 +449,34 @@ export default function BulkEditPanel() {
                     </button>
                   </div>
                 )}
-                <p className="text-xs text-gray-400">{SPACING_DESCRIPTIONS[spacing]}</p>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <label className="flex items-center gap-2 text-sm text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={onlyOfficeHours}
+                      onChange={(e) => setOnlyOfficeHours(e.target.checked)}
+                      disabled={isSubmitting}
+                      className="accent-indigo-500 disabled:cursor-not-allowed"
+                    />
+                    Only office hours
+                  </label>
+                  <span className="text-xs text-gray-400">({formatOfficeHours(officeHours)})</span>
+                  <button
+                    type="button"
+                    title="Change the office hours in the settings"
+                    disabled={isSubmitting}
+                    onClick={() => setSettingsOpen(true)}
+                    className={DATE_BUTTON_CLASS}
+                  >
+                    Change
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400">
+                  {SPACING_DESCRIPTIONS[spacing]}
+                  {onlyOfficeHours
+                    ? ' Time outside office hours is skipped, so every gap counts office time only. The first and last date must be within office hours, which are read in the first date’s time zone.'
+                    : ' Any time of day counts, so over several days a commit can land at night.'}
+                </p>
                 {spreadError && <p className="text-xs text-red-300">{spreadError}</p>}
                 {spread?.fellBack && (
                   <p className="text-xs text-yellow-300">

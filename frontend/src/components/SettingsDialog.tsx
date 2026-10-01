@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { DEFAULT_MESSAGE_GUIDES, MAX_GUIDE_COLUMN, type MessageGuides } from '../messageGuides'
+import { DEFAULT_OFFICE_HOURS, formatOfficeHours, officeHoursError, WEEKDAYS, type OfficeHours } from '../officeHours'
 import { useRepoStore } from '../store/repoStore'
 import { themePreferences, type ThemePreference } from '../theme'
 
@@ -115,6 +116,95 @@ function TerminalField() {
           <li key={example}>{example}</li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+const TIME_INPUT_CLASS =
+  'rounded-md border border-gray-700 bg-gray-800 px-2 py-1 font-mono text-sm text-gray-100 outline-none transition focus:border-indigo-500'
+
+// The working hours used by "Only office hours" when spreading commits. Like
+// the guide fields, valid hours are saved at once and invalid ones stay here
+// until they are fixed, or are dropped on close.
+function OfficeHoursField() {
+  const officeHours = useRepoStore((s) => s.officeHours)
+  const setOfficeHours = useRepoStore((s) => s.setOfficeHours)
+  const [draft, setDraft] = useState<OfficeHours>(officeHours)
+  const error = officeHoursError(draft)
+
+  function change(hours: OfficeHours) {
+    setDraft(hours)
+    if (officeHoursError(hours) === null) {
+      setOfficeHours(hours)
+    }
+  }
+
+  function toggleDay(day: number) {
+    const days = draft.days.includes(day) ? draft.days.filter((d) => d !== day) : [...draft.days, day]
+    change({ ...draft, days: days.sort((left, right) => left - right) })
+  }
+
+  const isDefault = formatOfficeHours(draft) === formatOfficeHours(DEFAULT_OFFICE_HOURS)
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="settings-office-start" className="text-sm text-gray-200">
+          From
+        </label>
+        <input
+          id="settings-office-start"
+          type="time"
+          value={draft.start}
+          onChange={(event) => change({ ...draft, start: event.target.value })}
+          className={TIME_INPUT_CLASS}
+        />
+        <label htmlFor="settings-office-end" className="text-sm text-gray-200">
+          to
+        </label>
+        <input
+          id="settings-office-end"
+          type="time"
+          value={draft.end}
+          onChange={(event) => change({ ...draft, end: event.target.value })}
+          className={TIME_INPUT_CLASS}
+        />
+      </div>
+      <div role="group" aria-label="Working days" className="mt-2 flex flex-wrap gap-1">
+        {WEEKDAYS.map(({ day, short }) => {
+          const isWorking = draft.days.includes(day)
+          return (
+            <button
+              key={day}
+              type="button"
+              aria-pressed={isWorking}
+              onClick={() => toggleDay(day)}
+              className={`rounded-md border px-2 py-1 text-xs transition ${
+                isWorking
+                  ? 'border-indigo-500 bg-indigo-600 text-white'
+                  : 'border-gray-700 text-gray-400 hover:bg-gray-800'
+              }`}
+            >
+              {short}
+            </button>
+          )
+        })}
+      </div>
+      {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
+      <p className="mt-1 text-xs text-gray-500">
+        Used by <span className="text-gray-300">Only office hours</span> when spreading the dates of several
+        commits: commits are only placed within these hours, in the time zone of the first date.
+      </p>
+      <div className="mt-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => change(DEFAULT_OFFICE_HOURS)}
+          disabled={isDefault}
+          className="rounded-md border border-gray-700 px-3 py-1 text-xs text-gray-300 transition hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Restore default ({formatOfficeHours(DEFAULT_OFFICE_HOURS)})
+        </button>
+      </div>
     </div>
   )
 }
@@ -265,6 +355,10 @@ function SettingsContent({ onClose }: { onClose: () => void }) {
             </div>
           </Section>
 
+          <Section title="Office hours">
+            <OfficeHoursField />
+          </Section>
+
           <Section title="Terminal">
             <TerminalField />
           </Section>
@@ -275,8 +369,8 @@ function SettingsContent({ onClose }: { onClose: () => void }) {
 }
 
 // SettingsDialog holds the user's preferences: the colour theme, the
-// commit message guide columns and the terminal command. Changes apply and
-// are saved at once, like the header's theme button.
+// commit message guide columns, the office hours and the terminal command.
+// Changes apply and are saved at once, like the header's theme button.
 export default function SettingsDialog() {
   const isOpen = useRepoStore((s) => s.isSettingsOpen)
   const setSettingsOpen = useRepoStore((s) => s.setSettingsOpen)
