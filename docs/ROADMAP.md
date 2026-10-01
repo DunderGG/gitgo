@@ -56,7 +56,7 @@
 - [x] Implement `app/app.go` — `GetCommitDetail(hash)` binding
 - [x] Implement `app/app.go` — `RefreshLog()` binding (re-open current repo and return updated log)
   - [x] Extract `commitSummariesFromEntries` helper shared by `GetCommitLog` and `RefreshLog`
-- [ ] Implement `git/rewrite.go`
+- [x] Implement `git/rewrite.go`
   - [x] `AmendCommit` — modify the most recent commit (message, date, author)
   - [x] `RebaseRewrite` — modify any unpushed commit further back in history
     - [x] Walk commits from target to HEAD
@@ -200,10 +200,6 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Drop commit**
   - [ ] Remove an unpushed commit from history entirely
   - [ ] Confirmation dialog with strong warning
-- [ ] **Split commit** *(stretch goal)*
-  - [ ] Reset to pre-commit state, open diff view, let user stage partial changes
-- [ ] **Edit commit file tree** *(stretch goal)*
-  - [ ] Add / remove files from an unpushed commit
 - [ ] **Reword several messages in one view**: a list of the selected commits' messages edited side by side and applied in one rewrite, like the reword step of `git rebase -i` (as in lazygit and Sublime Merge)
 - [ ] **Undo last commit**: remove the newest unpushed commit and keep its changes staged, like `git reset --soft HEAD~1` (GitHub Desktop's "Undo" button)
 - [ ] **Apply fixup commits**: fold `fixup!` / `squash!` commits into their targets, like `git rebase -i --autosquash`
@@ -256,7 +252,9 @@ Found in the follow-up review (2026-09-25):
   - [x] `Settings.OfficeHours` and `SetOfficeHours` (invalid hours in the file fall back to the defaults), `SpreadRequest.OfficeHours`; an Office hours section in `SettingsDialog`, and in `BulkEditPanel` the checkbox with the hours in its label and a Change button that opens Settings
   - [x] Tests: `TestSpreadTimes_OfficeHours*` (nights and weekends skipped, relative spacing, random stays inside with the minimum gap in office time, first date's location, ends outside rejected), `TestOfficeHours_Validate`, `TestGetSettings_OfficeHoursDefaults`, `TestSetOfficeHours_*`, `TestSpreadDates_OfficeHours`
   - Not done: the earlier idea of keeping each commit's day and squeezing only its time into the window, which has no rule that would not surprise people (commits already inside the window would move too), and office hours that run past midnight
-- [ ] **Change time zone, keeping the moment**: convert the selected commits' dates to another offset (for example "my time zone") without changing the actual point in time, unlike the offset menu in `EditPanel`, which keeps the wall-clock time
+- [ ] **Convert to my time zone, keeping the moment** (low priority): rewrite the selected commits' offsets without changing the actual point in time, unlike the offset menu in `EditPanel`, which keeps the wall-clock time. Mainly for privacy (an offset hints at where you are) and for tidying mixed offsets after travel or a wrongly set system time zone; most hosts show dates in the viewer's time zone, so it is rarely needed
+  - [ ] `Settings.TimeZone` ("My time zone", default this computer's) in `SettingsDialog`, the conversion's target; could later serve the Now button and Spread's notice about other time zones
+  - [ ] A third mode in `BulkEditPanel`'s Dates switch (Shift / Spread / Convert), so it reuses the preview, `ConfirmDialog`, undo and "Also move committer dates"; not an action in `SettingsDialog`, which holds preferences only
 - [x] **Edit the committer**: an option to set the committer name and email too, or to reset them to the author, since a wrong identity usually affects both
   - [x] `git.CommitterChange` (`KeepCommitter`, `SetCommitter`, `CommitterFromAuthor`) in `AmendOptions` and `BulkEditOptions`, with `validateIdentity` naming the author or committer (`TestAmendCommit_SetsCommitter`, `TestAmendCommit_CommitterFromAuthor`, `TestRebaseRewrite_SetsCommitterOnTargetOnly`, `TestEditCommits_SetsCommitterKeepingEverythingElse`, `TestEditCommits_CommitterFromAuthor`)
   - [x] `Committer` (`"keep"` / `"author"` / `"set"`), `CommitterName` and `CommitterEmail` in `EditRequest` and `BulkEditRequest` (`TestUpdateCommit_ChangesCommitter`, `TestEditCommits_SetsCommitterOnly`); `CommitSummary.committer` for the bulk preview
@@ -281,7 +279,6 @@ Found in the follow-up review (2026-09-25):
 
 - [x] **Select all unpushed** (button above `CommitList` and `Ctrl+A`), as the starting point for a bulk shift or author fix
 - [ ] Commit search and filtering by message, author, date, or hash
-- [ ] Side-by-side commit comparison view
 - [ ] Copy actions for commit metadata (full hash, short hash, author name, author email)
 - [ ] **Load more commits**: the list stops at 100 commits (`defaultLogDepth` in `git/log.go`); load the next page when scrolling to the end, or show a "Load more" row
 - [ ] **Branch and tag labels** on the rows they point to, as every Git GUI does, so it is clear which other refs an edit will affect before opening `ConfirmDialog`
@@ -306,7 +303,6 @@ Found in the follow-up review (2026-09-25):
 - [ ] Handle signed commits: an edit silently drops the GPG/SSH signature of the edited commit and of every commit rebuilt above it (a copied signature would no longer verify)
   - [x] Warn in `ConfirmDialog` when any commit that will be rebuilt is signed (`FindSignedCommits` / `GetSignedCommits`, which also detect `gpgsig-sha256`, which go-git does not parse; `TestFindSignedCommits_*`)
   - [ ] Optionally re-sign rebuilt commits when `commit.gpgSign` is set (like `git rebase` does), via the native `git` / `gpg` binaries (setting in `SettingsDialog`: never, always, or follow `commit.gpgSign`)
-- [ ] Show a preview of the Git command that will actually be run
 - [ ] **Stale remote warning**: pushed/unpushed detection uses the local remote-tracking branches, which are only as fresh as the last `git fetch`. Show when the last fetch happened (from the time `FETCH_HEAD` was last written) and warn when it is old, without GitGo fetching itself (the age that counts as old as a setting in `SettingsDialog`)
 - [ ] **Protected branches** setting: never allow edits on chosen branches (for example `main`), even when unpushed
 
@@ -319,18 +315,19 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Open a repository from the command line** (`gitgo <path>`), so it can be started from a terminal or used as an external tool in an editor
 - [ ] **Drag and drop** a folder onto the window to open it (as in GitHub Desktop)
 - [ ] **Watch the repository** for changes made outside GitGo and offer to reload, instead of relying on `F5`
-- [ ] **Worktrees**: list the repository's linked worktrees (`git worktree`) and open them, noting which branch each has checked out
 
 ### External tools and export
 
 > Handing the repository or its data to other programs.
 
 - [ ] **Open folder** button next to the terminal button, showing the repository in Explorer / Finder / the Linux file manager
-- [ ] Open commit details in an external tool or terminal command
-- [ ] Export commit metadata or history summaries as text/JSON for sharing
+- [ ] **Run menu**: one header dropdown (not a button per command) with ready-made Git commands, so common tasks need no external terminal. Output is shown in a read-only dialog with Copy and Save buttons
+  - [ ] **History as text**: `git log --format=…` over the selected commits or the whole list, with a few presets (one line per commit, full metadata, authors and dates as CSV)
+  - [ ] **Export as patches**: `git format-patch` for the selected commits, into a folder picked in a native dialog
+  - [ ] Needs the native `git` binary, which is otherwise not a runtime dependency (see Phase 4): look for it on `PATH` and disable the menu with an explanation when it is missing, rather than failing per command
+  - [ ] A fixed list of commands with arguments built by GitGo, never free text, so nothing in the menu can change the repository
 - [ ] **Open in editor** button, opening the repository in the user's editor (VS Code, or the one set in `core.editor` / an app preference)
 - [ ] **View on GitHub / GitLab / Bitbucket** for pushed commits, building the commit URL from the remote URL
-- [ ] **Export as patches**: save the selected commits as `.patch` files, like `git format-patch`
 - [x] Header button that opens a terminal in the repository folder (`OpenTerminal`; Windows Terminal or cmd, Terminal.app, `$TERMINAL` or a common Linux emulator, unless a terminal command is set in `SettingsDialog`)
 
 ### App settings and help
@@ -345,9 +342,7 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Command palette** (`Ctrl+Shift+P`) listing every action with its shortcut, as in Sublime Merge and GitKraken
 - [x] **Light theme** and following the system theme: header button cycling System / Light / Dark, saved in `settings.json`; the palettes are CSS variables swapped per theme in `tailwind.config.ts`, and the native title bar follows
 - [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens (level remembered in `settings.json`, shown with a Reset button in `SettingsDialog`)
-- [ ] **First-run tour** highlighting the commit list, the edit panel and the Undo button, reusing the `HelpDialog` content
 - [ ] **Update check** against GitHub Releases, once Phase 6 publishes binaries (with an off switch in `SettingsDialog`, since it contacts GitHub)
-- [ ] **Translations**: move UI strings into one place so the app can be localised (language picker in `SettingsDialog`, defaulting to the system language)
 - [x] In-app help (`HelpDialog`, `?` button in the header or `F1`): walkthrough of single and bulk edits, review and undo, keyboard shortcuts and safety notes
 
 ---
