@@ -8,15 +8,16 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 )
 
-const defaultLogDepth = 100
+// DefaultLogDepth is how many commits the commit list shows.
+const DefaultLogDepth = 100
 
 // Log walks the commit history from the tip of state.Branch and returns up to
 // limit entries.
 // Each entry is annotated with IsUnpushed based on the precomputed set in
-// state.UnpushedHashes. If limit is <= 0 the defaultLogDepth is used.
+// state.UnpushedHashes. If limit is <= 0 the DefaultLogDepth is used.
 func Log(state *RepoState, limit int) ([]CommitEntry, error) {
 	if limit <= 0 {
-		limit = defaultLogDepth
+		limit = DefaultLogDepth
 	}
 
 	head, err := branchTip(state)

@@ -145,6 +145,18 @@ Every rewrite and undo is also written to the reflog, with messages starting wit
 git reset --hard <branch>@{1}
 ```
 
+## Run menu
+
+The **Run** menu in the header runs a few ready-made git commands, so common tasks need no terminal. None of them change the repository.
+
+- **History of all commits in the list:** the commits the list shows, newest first, as **One line per commit** (short hash, date, author and subject), **Full metadata** (author and committer with their dates, and the whole message), or **Authors and dates (CSV)** (hash, author, author email, author date, committer, committer email, committer date and subject, for a spreadsheet).
+- **History of the selected commits:** the same, for the commits you selected, in list order.
+- **Export → selected commits as patches…:** pick a folder, and each selected commit is written there as a patch file (`git format-patch`), numbered from the oldest, for example `0001-fix-typo.patch`. Merge commits get no patch.
+
+The output opens in a window showing the command that ran. Click **Copy** to put the output on the clipboard, or **Save…** to save it to a file. Very long output is cut off at 10 MB.
+
+The menu needs git installed, unlike the rest of GitGo. Without it, the menu is disabled, and hovering over it says why. Install git, then reopen the repository.
+
 ## Settings
 
 Open the settings with the **⚙** button in the header or `Ctrl+,`. Changes apply at once and are saved for next time.

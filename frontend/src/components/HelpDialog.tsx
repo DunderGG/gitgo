@@ -285,6 +285,11 @@ export default function HelpDialog() {
                 folder button next to it shows the repository folder in Explorer, Finder or your file manager.
               </li>
               <li>
+                The <Ui>Run</Ui> menu in the header runs ready-made git commands that never change the repository: the
+                history of the list or the selected commits as text or CSV, or the selected commits as patch files. The
+                output can be copied or saved. It needs git installed, and is disabled without it.
+              </li>
+              <li>
                 Made changes outside GitGo, for example a new commit in a terminal? Press <Kbd>F5</Kbd> or click{' '}
                 <Ui>↻</Ui> in the header to reload.
               </li>

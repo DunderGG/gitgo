@@ -242,3 +242,25 @@ type OperationResult struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
+
+// GitStatus says whether the native git program, which the Run menu needs, is
+// available.
+type GitStatus struct {
+	Available bool `json:"available"`
+	// Version is the version git reports, such as "2.45.1", when available.
+	Version string `json:"version"`
+	// Problem explains why git is unavailable, for the disabled Run menu.
+	Problem string `json:"problem"`
+}
+
+// RunResult is the output of a command from the Run menu.
+type RunResult struct {
+	// Command is the git command that ran, for display. It may leave out
+	// options GitGo adds to every run, such as -c settings.
+	Command string `json:"command"`
+	Output  string `json:"output"`
+	// Truncated is true when the output was cut off at maxRunOutput.
+	Truncated bool `json:"truncated"`
+	// FileName is the suggested file name for saving the output.
+	FileName string `json:"fileName"`
+}

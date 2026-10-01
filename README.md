@@ -23,6 +23,7 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - **One-step undo:** revert the last rewrite with `Ctrl+Z`
 - **Work on any branch:** view and edit other local branches without checking them out
 - **Terminal shortcut:** open a terminal in the repository folder from the header when you need to run a git command by hand
+- **Run menu:** ready-made, read-only git commands from the header: the history as text or CSV, or the selected commits as patch files, with Copy and Save
 - **Light and dark themes:** follows your system's setting, or pick one with the theme button in the header
 - **In-app help:** a walkthrough of editing and applying changes, every keyboard shortcut and the safety rules, behind the `?` button or `F1`
 - **Leaves your work alone:** uncommitted changes (staged or not) and the stash are never touched
@@ -67,7 +68,7 @@ On macOS, `Cmd` works in place of `Ctrl`.
 - Node.js 20+
 - Wails CLI: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 
-No `git` binary is needed at runtime; all Git operations use [go-git](https://github.com/go-git/go-git).
+No `git` binary is needed at runtime; all Git operations use [go-git](https://github.com/go-git/go-git). Only the optional **Run** menu runs `git`, and it is disabled when git is not installed.
 
 ### Run in development
 

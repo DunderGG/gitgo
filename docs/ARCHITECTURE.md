@@ -190,6 +190,10 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `CanUndo() bool` | Reports whether `lastRewrite` is set. Used by the frontend to re-sync the Undo button after a failed undo. |
 | `OpenTerminal() error` | *(`app/terminal.go`)* Opens a terminal window in the repository root for running git by hand. Windows: Windows Terminal (`wt.exe -d`), else `cmd.exe` in a new console; macOS: `open -a Terminal`; Linux: `$TERMINAL`, then common emulators. A terminal command set in `SettingsDialog` replaces this choice, with no fallback, and on Windows gets a console of its own. The terminal is detached and outlives GitGo. |
 | `OpenFolder() error` | *(`app/folder.go`)* Shows the repository root in the file manager: `explorer.exe` on Windows, `open` (Finder) on macOS, `xdg-open` elsewhere. Detached like `OpenTerminal`; the exit code is ignored, since `explorer.exe` exits with 1 even on success. |
+| `GetGitStatus() GitStatus` | *(`app/run.go`)* Whether the native `git` program the Run menu needs is on `PATH` (`exec.LookPath`), with its `git --version`, or a `Problem` explaining why not. Called by `RunMenu` when a repository is opened. |
+| `RunHistory(format string, hashes []string) (RunResult, error)` | *(`app/run.go`)* Runs `git log` in the repository and returns its output: `oneline` (`%h %ad %an: %s`, short dates), `full` (`--format=fuller`) or `csv` (hash, author, email, date, committer, email, date and subject, read from US/RS-separated output and written with `encoding/csv`). With hashes (full SHA-1 or SHA-256 only), only those commits in the given order (`--no-walk=unsorted --stdin`); without, the commits the list shows (`--max-count=100 refs/heads/<branch>`). Output is capped at 10 MB (`Truncated`). |
+| `ExportPatches(hashes []string) (RunResult, error)` | *(`app/run.go`)* Asks for a folder (native dialog) and writes one patch per commit, oldest first, with `git format-patch -o <dir> --start-number=<n> -1 --no-walk <hash>`; merge commits get no patch and are listed as skipped. An empty result means the dialog was cancelled. |
+| `SaveRunOutput(fileName, content string) (string, error)` | *(`app/run.go`)* Asks for a file (native save dialog, suggesting `fileName`) and writes the Run menu output to it; returns the path, or empty when cancelled. |
 | `GetSettings() Settings` | *(`app/settings.go`)* Reads `settings.json` in GitGo's config directory (`os.UserConfigDir()/gitgo`). A missing or unreadable file gives the defaults, so it never fails. |
 | `SetRecentRepos(paths []string) error` | *(`app/settings.go`)* Saves the recent repositories list into `settings.json`, keeping the other settings. Files in the config directory are written to a temporary file and renamed, so a crash never leaves a half-written file. |
 | `SetTheme(theme string) error` | *(`app/settings.go`)* Saves the colour theme (`system`, `light` or `dark`) into `settings.json`. `GetSettings` gives `system` for a missing or unknown value. |
@@ -319,7 +323,7 @@ A class component (React has no hook equivalent) that catches errors thrown whil
 
 The root layout component. Renders a full-height flex column with three vertical sections:
 
-- **Header** (fixed height) — application title; when a repo is open, shows a `<RepoSwitcher>` dropdown with the open repository, followed by a **×** button that calls the store's `closeRepository` (disabled during any git operation), and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`, and a folder button that calls `OpenFolder`. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, a **⚙** button opens `SettingsDialog`, and a **?** button opens `HelpDialog`; these three are shown on every screen.
+- **Header** (fixed height) — application title; when a repo is open, shows a `<RepoSwitcher>` dropdown with the open repository, followed by a **×** button that calls the store's `closeRepository` (disabled during any git operation), and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`, a folder button that calls `OpenFolder`, and the `<RunMenu>` dropdown. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, a **⚙** button opens `SettingsDialog`, and a **?** button opens `HelpDialog`; these three are shown on every screen.
 - **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
@@ -451,6 +455,17 @@ A modal with the user's preferences, opened with the **⚙** button in the heade
 
 ---
 
+#### `frontend/src/components/RunMenu.tsx` and `RunOutputDialog.tsx`
+
+The header's **Run** dropdown: ready-made git commands, so common tasks need no terminal. It is a native `<select>` (like `RepoSwitcher`) whose value always snaps back to the "Run" placeholder, so it acts as a menu.
+
+- **History of all commits in the list** and, while commits are selected, **History of the N selected commits**: one line per commit, full metadata, or authors and dates as CSV (`RunHistory`).
+- **Export → N selected commits as patches…** (`ExportPatches`), disabled until commits are selected.
+- The commands need the native `git` program, which edits do not. `GetGitStatus` runs when the menu mounts (each time a repository is opened); without git the menu is disabled and its tooltip says why.
+- Every command is built by the backend from a fixed list, with full commit hashes as the only input, and only reads the repository (`git log`, `git format-patch` into a folder the user picks). Commands run without a console window, prompts or optional locks.
+- Runs go through `runGitOperation`, so the status bar shows a spinner and the menu is disabled meanwhile.
+- `RunOutputDialog` shows the result: a title, the command that ran, and the output in a read-only text area, with **Copy** (Wails clipboard) and **Save…** (`SaveRunOutput`, with a suggested file name such as `history-main.csv`). Escape, focus and the blocked `Ctrl+Z` / `Ctrl+A` work as in `SettingsDialog`.
+
 #### `frontend/src/components/StatusBar.tsx`
 
 A persistent footer bar rendered on every screen. Reads three independent slices from the Zustand store:
@@ -578,6 +593,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo`; also renders and manages quick-open recent repositories |
 | `RepoSwitcher` | Header dropdown showing the open repository; lists the recent repositories and an "Open another folder…" entry (`SelectDirectory`), and opens the one picked via the store's `openRepository` |
 | `BranchSelector` | *(Phase 3)* Header dropdown of local branches; switches the viewed/edited branch via `SwitchBranch` without checking it out |
+| `RunMenu` | Header dropdown of ready-made, read-only git commands (`RunHistory`, `ExportPatches`), disabled with an explanation when `GetGitStatus` finds no git; shows the output in `RunOutputDialog` (Copy, Save… via `SaveRunOutput`) |
 | `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state; `Enter` / arrow-key navigation |
 | `useKeyboardShortcuts` | *(Phase 3)* App-wide `Ctrl+Z` (undo) and `Escape` (close edit panel) shortcuts |
 | `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite messages, Undo button after a rewrite |
@@ -593,7 +609,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, `OpenFolder` in `app/folder.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetStaleFetchDays` / `SetTerminalCommand` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, `OpenFolder` in `app/folder.go`, `GetGitStatus` / `RunHistory` / `ExportPatches` / `SaveRunOutput` in `app/run.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetStaleFetchDays` / `SetTerminalCommand` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -621,6 +637,7 @@ GitGo/
 │   ├── app.go               # App struct — bound methods exposed to frontend
 │   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
 │   ├── folder.go            # OpenFolder: the repository in the file manager
+│   ├── run.go               # Run menu: GetGitStatus, RunHistory, ExportPatches, SaveRunOutput (native git)
 │   ├── settings.go          # GetSettings and the Set* methods: settings.json in the config directory
 │   ├── theme.go             # Theme names; PrefersDark for the startup window colour (+ theme_windows.go / theme_other.go)
 │   ├── window.go            # Window size saved between runs (lifecycle hooks, not bound)
@@ -656,6 +673,8 @@ GitGo/
 │       │   ├── UseMyIdentityButton.tsx
 │       │   ├── RepoSelector.tsx
 │       │   ├── RepoSwitcher.tsx    # Header dropdown: open and recent repositories
+│       │   ├── RunMenu.tsx         # Header Run dropdown: git log presets, format-patch
+│       │   ├── RunOutputDialog.tsx # Read-only output of a Run menu command, with Copy and Save
 │       │   ├── Spinner.tsx         # (Phase 3)
 │       │   ├── CommitList.tsx
 │       │   ├── EditPanel.tsx       # (Phase 2)
@@ -723,7 +742,7 @@ GitGo only modifies the local working repository. It exposes no push functionali
 ### Working Tree Is Never Touched
 Rewrites only change commit metadata (message, author, dates); every rebuilt commit keeps its original file tree. Moving the branch ref therefore leaves the index and working tree consistent, so uncommitted work — staged or not — and the stash are never touched, whether or not the branch is checked out.
 
-> **History:** earlier versions auto-stashed a dirty worktree with the native `git stash` / `git stash pop`. That was removed: go-git's `Worktree.Status()` ignores `core.fileMode=false`, so on Windows a clean worktree with an executable file looked dirty, the no-op `git stash` was followed by a `git stash pop` that applied and dropped an unrelated stash, and `pop` without `--index` also unstaged staged changes. The native `git` binary is no longer a runtime dependency.
+> **History:** earlier versions auto-stashed a dirty worktree with the native `git stash` / `git stash pop`. That was removed: go-git's `Worktree.Status()` ignores `core.fileMode=false`, so on Windows a clean worktree with an executable file looked dirty, the no-op `git stash` was followed by a `git stash pop` that applied and dropped an unrelated stash, and `pop` without `--index` also unstaged staged changes. The native `git` binary is no longer a runtime dependency; only the optional Run menu (`app/run.go`) uses it, and it is disabled when git is missing.
 
 ### Wails Binding Constraints
 All Go methods on the `App` struct that are exposed to the frontend via `wails.Bind` must conform to one of these return signatures:

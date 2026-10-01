@@ -110,7 +110,7 @@ Global stylesheet. Imports Tailwind's layers and gives the page the theme's back
 
 Top-level layout and routing-by-state:
 
-- Header with app title, a RepoSwitcher dropdown with the open repo and the recent ones, a × button that closes the repository (closeRepository), BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a folder button that shows the repo in the file manager (OpenFolder), a theme button (System / Light / Dark), a ⚙ settings button, and a ? help button
+- Header with app title, a RepoSwitcher dropdown with the open repo and the recent ones, a × button that closes the repository (closeRepository), BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a folder button that shows the repo in the file manager (OpenFolder), the RunMenu dropdown, a theme button (System / Light / Dark), a ⚙ settings button, and a ? help button
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
@@ -183,6 +183,16 @@ Header dropdown showing the open repository.
 - Lists the recent repositories and "Open another folder…" (native folder picker)
 - Picking one opens it in place of the current repository (openRepository), with a spinner while it loads
 - Disabled while a git operation runs
+
+### src/components/RunMenu.tsx
+
+Header "Run" dropdown of ready-made, read-only git commands.
+
+- History of all commits in the list, or of the selected commits: one line per commit, full metadata, or authors and dates as CSV (RunHistory)
+- The selected commits as patch files in a folder picked in a native dialog (ExportPatches); disabled until commits are selected
+- Needs the native git program: GetGitStatus runs on mount, and without git the menu is disabled with the reason as its tooltip
+- Runs through runGitOperation, and is disabled while a git operation runs
+- Shows the result in RunOutputDialog: the command, the output in a read-only text area, Copy (Wails clipboard) and Save… (SaveRunOutput)
 
 ### src/components/CommitList.tsx
 
@@ -339,6 +349,10 @@ Methods currently exposed include:
 - CanUndo
 - OpenTerminal
 - OpenFolder
+- GetGitStatus
+- RunHistory
+- ExportPatches
+- SaveRunOutput
 
 ### wailsjs/go/app/App.js
 

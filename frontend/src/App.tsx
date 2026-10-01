@@ -4,6 +4,7 @@ import { WindowSetTitle } from '../wailsjs/runtime/runtime'
 import BranchSelector from './components/BranchSelector'
 import RepoSelector from './components/RepoSelector'
 import RepoSwitcher from './components/RepoSwitcher'
+import RunMenu from './components/RunMenu'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
@@ -130,6 +131,7 @@ function App() {
                   <path d="M1.5 3.5h4.5l1.5 1.5h7v7.5h-13z" strokeLinejoin="round" />
                 </svg>
               </button>
+              <RunMenu />
             </>
           )}
           <button

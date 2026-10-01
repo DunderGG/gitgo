@@ -280,7 +280,7 @@ Found in the follow-up review (2026-09-25):
 - [x] **Select all unpushed** (button above `CommitList` and `Ctrl+A`), as the starting point for a bulk shift or author fix
 - [ ] Commit search and filtering by message, author, date, or hash
 - [ ] Copy actions for commit metadata (full hash, short hash, author name, author email)
-- [ ] **Load more commits**: the list stops at 100 commits (`defaultLogDepth` in `git/log.go`); load the next page when scrolling to the end, or show a "Load more" row
+- [ ] **Load more commits**: the list stops at 100 commits (`DefaultLogDepth` in `git/log.go`); load the next page when scrolling to the end, or show a "Load more" row
 - [ ] **Branch and tag labels** on the rows they point to, as every Git GUI does, so it is clear which other refs an edit will affect before opening `ConfirmDialog`
 - [ ] **Commit graph**: draw the branch and merge lines next to the list (as in Fork, GitKraken and `git log --graph`), making merge commits and where the pushed part starts easier to see
 - [ ] **Changed files list** (names and +/− line counts, read-only) in the commit details. This is much lighter than the file diffs that are out of scope, and helps confirm the right commit is selected
@@ -324,11 +324,11 @@ Found in the follow-up review (2026-09-25):
 > Handing the repository or its data to other programs.
 
 - [x] **Open folder** button next to the terminal button, showing the repository in Explorer / Finder / the Linux file manager (`OpenFolder`: `explorer.exe`, `open` or `xdg-open`; `TestFileManagerCommand`)
-- [ ] **Run menu**: one header dropdown (not a button per command) with ready-made Git commands, so common tasks need no external terminal. Output is shown in a read-only dialog with Copy and Save buttons
-  - [ ] **History as text**: `git log --format=…` over the selected commits or the whole list, with a few presets (one line per commit, full metadata, authors and dates as CSV)
-  - [ ] **Export as patches**: `git format-patch` for the selected commits, into a folder picked in a native dialog
-  - [ ] Needs the native `git` binary, which is otherwise not a runtime dependency (see Phase 4): look for it on `PATH` and disable the menu with an explanation when it is missing, rather than failing per command
-  - [ ] A fixed list of commands with arguments built by GitGo, never free text, so nothing in the menu can change the repository
+- [x] **Run menu**: one header dropdown (not a button per command) with ready-made Git commands, so common tasks need no external terminal. Output is shown in a read-only dialog with Copy and Save buttons (`RunMenu`, `RunOutputDialog`, `app/run.go`)
+  - [x] **History as text**: `git log --format=…` over the selected commits or the whole list, with a few presets (one line per commit, full metadata, authors and dates as CSV) (`RunHistory`, output capped at 10 MB; `TestRunHistory_*`)
+  - [x] **Export as patches**: `git format-patch` for the selected commits, into a folder picked in a native dialog (`ExportPatches`, one patch per commit numbered from the oldest, merge commits skipped; `TestExportPatches_*`)
+  - [x] Needs the native `git` binary, which is otherwise not a runtime dependency (see Phase 4): look for it on `PATH` and disable the menu with an explanation when it is missing, rather than failing per command (`GetGitStatus`)
+  - [x] A fixed list of commands with arguments built by GitGo, never free text, so nothing in the menu can change the repository (only full commit hashes come from the frontend; `TestHistoryArgs_RejectsUnknownFormatAndHashes`)
 - [ ] **Open in editor** button, opening the repository in the user's editor (VS Code, or the one set in `core.editor` / an app preference)
 - [ ] **View on GitHub / GitLab / Bitbucket** for pushed commits, building the commit URL from the remote URL
 - [x] Header button that opens a terminal in the repository folder (`OpenTerminal`; Windows Terminal or cmd, Terminal.app, `$TERMINAL` or a common Linux emulator, unless a terminal command is set in `SettingsDialog`)
