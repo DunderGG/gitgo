@@ -303,7 +303,10 @@ Found in the follow-up review (2026-09-25):
 - [ ] Handle signed commits: an edit silently drops the GPG/SSH signature of the edited commit and of every commit rebuilt above it (a copied signature would no longer verify)
   - [x] Warn in `ConfirmDialog` when any commit that will be rebuilt is signed (`FindSignedCommits` / `GetSignedCommits`, which also detect `gpgsig-sha256`, which go-git does not parse; `TestFindSignedCommits_*`)
   - [ ] Optionally re-sign rebuilt commits when `commit.gpgSign` is set (like `git rebase` does), via the native `git` / `gpg` binaries (setting in `SettingsDialog`: never, always, or follow `commit.gpgSign`)
-- [ ] **Stale remote warning**: pushed/unpushed detection uses the local remote-tracking branches, which are only as fresh as the last `git fetch`. Show when the last fetch happened (from the time `FETCH_HEAD` was last written) and warn when it is old, without GitGo fetching itself (the age that counts as old as a setting in `SettingsDialog`)
+- [x] **Stale remote warning**: pushed/unpushed detection uses the local remote-tracking branches, which are only as fresh as the last `git fetch`. Show when the last fetch happened (from the time `FETCH_HEAD` was last written) and warn when it is old, without GitGo fetching itself (the age that counts as old as a setting in `SettingsDialog`)
+  - [x] `RepoState.LastFetch` / `RepoInfo.lastFetch` from `FETCH_HEAD`'s modification time (zero / empty when none is recorded, as after a fresh clone); `TestOpen_LastFetch`
+  - [x] "Fetched 3 days ago" in `StatusBar`, yellow once stale, and a warning banner above `CommitList` while there are unpushed commits (`src/lastFetch.ts`)
+  - [x] `Settings.StaleFetchDays` and `SetStaleFetchDays` (0–365, default 7, 0 turns the warning off), a Remote section in `SettingsDialog`; `TestSetStaleFetchDays_*`
 - [ ] **Protected branches** setting: never allow edits on chosen branches (for example `main`), even when unpushed
 
 ### Repository and branch status

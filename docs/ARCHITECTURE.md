@@ -195,6 +195,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `SetMessageGuides(subject, body int) error` | *(`app/settings.go`)* Saves the commit message guide columns, for the subject ruler and length hint and for the body line length hint (0–200, 0 turns a guide off), into `settings.json`. `GetSettings` gives 50 and 72 for missing or out-of-range values. |
 | `SetOfficeHours(hours OfficeHours) error` | *(`app/settings.go`)* Saves the working hours used by "Only office hours" (`start` / `end` as `HH:MM`, start before end, and `days`, 0 for Sunday to 6, at least one) into `settings.json`. Invalid hours are rejected; `GetSettings` gives Mon–Fri 09:00–17:00 for missing or invalid ones. |
 | `SetTerminalCommand(command string) error` | *(`app/settings.go`)* Saves the command `OpenTerminal` runs into `settings.json`, trimmed; `{dir}` stands for the repository folder, and double or single quotes keep spaces in one argument (backslashes are literal, for Windows paths). Rejects an unclosed quote or an empty program name. An empty command goes back to the automatic choice. |
+| `SetStaleFetchDays(days int) error` | *(`app/settings.go`)* Saves how many days after the last fetch the status bar and commit list warn that the pushed / unpushed split may be out of date (0–365, 0 turns the warning off) into `settings.json`. Out-of-range values are rejected; `GetSettings` gives 7 for missing or invalid ones. |
 
 The app layer owns all DTO mapping (Go types ↔ JSON-serialisable structs). The `git/` package knows nothing about the `app/models.go` types.
 
@@ -206,7 +207,7 @@ Data transfer types that cross the IPC boundary. All fields carry `json:` tags s
 
 | Type | Purpose |
 |---|---|
-| `RepoInfo` | Returned by `OpenRepository` and `SwitchBranch`. Carries the absolute repo path, the selected branch name, `IsCheckedOut` (whether that branch is the one HEAD points at), and two boolean flags: `HasRemote` (at least one remote configured) and `HasUpstream` (current branch tracks a remote branch). The frontend uses these flags to decide what to display in `StatusBar`. |
+| `RepoInfo` | Returned by `OpenRepository` and `SwitchBranch`. Carries the absolute repo path, the selected branch name, `IsCheckedOut` (whether that branch is the one HEAD points at), two boolean flags: `HasRemote` (at least one remote configured) and `HasUpstream` (current branch tracks a remote branch), and `LastFetch`: when `FETCH_HEAD` was last written (RFC 3339), or empty when no fetch is recorded. The frontend uses these to decide what to display in `StatusBar` and above `CommitList`. |
 | `CommitSummary` | One row in the commit list. Contains the full 40-character hash, a 7-character short hash for display, the first line of the commit message, the author and committer names, an RFC 3339 date string, and `IsUnpushed` — the flag the frontend uses for visual distinction and to gate editing. |
 | `CommitDetail` | *(Phase 2)* Full commit metadata for the edit form. Extends `CommitSummary` with `AuthorEmail` so the user can edit it. |
 | `EditRequest` | *(Phase 2)* The payload the frontend sends when the user confirms an edit. Contains the target hash plus the editable fields: message, author name, author email, and date, whether to sync the committer date, and `Committer` (`"keep"`, `"author"` or `"set"` with `CommitterName` / `CommitterEmail`) for the committer name and email. |
@@ -360,7 +361,7 @@ The main view after a repository is opened. Reads `commits` from the Zustand sto
 Structure:
 - **Column headers** — a fixed header row with labels for hash, message, author, and date.
 - **Legend** — a summary row showing the count of unpushed (indigo dot) vs pushed (grey dot) commits, the selected count during a multi-selection, and a **Select all unpushed** button (`selectAllUnpushed`, also `Ctrl+A`). The button is disabled when there are no unpushed commits or all of them are already selected, and moves focus to the primary row.
-- **Notice banner** (optional, from `listNotice`) — explains a surprising pushed/unpushed split. At most one shows, in this priority order: no remote (info: every commit counts as unpushed), no upstream (warning: every commit counts as unpushed, avoid editing commits pushed under another name), or no unpushed commits (muted: nothing to edit).
+- **Notice banner** (optional, from `listNotice`) — explains a surprising pushed/unpushed split. At most one shows, in this priority order: no remote (info: every commit counts as unpushed), no upstream (warning: every commit counts as unpushed, avoid editing commits pushed under another name),, a fetch older than the "Remote" setting while there are unpushed commits (warning: commits pushed since may still show as unpushed; run `git fetch` and press F5), or no unpushed commits (muted: nothing to edit).
 - **Empty branch** — when `commits` is empty, the list is replaced by "This branch has no commits yet."
 - **Scrollable commit rows** — each rendered by the internal `CommitRow` component.
 
@@ -442,6 +443,7 @@ A modal with the user's preferences, opened with the **⚙** button in the heade
 - **Theme**: System / Light / Dark buttons calling the store's `setTheme`, the same setting the header's theme button cycles.
 - **Commit message guides**: number fields for the subject and body columns (0–200, 0 turns a guide off), and a button that restores 50 / 72. A valid value calls `setMessageGuides` at once, so `EditPanel` follows while the dialog is open; an invalid one is marked and not saved.
 - **Office hours**: From and to time inputs and a button per weekday. Valid hours (`officeHoursError` in `src/officeHours.ts`) call `setOfficeHours` at once; invalid ones are marked and not saved. A button restores Mon–Fri 09:00–17:00.
+- **Remote**: a number field (0–365, default 7, 0 turns the warning off) for how many days after the last fetch `StatusBar` and `CommitList` warn. A valid value calls `setStaleFetchDays` at once.
 - **Terminal**: the command the `>_` button runs (`setTerminalCommand`), with this platform's automatic choice as the placeholder and two example commands. Each change is saved at once; the store chains the saves so the last one typed wins, and a rejected command is marked with the backend's message.
 - There is no Save or Cancel: every change is applied and saved as it is made, like the theme button. The content is mounted only while the dialog is open, so the fields start from the saved values each time.
 - Closes on `Escape`, `Ctrl+,`, the **×** button or a click on the backdrop; `Ctrl+Z` is swallowed outside its fields, and focus is handled like `HelpDialog`.
@@ -452,7 +454,7 @@ A modal with the user's preferences, opened with the **⚙** button in the heade
 
 A persistent footer bar rendered on every screen. Reads three independent slices from the Zustand store:
 
-- **Left side** — when a repo is open: shows the branch name in indigo, plus a "Not checked out" notice when viewing a branch other than HEAD's. Conditionally appends a yellow "No remote configured" or "No upstream set" notice, driven by `repoInfo.hasRemote` and `repoInfo.hasUpstream`.
+- **Left side** — when a repo is open: shows the branch name in indigo, plus a "Not checked out" notice when viewing a branch other than HEAD's. Conditionally appends a yellow "No remote configured" or "No upstream set" notice, driven by `repoInfo.hasRemote` and `repoInfo.hasUpstream`. With a remote, it also shows when the repository was last fetched ("Fetched 3 days ago", or "No fetch recorded"), from `fetchStatus` in `src/lastFetch.ts`, in grey or, once older than `staleFetchDays`, in yellow; the tooltip has the exact time and why it matters. `useNow` re-renders it every minute so the age keeps up.
 - **Right side** — mutually exclusive: while `activity` is set, shows a spinner with the running operation's label; otherwise, if `error` is non-null, shows it in red; otherwise shows the `status` string in muted grey. This means any error immediately replaces a previous status message. Errors are truncated to fit; the tooltip shows the full message plus the raw `errorDetail`, and a **×** button dismisses the error.
 
 Successful rewrite messages from `UpdateCommit` also surface here, including the warning returned when some of the other branches selected in `ConfirmDialog` could not be moved.
@@ -501,6 +503,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `messageGuides` | `MessageGuides` | Commit message guide columns, `{ subject, body }`: the subject ruler and length hint, and the body line length hint (0 turns a guide off), saved in `settings.json` through `SetMessageGuides` and loaded by `loadSettings()`. |
 | `officeHours` | `OfficeHours` | Working hours, `{ start, end, days }`, for spreading commits with "Only office hours", saved in `settings.json` through `SetOfficeHours` and loaded by `loadSettings()`. |
 | `terminalCommand` | `string` | Command the `>_` button runs, with `{dir}` for the repository folder; empty picks a terminal automatically. Saved in `settings.json` through `SetTerminalCommand`. |
+| `staleFetchDays` | `number` | Days after the last fetch before `StatusBar` and `CommitList` warn that the pushed / unpushed split may be out of date; 0 never warns. Saved in `settings.json` through `SetStaleFetchDays`. |
 | `selectedHash` | `string | null` | Currently selected `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `closeRepository`. |
 | `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
@@ -589,7 +592,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetTerminalCommand` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetStaleFetchDays` / `SetTerminalCommand` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -640,6 +643,7 @@ GitGo/
 │       ├── dates.ts                # Wall-clock + offset date helpers
 │       ├── identity.ts             # Author and committer name/email validation
 │       ├── officeHours.ts          # Office hours type, validation and description
+│       ├── lastFetch.ts            # Age of the last fetch and the stale fetch warning
 │       ├── App.tsx
 │       ├── components/
 │       │   ├── BranchSelector.tsx  # (Phase 3)
@@ -735,6 +739,7 @@ The following conditions must be detected at the start of any operation and retu
 |---|---|---|
 | No remote configured | `git.Repository.Remotes()` returns empty | Mark all commits as unpushed; disable upstream-based detection; explain it in a banner above `CommitList` |
 | Branch has no upstream set | `git.Branch.Remote` is empty | Same as above; surface a notice in `StatusBar` and a warning banner above `CommitList` |
+| Remote-tracking refs out of date | `FETCH_HEAD` older than the "Remote" setting (`RepoState.LastFetch`) | GitGo never fetches; show the fetch age in yellow in `StatusBar` and a warning banner above `CommitList` |
 | No unpushed commits | Every commit in the log has `isUnpushed == false` | Banner above `CommitList` and a hint in `EditPanel` that there is nothing to edit |
 | Repository has no commits | `git.Repository.Head()` returns `plumbing.ErrReferenceNotFound` | Return `ErrNoCommits`; show the error and stay on `RepoSelector` |
 | Detached HEAD state | `git.Repository.Head()` returns a non-branch ref | Show error; disable all editing |

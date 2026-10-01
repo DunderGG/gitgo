@@ -10,6 +10,7 @@ import {
   SetMessageGuides,
   SetOfficeHours,
   SetRecentRepos,
+  SetStaleFetchDays,
   SetTerminalCommand,
   SetTheme,
   UndoLastOperation,
@@ -18,6 +19,7 @@ import { errorText, friendlyError } from '../errors'
 import { applyTheme, isThemePreference, type ThemePreference } from '../theme'
 import { DEFAULT_MESSAGE_GUIDES, type MessageGuides } from '../messageGuides'
 import { DEFAULT_OFFICE_HOURS, type OfficeHours } from '../officeHours'
+import { DEFAULT_STALE_FETCH_DAYS } from '../lastFetch'
 
 // Where earlier versions kept the recent repositories, in the WebView's
 // localStorage. loadSettings moves the list to the backend's settings file.
@@ -66,7 +68,8 @@ export async function loadSettings(): Promise<void> {
   const messageGuides = { subject: settings.subjectGuide, body: settings.bodyGuide }
   const terminalCommand = settings.terminalCommand
   const officeHours = settings.officeHours
-  useRepoStore.setState({ recentRepos, theme, messageGuides, terminalCommand, officeHours })
+  const staleFetchDays = settings.staleFetchDays
+  useRepoStore.setState({ recentRepos, theme, messageGuides, terminalCommand, officeHours, staleFetchDays })
 }
 
 // The last SetTerminalCommand call; see setTerminalCommand.
@@ -94,6 +97,9 @@ export interface RepoInfo {
   isCheckedOut: boolean
   hasRemote: boolean
   hasUpstream: boolean
+  // When the repository was last fetched, as RFC 3339, or empty when no
+  // fetch is recorded (see lastFetch.ts).
+  lastFetch: string
 }
 
 export interface CommitSummary {
@@ -129,6 +135,10 @@ interface RepoStore {
   // Working hours for spreading commits with "Only office hours". Saved in
   // the settings file.
   officeHours: OfficeHours
+  // Days after the last fetch before the status bar and commit list warn
+  // that the pushed / unpushed split may be out of date; 0 never warns.
+  // Saved in the settings file.
+  staleFetchDays: number
   // Hash of the commit currently selected in CommitList; null when nothing is
   // selected. EditPanel reads this to know which commit to load. With several
   // commits selected it is the one last clicked or moved to.
@@ -169,6 +179,7 @@ interface RepoStore {
   setTheme: (theme: ThemePreference) => void
   setMessageGuides: (messageGuides: MessageGuides) => void
   setOfficeHours: (officeHours: OfficeHours) => void
+  setStaleFetchDays: (staleFetchDays: number) => void
   // Saves the terminal command. Resolves to an error message when the backend
   // rejects it (for example an unclosed quote), or null.
   setTerminalCommand: (command: string) => Promise<string | null>
@@ -204,6 +215,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   messageGuides: DEFAULT_MESSAGE_GUIDES,
   terminalCommand: '',
   officeHours: DEFAULT_OFFICE_HOURS,
+  staleFetchDays: DEFAULT_STALE_FETCH_DAYS,
   selectedHash: null,
   selectedHashes: [],
   selectionAnchor: null,
@@ -288,6 +300,13 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     // Like the guides, the hours already apply, so a failed save only loses
     // them for the next run.
     SetOfficeHours(officeHours).catch((error) => console.error('Saving the office hours failed:', error))
+  },
+
+  setStaleFetchDays: (staleFetchDays) => {
+    set({ staleFetchDays })
+    // Like the guides, the setting already applies, so a failed save only
+    // loses it for the next run.
+    SetStaleFetchDays(staleFetchDays).catch((error) => console.error('Saving the stale fetch days failed:', error))
   },
 
   setTerminalCommand: (command) => {

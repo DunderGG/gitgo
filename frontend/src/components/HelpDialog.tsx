@@ -139,6 +139,11 @@ export default function HelpDialog() {
               Without a remote or an upstream branch, every commit counts as unpushed. A notice above the commit list
               tells you when this is the case.
             </p>
+            <p className="text-gray-400">
+              Pushed commits are found through your last <Ui>git fetch</Ui>, which GitGo never runs itself. The status
+              bar shows when that was and turns yellow when it is older than the limit in Settings: fetch, then press{' '}
+              <Kbd>F5</Kbd>.
+            </p>
           </Section>
 
           <Section title="3. Edit a single commit">

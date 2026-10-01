@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { DEFAULT_STALE_FETCH_DAYS, MAX_STALE_FETCH_DAYS } from '../lastFetch'
 import { DEFAULT_MESSAGE_GUIDES, MAX_GUIDE_COLUMN, type MessageGuides } from '../messageGuides'
 import { DEFAULT_OFFICE_HOURS, formatOfficeHours, officeHoursError, WEEKDAYS, type OfficeHours } from '../officeHours'
 import { useRepoStore } from '../store/repoStore'
@@ -15,26 +16,27 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-// The column typed in a guide field, or null when it is not a whole number
-// from 0 to MAX_GUIDE_COLUMN.
-function parseGuide(text: string): number | null {
+// The number typed in a NumberField, or null when it is not a whole number
+// from 0 to max.
+function parseWholeNumber(text: string, max: number): number | null {
   if (!/^\d+$/.test(text.trim())) {
     return null
   }
-  const column = Number(text)
-  return column <= MAX_GUIDE_COLUMN ? column : null
+  const value = Number(text)
+  return value <= max ? value : null
 }
 
-interface GuideFieldProps {
+interface NumberFieldProps {
   id: string
   label: string
   description: string
+  max: number
   text: string
   onChange: (text: string) => void
 }
 
-function GuideField({ id, label, description, text, onChange }: GuideFieldProps) {
-  const isValid = parseGuide(text) !== null
+function NumberField({ id, label, description, max, text, onChange }: NumberFieldProps) {
+  const isValid = parseWholeNumber(text, max) !== null
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
@@ -45,7 +47,7 @@ function GuideField({ id, label, description, text, onChange }: GuideFieldProps)
           id={id}
           type="number"
           min={0}
-          max={MAX_GUIDE_COLUMN}
+          max={max}
           value={text}
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={!isValid}
@@ -54,7 +56,7 @@ function GuideField({ id, label, description, text, onChange }: GuideFieldProps)
       </div>
       <p className="mt-1 text-xs text-gray-500">{description}</p>
       {!isValid && (
-        <p className="mt-1 text-xs text-red-300">Enter a whole number from 0 to {MAX_GUIDE_COLUMN}.</p>
+        <p className="mt-1 text-xs text-red-300">Enter a whole number from 0 to {max}.</p>
       )}
     </div>
   )
@@ -209,6 +211,33 @@ function OfficeHoursField() {
   )
 }
 
+// How many days after the last fetch the status bar and commit list warn.
+// Like the guide fields, a valid value is saved at once.
+function StaleFetchField() {
+  const staleFetchDays = useRepoStore((s) => s.staleFetchDays)
+  const setStaleFetchDays = useRepoStore((s) => s.setStaleFetchDays)
+  const [text, setText] = useState(String(staleFetchDays))
+
+  function change(value: string) {
+    setText(value)
+    const days = parseWholeNumber(value, MAX_STALE_FETCH_DAYS)
+    if (days !== null && days !== staleFetchDays) {
+      setStaleFetchDays(days)
+    }
+  }
+
+  return (
+    <NumberField
+      id="settings-stale-fetch"
+      label="Warn after days without a fetch"
+      description={`Pushed and unpushed commits are worked out from your last git fetch, which GitGo never runs itself. When it is older than this, the status bar and commit list warn. 0 turns the warning off. Default ${DEFAULT_STALE_FETCH_DAYS}.`}
+      max={MAX_STALE_FETCH_DAYS}
+      text={text}
+      onChange={change}
+    />
+  )
+}
+
 // The dialog's content, mounted only while it is open so the guide fields
 // start from the saved values each time.
 function SettingsContent({ onClose }: { onClose: () => void }) {
@@ -256,7 +285,7 @@ function SettingsContent({ onClose }: { onClose: () => void }) {
     } else {
       setBodyText(text)
     }
-    const column = parseGuide(text)
+    const column = parseWholeNumber(text, MAX_GUIDE_COLUMN)
     if (column !== null && column !== messageGuides[field]) {
       setMessageGuides({ ...messageGuides, [field]: column })
     }
@@ -329,17 +358,19 @@ function SettingsContent({ onClose }: { onClose: () => void }) {
           </Section>
 
           <Section title="Commit message guides">
-            <GuideField
+            <NumberField
               id="settings-subject-guide"
               label="Subject line length"
               description="Draws a ruler over the first line of the message and warns about longer subjects. 0 turns it off."
+              max={MAX_GUIDE_COLUMN}
               text={subjectText}
               onChange={(text) => changeGuide('subject', text)}
             />
-            <GuideField
+            <NumberField
               id="settings-body-guide"
               label="Body line length"
               description="Warns about body lines longer than this. 0 turns it off."
+              max={MAX_GUIDE_COLUMN}
               text={bodyText}
               onChange={(text) => changeGuide('body', text)}
             />
@@ -357,6 +388,10 @@ function SettingsContent({ onClose }: { onClose: () => void }) {
 
           <Section title="Office hours">
             <OfficeHoursField />
+          </Section>
+
+          <Section title="Remote">
+            <StaleFetchField />
           </Section>
 
           <Section title="Terminal">

@@ -142,6 +142,30 @@ func (app *App) SetOfficeHours(hours OfficeHours) error {
 	return app.saveSettings(settings)
 }
 
+// SetStaleFetchDays saves how many days after the last fetch the app warns
+// that the pushed / unpushed split may be out of date. 0 turns it off.
+func (app *App) SetStaleFetchDays(days int) error {
+	if !validStaleFetchDays(days) {
+		return fmt.Errorf("stale fetch days must be between 0 and %d", maxStaleFetchDays)
+	}
+	app.settingsMutex.Lock()
+	defer app.settingsMutex.Unlock()
+
+	settings := app.loadSettings()
+	settings.StaleFetchDays = days
+	return app.saveSettings(settings)
+}
+
+// A week without a fetch counts as stale by default.
+const (
+	defaultStaleFetchDays = 7
+	maxStaleFetchDays     = 365
+)
+
+func validStaleFetchDays(days int) bool {
+	return days >= 0 && days <= maxStaleFetchDays
+}
+
 // defaultOfficeHours are Monday to Friday, 09:00 to 17:00.
 func defaultOfficeHours() OfficeHours {
 	return OfficeHours{Start: "09:00", End: "17:00", Days: []int{1, 2, 3, 4, 5}}
@@ -188,6 +212,8 @@ func defaultSettings() Settings {
 		SubjectGuide: defaultSubjectGuide,
 		BodyGuide:    defaultBodyGuide,
 		OfficeHours:  defaultOfficeHours(),
+
+		StaleFetchDays: defaultStaleFetchDays,
 	}
 }
 
@@ -214,6 +240,9 @@ func (app *App) loadSettings() Settings {
 	}
 	if !validGuide(settings.BodyGuide) {
 		settings.BodyGuide = defaultBodyGuide
+	}
+	if !validStaleFetchDays(settings.StaleFetchDays) {
+		settings.StaleFetchDays = defaultStaleFetchDays
 	}
 	return settings
 }

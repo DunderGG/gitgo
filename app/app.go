@@ -137,12 +137,17 @@ func (app *App) ListBranches() ([]string, error) {
 
 // repoInfoFromState maps a git.RepoState to the RepoInfo DTO.
 func repoInfoFromState(state *gitpkg.RepoState) RepoInfo {
+	lastFetch := ""
+	if !state.LastFetch.IsZero() {
+		lastFetch = state.LastFetch.Format(time.RFC3339)
+	}
 	return RepoInfo{
 		Path:         state.Path,
 		Branch:       state.Branch,
 		IsCheckedOut: state.IsCheckedOut,
 		HasRemote:    state.HasRemote,
 		HasUpstream:  state.HasUpstream,
+		LastFetch:    lastFetch,
 	}
 }
 

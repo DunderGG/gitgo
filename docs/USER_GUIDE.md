@@ -25,6 +25,8 @@ A commit counts as pushed when it is on the branch's upstream or on any other re
 
 Whether a commit is pushed is checked again right before every edit and undo, so an edit is refused if you pushed in the meantime.
 
+The remote-tracking branches are only as up to date as your last `git fetch` (or `git pull`), and GitGo never fetches by itself. The status bar shows when you last fetched, for example **Fetched 3 days ago**, or **No fetch recorded** for a fresh clone. When the last fetch is older than the limit in [Settings](#settings) (7 days by default), it turns yellow and a notice above the list warns that commits pushed since then, for example from another clone, may still show as unpushed. Run `git fetch` and press `F5` before editing.
+
 ## Editing one commit
 
 Click an unpushed commit, or move to it with `↑` / `↓` and press `Enter`. The **Edit Commit** panel shows its details.
@@ -148,4 +150,5 @@ Open the settings with the **⚙** button in the header or `Ctrl+,`. Changes app
 - **Theme:** System (follows your operating system's setting), Light or Dark. The **◐** button in the header switches between them too.
 - **Commit message guides:** the subject line length (default 50) draws a ruler in the message field and warns about longer subjects. The body line length (default 72) warns about longer body lines. 0 turns either one off.
 - **Office hours:** your working hours, From and to, and the working days (default Mon–Fri, 09:00–17:00). They are used by **Only office hours** when [spreading dates](#only-office-hours). The start must be before the end, on the same day, so hours that run past midnight aren't supported, and at least one day must be picked.
+- **Remote:** how many days after your last fetch GitGo warns that the [pushed and unpushed split](#pushed-and-unpushed-commits) may be out of date (default 7). 0 turns the warning off; the status bar still shows when you last fetched.
 - **Terminal command:** what the **>_** button in the header runs. `{dir}` stands for the repository folder. Leave it empty to use the default: Windows Terminal (or cmd) on Windows, Terminal on macOS, and `$TERMINAL` or the first common terminal found on Linux. Running git in that terminal needs git installed; GitGo itself doesn't.

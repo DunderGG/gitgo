@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 )
 
 // Open opens the git repository rooted at path for the checked-out branch,
@@ -103,6 +105,7 @@ func OpenBranch(path string, branch string) (*RepoState, error) {
 		IsCheckedOut:   branchName == checkedOutBranch,
 		HasRemote:      hasRemote,
 		HasUpstream:    hasUpstream,
+		LastFetch:      lastFetchTime(repo),
 		UnpushedHashes: unpushed,
 	}, nil
 }
@@ -201,6 +204,22 @@ func resolveUpstream(repo *gogit.Repository, branchName string) (hasRemote bool,
 	}
 
 	return hasRemote, true, trackingRef.Hash(), nil
+}
+
+// lastFetchTime returns when FETCH_HEAD was last written, which git does on
+// every fetch and pull, even when nothing new arrived. It is the zero time
+// when there is no FETCH_HEAD: the repository was never fetched, or was
+// cloned and not fetched since (git clone does not write one).
+func lastFetchTime(repo *gogit.Repository) time.Time {
+	storage, ok := repo.Storer.(*filesystem.Storage)
+	if !ok {
+		return time.Time{}
+	}
+	info, err := storage.Filesystem().Stat("FETCH_HEAD")
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
 }
 
 // computeUnpushed returns the commits reachable from tipHash that are NOT

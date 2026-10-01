@@ -1,3 +1,4 @@
+import { fetchStatus, useNow } from '../lastFetch'
 import { useRepoStore } from '../store/repoStore'
 import Spinner from './Spinner'
 
@@ -10,6 +11,9 @@ export default function StatusBar() {
   const canUndo = useRepoStore((s) => s.canUndo)
   const activity = useRepoStore((s) => s.activity)
   const undoLastOperation = useRepoStore((s) => s.undoLastOperation)
+  const staleFetchDays = useRepoStore((s) => s.staleFetchDays)
+  const now = useNow()
+  const fetch = repoInfo ? fetchStatus(repoInfo, staleFetchDays, now) : null
 
   return (
     <footer className="flex items-center justify-between px-4 py-1.5 bg-gray-800 border-t border-gray-700 text-xs shrink-0">
@@ -30,6 +34,11 @@ export default function StatusBar() {
             )}
             {repoInfo.hasRemote && !repoInfo.hasUpstream && (
               <span className="text-yellow-400">No upstream set</span>
+            )}
+            {fetch && (
+              <span className={fetch.isStale ? 'text-yellow-400' : 'text-gray-500'} title={fetch.title}>
+                {fetch.label}
+              </span>
             )}
           </>
         )}

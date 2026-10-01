@@ -3,6 +3,7 @@ package git_test
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"gitgo/git"
 
@@ -125,4 +126,21 @@ func TestUnpushed_UpToDate(test *testing.T) {
 	localDir, _ := setupPushedRepo(test, "first", "second")
 
 	assertUnpushed(test, mustOpen(test, localDir))
+}
+
+// TestOpen_LastFetch verifies that LastFetch is zero until the repository is
+// fetched, and then the time of that fetch (FETCH_HEAD's modification time).
+func TestOpen_LastFetch(test *testing.T) {
+	localDir, gitCmd := setupPushedRepo(test, "first")
+
+	if got := mustOpen(test, localDir).LastFetch; !got.IsZero() {
+		test.Fatalf("LastFetch before any fetch = %v, want zero", got)
+	}
+
+	before := time.Now().Add(-time.Minute)
+	gitCmd("fetch", "origin")
+	got := mustOpen(test, localDir).LastFetch
+	if got.Before(before) || got.After(time.Now().Add(time.Minute)) {
+		test.Fatalf("LastFetch after a fetch = %v, want about now", got)
+	}
 }

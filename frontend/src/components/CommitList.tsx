@@ -1,5 +1,6 @@
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { focusCommitRow } from '../hooks/useKeyboardShortcuts'
+import { fetchStatus, useNow, type FetchStatus } from '../lastFetch'
 import { useRepoStore, CommitSummary, RepoInfo } from '../store/repoStore'
 
 interface CommitRowProps {
@@ -78,8 +79,13 @@ const noticeToneClassName: Record<NoticeTone, string> = {
 
 // listNotice explains situations where the pushed / unpushed split may be
 // surprising: with no remote or upstream every commit counts as unpushed, and
-// with everything pushed there is nothing to edit.
-function listNotice(repoInfo: RepoInfo, unpushedCount: number): { tone: NoticeTone; text: string } | null {
+// with an old fetch the split may be out of date, and with everything pushed
+// there is nothing to edit.
+function listNotice(
+  repoInfo: RepoInfo,
+  fetch: FetchStatus | null,
+  unpushedCount: number,
+): { tone: NoticeTone; text: string } | null {
   if (!repoInfo.hasRemote) {
     return {
       tone: 'info',
@@ -90,6 +96,12 @@ function listNotice(repoInfo: RepoInfo, unpushedCount: number): { tone: NoticeTo
     return {
       tone: 'warning',
       text: `Branch ${repoInfo.branch} has no upstream, so every commit is treated as unpushed. If you pushed these commits under another branch name, avoid editing them.`,
+    }
+  }
+  if (fetch?.isStale && unpushedCount > 0) {
+    return {
+      tone: 'warning',
+      text: `The last fetch was ${fetch.age}, so commits pushed since then, for example from another clone, may still show as unpushed. Run git fetch, then press F5 before editing.`,
     }
   }
   if (unpushedCount === 0) {
@@ -111,6 +123,8 @@ export default function CommitList() {
   const extendSelection = useRepoStore((s) => s.extendSelection)
   const selectAllUnpushed = useRepoStore((s) => s.selectAllUnpushed)
   const requestEditFocus = useRepoStore((s) => s.requestEditFocus)
+  const staleFetchDays = useRepoStore((s) => s.staleFetchDays)
+  const now = useNow()
   const isMultiSelect = selectedHashes.length > 1
 
   // A plain click selects one commit; Ctrl/Cmd-click and Shift-click build a
@@ -159,7 +173,8 @@ export default function CommitList() {
 
   const unpushedCount = commits.filter((c) => c.isUnpushed).length
   const isAllUnpushedSelected = commits.every((c) => !c.isUnpushed || selectedHashes.includes(c.hash))
-  const notice = repoInfo ? listNotice(repoInfo, unpushedCount) : null
+  const fetch = repoInfo ? fetchStatus(repoInfo, staleFetchDays, now) : null
+  const notice = repoInfo ? listNotice(repoInfo, fetch, unpushedCount) : null
 
   // Focus the primary row so the arrow keys and Escape work right away.
   function handleSelectAll() {

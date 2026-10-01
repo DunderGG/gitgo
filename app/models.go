@@ -54,6 +54,9 @@ type Settings struct {
 	// OfficeHours are the user's working hours, for spreading commits with
 	// "Only office hours".
 	OfficeHours OfficeHours `json:"officeHours"`
+	// StaleFetchDays is how many days after the last fetch the app warns that
+	// the pushed / unpushed split may be out of date. 0 turns the warning off.
+	StaleFetchDays int `json:"staleFetchDays"`
 }
 
 // OfficeHours is a daily window of working time on chosen weekdays.
@@ -91,6 +94,9 @@ type RepoInfo struct {
 	IsCheckedOut bool   `json:"isCheckedOut"`
 	HasRemote    bool   `json:"hasRemote"`
 	HasUpstream  bool   `json:"hasUpstream"`
+	// LastFetch is when the repository was last fetched, as RFC 3339, or
+	// empty when no fetch is recorded.
+	LastFetch string `json:"lastFetch"`
 }
 
 // CommitSummary is a lightweight representation of a commit for the commit list.

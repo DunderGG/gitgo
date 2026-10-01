@@ -270,3 +270,44 @@ func TestSetOfficeHours_RejectsInvalidHours(test *testing.T) {
 		test.Fatalf("office hours = %+v, want the defaults", got)
 	}
 }
+
+func TestSetStaleFetchDays_SavedForNextRun(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	if got := app.GetSettings().StaleFetchDays; got != 7 {
+		test.Fatalf("StaleFetchDays without a file = %d, want 7", got)
+	}
+	// 0 turns the warning off, and must survive a reload rather than become the default.
+	if err := app.SetStaleFetchDays(0); err != nil {
+		test.Fatalf("SetStaleFetchDays: %v", err)
+	}
+
+	nextRun := &App{settingsPath: path}
+	if got := nextRun.GetSettings().StaleFetchDays; got != 0 {
+		test.Fatalf("StaleFetchDays = %d, want 0", got)
+	}
+}
+
+func TestSetStaleFetchDays_RejectsOutOfRange(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	for _, days := range []int{-1, 366} {
+		if err := app.SetStaleFetchDays(days); err == nil {
+			test.Fatalf("SetStaleFetchDays(%d) accepted an out-of-range value", days)
+		}
+	}
+	if got := app.GetSettings().StaleFetchDays; got != 7 {
+		test.Fatalf("StaleFetchDays = %d, want the default", got)
+	}
+
+	// An out-of-range value, edited by hand, falls back to the default.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		test.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"staleFetchDays": 1000}`), 0o644); err != nil {
+		test.Fatal(err)
+	}
+	if got := app.GetSettings().StaleFetchDays; got != 7 {
+		test.Fatalf("out-of-range StaleFetchDays = %d, want 7", got)
+	}
+}

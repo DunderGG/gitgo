@@ -113,6 +113,11 @@ type RepoState struct {
 	// HasUpstream is true when the current branch has a remote tracking branch.
 	HasUpstream bool
 
+	// LastFetch is when the repository was last fetched (FETCH_HEAD's
+	// modification time), or the zero time when no fetch is recorded. The
+	// remote-tracking refs behind UnpushedHashes are only as fresh as this.
+	LastFetch time.Time
+
 	// UnpushedHashes is the set of commit hashes reachable from the branch tip
 	// but not from its upstream or any other remote-tracking ref (i.e. safe to
 	// edit). All commits are considered unpushed when there are no
