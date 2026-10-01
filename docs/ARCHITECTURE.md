@@ -655,6 +655,7 @@ GitGo/
 └── docs/
     ├── ARCHITECTURE.md       # This file
     ├── ROADMAP.md
+    ├── USER_GUIDE.md         # How each feature works, for users
     └── diagrams/
         ├── layer-diagram.puml
         ├── sequence-open-repo.puml

@@ -245,7 +245,12 @@ Found in the follow-up review (2026-09-25):
 - [x] **Set author on several commits** in `BulkEditPanel` (renamed from `BulkDatePanel`), next to the date shift, with the same Use my identity button, so a batch of wrongly attributed commits is fixed in one rewrite
   - [x] `ShiftDates` / `ShiftCommitDates` generalised to `git.EditCommits` / `EditCommits` (`BulkEditOptions` / `BulkEditRequest`): a date shift, a new author, or both in one rewrite; committers are kept (`TestEditCommits_*`)
   - [x] "Set Author" checkbox with name and email fields, validated like `EditPanel`; per-commit author preview in the panel and `ConfirmDialog`
-- [ ] **Spread dates evenly** in `BulkEditPanel`: set a first and last date and space the selected commits between them, for backdating a series without making every commit share the same shift
+- [ ] **Spread dates over a range** in `BulkEditPanel`: set a first and last date and fit the selected commits between them, for backdating a series without making every commit share the same shift
+  - Decided: commits are ordered by history, not by date, and the first and last dates are exact. **Keep relative spacing** (the default) scales the original gaps to the range, falling back to even spacing when the original dates are all equal. **Even** gives every gap the same length; **Vary the spacing** moves each commit in between by up to ±40% of the gap, drawn once for the preview, with a **Re-roll** button. Each commit keeps its offset; committer dates follow the existing checkbox.
+  - Backend: `BulkEditRequest` takes each commit's new author date as previewed, a per-commit date path the date shift and the time window can share
+  - [ ] Show the gap to the previous commit next to each new date (panel and `ConfirmDialog`), a one-line description of the selected mode, and a notice when the fallback is used
+  - [ ] Document the modes, the variation and the fallback in `docs/USER_GUIDE.md` and `HelpDialog`
+  - [ ] Tests: scaling, even spacing, the variation keeps order and end dates, the fallback, rounding to seconds, rejected ranges, offsets kept, committer dates
 - [ ] **Keep dates within a time window**: move the selected commits' times into a daily window (for example 09:00–17:00), keeping their order and days (like `git-redate` and similar scripts)
 - [ ] **Change time zone, keeping the moment**: convert the selected commits' dates to another offset (for example "my time zone") without changing the actual point in time, unlike the offset menu in `EditPanel`, which keeps the wall-clock time
 - [x] **Edit the committer**: an option to set the committer name and email too, or to reset them to the author, since a wrong identity usually affects both

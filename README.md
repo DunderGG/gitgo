@@ -27,6 +27,8 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - **In-app help:** a walkthrough of editing and applying changes, every keyboard shortcut and the safety rules, behind the `?` button or `F1`
 - **Leaves your work alone:** uncommitted changes (staged or not) and the stash are never touched
 
+The [user guide](docs/USER_GUIDE.md) explains each feature and exactly what it changes.
+
 ### Safety
 
 - Unpushed commits are computed like `git rev-list HEAD ^@{u}`, and commits on any remote-tracking branch are excluded too
@@ -142,6 +144,7 @@ gitgo/
 
 ### Documentation
 
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how each feature works and exactly what it changes
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design overview and a breakdown of every file
 - [docs/ROADMAP.md](docs/ROADMAP.md): completed phases, planned work and future ideas
 - [docs/BACKUPS.md](docs/BACKUPS.md): design proposal for saving and restoring backups of a branch's history
