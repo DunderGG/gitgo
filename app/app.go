@@ -53,6 +53,16 @@ func (app *App) OpenRepository(path string) (RepoInfo, error) {
 	return repoInfoFromState(state), nil
 }
 
+// CloseRepository forgets the open repository and its undo record, so the
+// frontend can go back to the start screen. Calling it with no repository
+// open does nothing.
+func (app *App) CloseRepository() {
+	app.mutex.Lock()
+	app.repoState = nil
+	app.lastRewrite = nil
+	app.mutex.Unlock()
+}
+
 // SwitchBranch changes the branch the app operates on to the local branch
 // with the given short name. It does not check the branch out: the working
 // tree and HEAD are untouched, and later edits move only that branch's ref.

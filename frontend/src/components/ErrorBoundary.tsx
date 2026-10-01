@@ -33,7 +33,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   // Close the repository and go back to the open screen. Git history is not
   // affected; this only resets what the UI shows.
   handleCloseRepository = () => {
-    useRepoStore.getState().clearRepo()
+    useRepoStore.getState().closeRepository()
     this.setState({ error: null })
   }
 

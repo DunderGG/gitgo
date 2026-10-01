@@ -3,6 +3,7 @@ import { OpenTerminal } from '../wailsjs/go/app/App'
 import { WindowSetTitle } from '../wailsjs/runtime/runtime'
 import BranchSelector from './components/BranchSelector'
 import RepoSelector from './components/RepoSelector'
+import RepoSwitcher from './components/RepoSwitcher'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
@@ -35,6 +36,7 @@ function App() {
   const activity = useRepoStore((s) => s.activity)
   const isMultiSelect = useRepoStore((s) => s.selectedHashes.length > 1)
   const reloadRepository = useRepoStore((s) => s.reloadRepository)
+  const closeRepository = useRepoStore((s) => s.closeRepository)
   const setHelpOpen = useRepoStore((s) => s.setHelpOpen)
   const setSettingsOpen = useRepoStore((s) => s.setSettingsOpen)
   const theme = useRepoStore((s) => s.theme)
@@ -69,9 +71,19 @@ function App() {
       <header className="flex items-center px-4 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
         <h1 className="text-lg font-semibold text-gray-50 tracking-tight">GitGo</h1>
         {repoInfo && (
-          <span className="ml-4 text-sm text-gray-400 truncate">
-            {repoInfo.path}
-          </span>
+          <>
+            <RepoSwitcher />
+            <button
+              type="button"
+              onClick={closeRepository}
+              disabled={activity !== null}
+              title="Close the repository and go back to the start screen"
+              aria-label="Close repository"
+              className="ml-2 shrink-0 rounded-md px-1.5 text-sm text-gray-300 transition hover:bg-gray-700 hover:text-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              ×
+            </button>
+          </>
         )}
         <div className="ml-auto flex items-center gap-3 pl-4">
           {repoInfo && (

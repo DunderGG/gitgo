@@ -283,6 +283,11 @@ export default function HelpDialog() {
                 <Ui>↻</Ui> in the header to reload.
               </li>
               <li>
+                To switch repository, pick one of your recent repositories (or <Ui>Open another folder…</Ui>) from the
+                repository menu in the header, or click <Ui>×</Ui> next to it to go back to the start screen. The last
+                edit can no longer be undone after that.
+              </li>
+              <li>
                 GitGo follows your system's light or dark setting. Click <Ui>◐</Ui> in the header to switch between
                 System, Light and Dark; the button shows the current choice.
               </li>

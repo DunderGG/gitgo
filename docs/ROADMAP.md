@@ -310,7 +310,7 @@ Found in the follow-up review (2026-09-25):
 
 > Opening repositories and showing their state in the header and `StatusBar`.
 
-- [ ] **Close / switch repository** button in the header. Once a repository is open there is no way back to the start screen and its recent list; `clearRepo` exists in the store but only `ErrorBoundary` calls it
+- [x] **Close / switch repository**: a `RepoSwitcher` dropdown in the header lists the recent repositories (and "Open another folder…") to switch directly, and a **×** button next to it goes back to the start screen and its recent list (`CloseRepository`, which also drops the undo record; the store's `closeRepository`, also used by `ErrorBoundary`; `TestCloseRepository_ForgetsRepositoryAndUndo`)
 - [ ] Ahead-of-remote details in the status area (for example: exact number of commits ahead)
 - [ ] **Open a repository from the command line** (`gitgo <path>`), so it can be started from a terminal or used as an external tool in an editor
 - [ ] **Drag and drop** a folder onto the window to open it (as in GitHub Desktop)

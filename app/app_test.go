@@ -158,6 +158,32 @@ func TestUndo_RestoresUnpushedEdit(test *testing.T) {
 	}
 }
 
+// TestCloseRepository_ForgetsRepositoryAndUndo verifies that closing drops
+// both the open repository and the undo record, and that another repository
+// can be opened afterwards.
+func TestCloseRepository_ForgetsRepositoryAndUndo(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	local := runGit(test, dir, "rev-parse", "HEAD")
+
+	if _, err := app.UpdateCommit(editRequest(local)); err != nil {
+		test.Fatalf("UpdateCommit: %v", err)
+	}
+	app.CloseRepository()
+
+	if app.CanUndo() {
+		test.Error("CanUndo should be false after CloseRepository")
+	}
+	if _, err := app.GetCommitLog(); err == nil {
+		test.Error("GetCommitLog should fail with no repository open")
+	}
+	if _, err := app.OpenRepository(dir); err != nil {
+		test.Fatalf("OpenRepository after close: %v", err)
+	}
+	if _, err := app.GetCommitLog(); err != nil {
+		test.Errorf("GetCommitLog after reopening: %v", err)
+	}
+}
+
 // TestUpdateCommit_MovesBranchesAndUndoRestoresThem verifies that a branch
 // reported by GetAffectedRefs can be moved with the edit, and that undo moves
 // it back together with the edited branch.

@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import {
   CanUndo,
+  CloseRepository,
   GetCommitLog,
   GetSettings,
+  OpenRepository,
   RefreshLog,
   ReloadRepository,
   SetMessageGuides,
@@ -74,6 +76,10 @@ function persistRecentRepos(paths: string[]) {
   // The list in the store is already up to date, so a failed save only loses
   // it for the next run.
   SetRecentRepos(paths).catch((error) => console.error('Saving recent repositories failed:', error))
+}
+
+function looksLikeMissingPathError(errorText: string): boolean {
+  return /does not exist|cannot find|no such file|cannot resolve path/i.test(errorText)
 }
 
 function withRecentRepo(paths: string[], path: string): string[] {
@@ -155,6 +161,10 @@ interface RepoStore {
   // already the raw text or there is no error.
   errorDetail: string | null
   setRepo: (info: RepoInfo, commits: CommitSummary[]) => void
+  // Opens the repository at path (start screen or the header's repository
+  // dropdown). On failure the open repository, if any, stays open, and a
+  // recent entry whose folder no longer exists is removed.
+  openRepository: (path: string) => Promise<void>
   removeRecentRepo: (path: string) => void
   setTheme: (theme: ThemePreference) => void
   setMessageGuides: (messageGuides: MessageGuides) => void
@@ -181,7 +191,9 @@ interface RepoStore {
   setStatus: (message: string) => void
   // Accepts raw error text; stores a friendly message plus the raw detail.
   setError: (error: string | null) => void
-  clearRepo: () => void
+  // Closes the repository and returns to RepoSelector. Git history is not
+  // touched, but the undo record is dropped.
+  closeRepository: () => void
 }
 
 export const useRepoStore = create<RepoStore>((set, get) => ({
@@ -222,6 +234,31 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
         status: `Opened: ${info.path}`,
       }
     }),
+
+  openRepository: async (path) => {
+    const { runGitOperation, setRepo, setError, removeRecentRepo, closeRepository } = get()
+    setError(null)
+    // Once OpenRepository succeeds the backend has replaced the previous
+    // repository, so a later failure cannot go back to showing that one.
+    let isBackendSwitched = false
+    try {
+      await runGitOperation('Opening repository…', async () => {
+        const info = await OpenRepository(path)
+        isBackendSwitched = true
+        const commits = await GetCommitLog()
+        setRepo(info, commits)
+      })
+    } catch (error) {
+      const text = String(error)
+      if (isBackendSwitched) {
+        closeRepository()
+      }
+      setError(text)
+      if (looksLikeMissingPathError(text)) {
+        removeRecentRepo(path)
+      }
+    }
+  },
 
   removeRecentRepo: (path) =>
     set((state) => {
@@ -438,5 +475,20 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     set({ error: friendly, errorDetail: isSameText ? null : error })
   },
 
-  clearRepo: () => set({ repoInfo: null, commits: [], ...NO_SELECTION, canUndo: false, status: '', error: null, errorDetail: null }),
+  closeRepository: () => {
+    const path = get().repoInfo?.path
+    // The frontend no longer uses the backend state, so a failed close only
+    // keeps it in memory until the next OpenRepository replaces it.
+    CloseRepository().catch((error) => console.error('Closing the repository failed:', error))
+    set({
+      repoInfo: null,
+      commits: [],
+      ...NO_SELECTION,
+      canUndo: false,
+      pendingEditFocus: false,
+      status: path ? `Closed: ${path}` : '',
+      error: null,
+      errorDetail: null,
+    })
+  },
 }))

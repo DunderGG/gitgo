@@ -1,37 +1,19 @@
-import { OpenRepository, GetCommitLog, SelectDirectory } from '../../wailsjs/go/app/App'
+import { SelectDirectory } from '../../wailsjs/go/app/App'
 import { useState } from 'react'
 import { useRepoStore } from '../store/repoStore'
 import Spinner from './Spinner'
 
-function looksLikeMissingPathError(errorText: string): boolean {
-  return /does not exist|cannot find|no such file|cannot resolve path/i.test(errorText)
-}
-
 export default function RepoSelector() {
-  const { recentRepos, activity, runGitOperation, setRepo, setError, removeRecentRepo } = useRepoStore()
+  const { recentRepos, activity, openRepository, removeRecentRepo } = useRepoStore()
 
   // Path currently being opened, so its button can show a spinner.
   const [openingPath, setOpeningPath] = useState<string | null>(null)
   const isBusy = activity !== null
 
   async function openRepo(path: string) {
-    setError(null)
     setOpeningPath(path)
-
     try {
-      await runGitOperation('Opening repository…', async () => {
-        const repoInfo = await OpenRepository(path)
-        const commits = await GetCommitLog()
-        setRepo(repoInfo, commits)
-      })
-    } catch (error) {
-      const errorText = String(error)
-      setError(errorText)
-
-      // Remove stale recent entries when the folder no longer exists.
-      if (looksLikeMissingPathError(errorText)) {
-        removeRecentRepo(path)
-      }
+      await openRepository(path)
     } finally {
       setOpeningPath(null)
     }

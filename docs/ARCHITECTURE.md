@@ -183,6 +183,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetAffectedRefs(hashes []string) ([]AffectedRef, error)` | Lists other branches and tags an edit of the given commits would leave behind, for the confirm dialog. |
 | `GetSignedCommits(hashes []string) ([]SignedCommit, error)` | Lists the signed commits an edit of the given commits would rebuild (the edited ones and those above them), which come out unsigned, for the confirm dialog's warning. |
 | `ReloadRepository() (RepoInfo, error)` | Re-opens the current repository and branch from disk (`git.OpenBranch`) and returns fresh `RepoInfo`, so upstream, remote and checked-out state are re-read too. If the branch no longer exists it falls back to the checked-out branch. Keeps `lastRewrite`; if the branch moved, `UndoLastOperation` reports it. |
+| `CloseRepository()` | Forgets the open repository (`repoState = nil`) and clears `lastRewrite`, so the frontend can return to `RepoSelector`. Git history is not touched; a no-op when nothing is open. |
 | `SwitchBranch(branch string) (RepoInfo, error)` | Calls `git.OpenBranch(path, branch)` to target another local branch **without checking it out**: HEAD and the working tree are untouched, and later edits move only that branch's ref. Replaces `repoState`, clears `lastRewrite`, and returns the new `RepoInfo`. |
 | `ListBranches() ([]string, error)` | Returns the short names of all local branches, sorted alphabetically. |
 | `UndoLastOperation() (OperationResult, error)` | Re-opens the repo and calls `git.ResetBranch` to move the branch from the post-rewrite tip back to the pre-rewrite tip. Only one level of undo is kept. Returns `ErrBranchMoved` (and drops the record) if the branch no longer points at the rewritten tip, e.g. a new commit was made. The worktree is not touched: rewrites only change metadata, so both tips have the same tree. |
@@ -308,7 +309,7 @@ When adding a new backend error whose raw text is not user-friendly, add a rule 
 
 #### `frontend/src/components/ErrorBoundary.tsx`
 
-A class component (React has no hook equivalent) that catches errors thrown while rendering. Instead of a blank window it shows a "Something went wrong" screen explaining that the repository was not changed, a collapsible "Technical details" block with the stack, and three recovery actions: **Try again** (re-render with the same state), **Close repository** (`clearRepo()` and back to `RepoSelector`), and **Reload GitGo** (`window.location.reload()`; the Go backend keeps running). Errors in event handlers and promises are not caught by React boundaries; those go through `setError`.
+A class component (React has no hook equivalent) that catches errors thrown while rendering. Instead of a blank window it shows a "Something went wrong" screen explaining that the repository was not changed, a collapsible "Technical details" block with the stack, and three recovery actions: **Try again** (re-render with the same state), **Close repository** (`closeRepository()` and back to `RepoSelector`), and **Reload GitGo** (`window.location.reload()`; the Go backend keeps running). Errors in event handlers and promises are not caught by React boundaries; those go through `setError`.
 
 ---
 
@@ -316,7 +317,7 @@ A class component (React has no hook equivalent) that catches errors thrown whil
 
 The root layout component. Renders a full-height flex column with three vertical sections:
 
-- **Header** (fixed height) — application title; when a repo is open, shows the full repository path truncated with `overflow-hidden`, and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, a **⚙** button opens `SettingsDialog`, and a **?** button opens `HelpDialog`; these three are shown on every screen.
+- **Header** (fixed height) — application title; when a repo is open, shows a `<RepoSwitcher>` dropdown with the open repository, followed by a **×** button that calls the store's `closeRepository` (disabled during any git operation), and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, a **⚙** button opens `SettingsDialog`, and a **?** button opens `HelpDialog`; these three are shown on every screen.
 - **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
@@ -343,7 +344,7 @@ It also renders a "Recent Repositories" list driven by `repoStore.recentRepos` (
 When the button is clicked, `handleOpen` runs the following sequence over the Wails IPC bridge:
 
 1. `SelectDirectory()` — opens the native OS folder picker. Returns empty string if cancelled; bails out immediately.
-2. `runGitOperation('Opening repository…', …)` wraps steps 3–5: the status bar shows a spinner with that label, the Open and recent-repository buttons are disabled, and the clicked button shows its own spinner.
+2. The store's `openRepository(path)` runs steps 3–5 inside `runGitOperation('Opening repository…', …)`: the status bar shows a spinner with that label, the Open and recent-repository buttons are disabled, and the clicked button shows its own spinner.
 3. `OpenRepository(path)` — validates the path on the Go side, builds `RepoState`, and returns `RepoInfo`.
 4. `GetCommitLog()` — walks the commit log and returns `[]CommitSummary`.
 5. `setRepo(repoInfo, commits)` — writes both into the Zustand store atomically. This triggers the `App.tsx` conditional to switch from `RepoSelector` to `CommitList`.
@@ -501,7 +502,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `officeHours` | `OfficeHours` | Working hours, `{ start, end, days }`, for spreading commits with "Only office hours", saved in `settings.json` through `SetOfficeHours` and loaded by `loadSettings()`. |
 | `terminalCommand` | `string` | Command the `>_` button runs, with `{dir}` for the repository folder; empty picks a terminal automatically. Saved in `settings.json` through `SetTerminalCommand`. |
 | `selectedHash` | `string | null` | Currently selected `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
-| `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `clearRepo`. |
+| `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `closeRepository`. |
 | `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
 | `pendingEditFocus` | `boolean` | Set by `Enter` on a commit row; consumed by `EditPanel` after the commit loads. |
 | `isSettingsOpen` | `boolean` | Whether `SettingsDialog` is open (**⚙** button or `Ctrl+,`). |
@@ -524,7 +525,8 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `setStatus(message)` | Updates `status` without touching anything else. |
 | `runGitOperation(label, operation)` | Async. Runs one git operation at a time: sets `activity` to `label`, awaits `operation`, and clears `activity` afterwards. If another operation is already running it skips the new one and returns `undefined`. Errors propagate to the caller. Used for opening a repository, switching branch, rewriting, and undoing. |
 | `setError(error)` | Takes raw error text, stores `friendlyError(error)` in `error` and the raw text in `errorDetail`. Pass `null` to dismiss. |
-| `clearRepo()` | Resets all state (including `selectedHash`) to initial values — returns the app to the `RepoSelector` view. |
+| `openRepository(path)` | Async. Runs as `runGitOperation("Opening repository…", …)`: `OpenRepository` then `GetCommitLog`, then `setRepo`. Used by `RepoSelector` and `RepoSwitcher`. On failure it shows the error and removes the recent entry if the folder no longer exists; the open repository stays open, unless `OpenRepository` already succeeded, in which case it closes so the frontend and backend agree. |
+| `closeRepository()` | Calls `CloseRepository` (fire-and-forget; a failure is only logged, since the next `OpenRepository` replaces the backend state anyway) and resets the repository state (`repoInfo`, `commits`, selection, `canUndo`, errors) — returns the app to the `RepoSelector` view with its recent list. Sets `status` to `"Closed: <path>"`. Used by the header's **×** button and `ErrorBoundary`. |
 
 ---
 
@@ -570,6 +572,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 |---|---|
 | `App.tsx` | Root layout; switches between `RepoSelector` and the repo workspace (`CommitList` + `EditPanel`) based on store state |
 | `RepoSelector` | Empty-state view; orchestrates `SelectDirectory` → `OpenRepository` → `GetCommitLog` → `setRepo`; also renders and manages quick-open recent repositories |
+| `RepoSwitcher` | Header dropdown showing the open repository; lists the recent repositories and an "Open another folder…" entry (`SelectDirectory`), and opens the one picked via the store's `openRepository` |
 | `BranchSelector` | *(Phase 3)* Header dropdown of local branches; switches the viewed/edited branch via `SwitchBranch` without checking it out |
 | `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state; `Enter` / arrow-key navigation |
 | `useKeyboardShortcuts` | *(Phase 3)* App-wide `Ctrl+Z` (undo) and `Escape` (close edit panel) shortcuts |
@@ -586,7 +589,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetTerminalCommand` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetTerminalCommand` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -646,6 +649,7 @@ GitGo/
 │       │   ├── DateTimeField.tsx
 │       │   ├── UseMyIdentityButton.tsx
 │       │   ├── RepoSelector.tsx
+│       │   ├── RepoSwitcher.tsx    # Header dropdown: open and recent repositories
 │       │   ├── Spinner.tsx         # (Phase 3)
 │       │   ├── CommitList.tsx
 │       │   ├── EditPanel.tsx       # (Phase 2)

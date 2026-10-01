@@ -8,6 +8,8 @@ How each feature works and what exactly it changes. For a quick overview, press 
 
 Click **Open Repository** and pick the folder of a local Git repository. Recently opened repositories are listed on the start screen.
 
+To switch to another repository, pick it from the repository menu in the header, which lists your recent repositories and **Open another folder…**. Or click **×** next to it to go back to the start screen. Either way, your history is not changed, but the last edit can no longer be undone with **Undo**, and changes you have not applied in the edit panel are lost.
+
 The checked-out branch is shown first. Use the **Branch** menu in the header to view and edit another local branch. That branch is not checked out, and your working tree is left alone.
 
 Made changes outside GitGo, for example a new commit in a terminal? Press `F5` or click **↻** to reload.

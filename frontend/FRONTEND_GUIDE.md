@@ -110,7 +110,7 @@ Global stylesheet. Imports Tailwind's layers and gives the page the theme's back
 
 Top-level layout and routing-by-state:
 
-- Header with app title, currently opened repo path, BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a theme button (System / Light / Dark), a ⚙ settings button, and a ? help button
+- Header with app title, a RepoSwitcher dropdown with the open repo and the recent ones, a × button that closes the repository (closeRepository), BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a theme button (System / Light / Dark), a ⚙ settings button, and a ? help button
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
@@ -153,7 +153,8 @@ Actions currently include:
 - requestEditFocus / consumeEditFocus: ask EditPanel to focus its form after Enter on a row
 - setStatus: set status message
 - setError: set error from raw text (converted to a friendly message), or null to dismiss
-- clearRepo: reset store to initial state
+- openRepository: open a repository by path (RepoSelector and RepoSwitcher), removing a recent entry whose folder is gone
+- closeRepository: close the repository (CloseRepository) and go back to the start screen
 
 ### src/components/RepoSelector.tsx
 
@@ -164,7 +165,7 @@ It calls generated Wails functions to:
 - open native folder picker
 - open selected repository in backend
 - fetch commit log
-- write results into the Zustand store
+- write results into the Zustand store (both through the store's openRepository)
 
 While a repository is opening, all buttons are disabled and the clicked one shows a spinner.
 
@@ -174,6 +175,14 @@ It also shows recent repositories as quick-open buttons.
 - It stores up to 10 unique paths (most recent first).
 - If a quick-open fails because the folder no longer exists, the stale entry is removed.
 - When there are no recent repositories, a hint says opened ones will appear there.
+
+### src/components/RepoSwitcher.tsx
+
+Header dropdown showing the open repository.
+
+- Lists the recent repositories and "Open another folder…" (native folder picker)
+- Picking one opens it in place of the current repository (openRepository), with a spinner while it loads
+- Disabled while a git operation runs
 
 ### src/components/CommitList.tsx
 
@@ -323,6 +332,7 @@ Methods currently exposed include:
 - RefreshLog
 - UpdateCommit
 - ReloadRepository
+- CloseRepository
 - SwitchBranch
 - ListBranches
 - UndoLastOperation

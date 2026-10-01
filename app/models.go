@@ -26,7 +26,7 @@ type App struct {
 
 	// lastRewrite records the most recent successful rewrite so it can be
 	// undone. It lives in memory only and is cleared when a repository is
-	// opened or the rewrite is undone. Guarded by mutex.
+	// opened or closed, or the rewrite is undone. Guarded by mutex.
 	lastRewrite *rewriteRecord
 
 	// settingsPath is the settings file (app/settings.go), or empty when there
