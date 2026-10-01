@@ -189,6 +189,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `UndoLastOperation() (OperationResult, error)` | Re-opens the repo and calls `git.ResetBranch` to move the branch from the post-rewrite tip back to the pre-rewrite tip. Only one level of undo is kept. Returns `ErrBranchMoved` (and drops the record) if the branch no longer points at the rewritten tip, e.g. a new commit was made. The worktree is not touched: rewrites only change metadata, so both tips have the same tree. |
 | `CanUndo() bool` | Reports whether `lastRewrite` is set. Used by the frontend to re-sync the Undo button after a failed undo. |
 | `OpenTerminal() error` | *(`app/terminal.go`)* Opens a terminal window in the repository root for running git by hand. Windows: Windows Terminal (`wt.exe -d`), else `cmd.exe` in a new console; macOS: `open -a Terminal`; Linux: `$TERMINAL`, then common emulators. A terminal command set in `SettingsDialog` replaces this choice, with no fallback, and on Windows gets a console of its own. The terminal is detached and outlives GitGo. |
+| `OpenFolder() error` | *(`app/folder.go`)* Shows the repository root in the file manager: `explorer.exe` on Windows, `open` (Finder) on macOS, `xdg-open` elsewhere. Detached like `OpenTerminal`; the exit code is ignored, since `explorer.exe` exits with 1 even on success. |
 | `GetSettings() Settings` | *(`app/settings.go`)* Reads `settings.json` in GitGo's config directory (`os.UserConfigDir()/gitgo`). A missing or unreadable file gives the defaults, so it never fails. |
 | `SetRecentRepos(paths []string) error` | *(`app/settings.go`)* Saves the recent repositories list into `settings.json`, keeping the other settings. Files in the config directory are written to a temporary file and renamed, so a crash never leaves a half-written file. |
 | `SetTheme(theme string) error` | *(`app/settings.go`)* Saves the colour theme (`system`, `light` or `dark`) into `settings.json`. `GetSettings` gives `system` for a missing or unknown value. |
@@ -318,7 +319,7 @@ A class component (React has no hook equivalent) that catches errors thrown whil
 
 The root layout component. Renders a full-height flex column with three vertical sections:
 
-- **Header** (fixed height) — application title; when a repo is open, shows a `<RepoSwitcher>` dropdown with the open repository, followed by a **×** button that calls the store's `closeRepository` (disabled during any git operation), and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, a **⚙** button opens `SettingsDialog`, and a **?** button opens `HelpDialog`; these three are shown on every screen.
+- **Header** (fixed height) — application title; when a repo is open, shows a `<RepoSwitcher>` dropdown with the open repository, followed by a **×** button that calls the store's `closeRepository` (disabled during any git operation), and on the right a `<BranchSelector>` and a **↻ reload** button that calls the store's `reloadRepository` (shows a spinner while it runs, disabled during any git operation), and a **>_** button that calls `OpenTerminal`, and a folder button that calls `OpenFolder`. A **theme** button (◐ system / ☀ light / ☾ dark) cycles the store's `theme`, a **⚙** button opens `SettingsDialog`, and a **?** button opens `HelpDialog`; these three are shown on every screen.
 - **Main** (flex-1, scrollable) — conditionally renders either `<RepoSelector>` (no repo open) or a two-column repo workspace (`<CommitList>` + `<EditPanel>`), driven by `repoInfo` from the Zustand store.
 - **Footer** — always-visible `<StatusBar>`.
 
@@ -592,7 +593,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetStaleFetchDays` / `SetTerminalCommand` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `OpenTerminal` in `app/terminal.go`, `OpenFolder` in `app/folder.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetStaleFetchDays` / `SetTerminalCommand` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -619,6 +620,7 @@ GitGo/
 ├── app/
 │   ├── app.go               # App struct — bound methods exposed to frontend
 │   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
+│   ├── folder.go            # OpenFolder: the repository in the file manager
 │   ├── settings.go          # GetSettings and the Set* methods: settings.json in the config directory
 │   ├── theme.go             # Theme names; PrefersDark for the startup window colour (+ theme_windows.go / theme_other.go)
 │   ├── window.go            # Window size saved between runs (lifecycle hooks, not bound)

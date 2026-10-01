@@ -110,7 +110,7 @@ Global stylesheet. Imports Tailwind's layers and gives the page the theme's back
 
 Top-level layout and routing-by-state:
 
-- Header with app title, a RepoSwitcher dropdown with the open repo and the recent ones, a × button that closes the repository (closeRepository), BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a theme button (System / Light / Dark), a ⚙ settings button, and a ? help button
+- Header with app title, a RepoSwitcher dropdown with the open repo and the recent ones, a × button that closes the repository (closeRepository), BranchSelector, a ↻ reload button, a >_ button that opens a terminal in the repo (OpenTerminal), a folder button that shows the repo in the file manager (OpenFolder), a theme button (System / Light / Dark), a ⚙ settings button, and a ? help button
 - Main panel shows RepoSelector when no repo is open
 - Main panel shows CommitList when a repo is open
 - StatusBar always visible at bottom
@@ -338,6 +338,7 @@ Methods currently exposed include:
 - UndoLastOperation
 - CanUndo
 - OpenTerminal
+- OpenFolder
 
 ### wailsjs/go/app/App.js
 

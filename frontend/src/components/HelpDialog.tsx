@@ -281,7 +281,8 @@ export default function HelpDialog() {
               <li>
                 Need a git command GitGo does not offer? Click <Ui>&gt;_</Ui> in the header to open a terminal in the
                 repository folder. Running git there needs git installed; GitGo itself does not. To use another
-                terminal or shell, set a <Ui>Terminal command</Ui> in the settings (<Kbd>Ctrl</Kbd>+<Kbd>,</Kbd>).
+                terminal or shell, set a <Ui>Terminal command</Ui> in the settings (<Kbd>Ctrl</Kbd>+<Kbd>,</Kbd>). The
+                folder button next to it shows the repository folder in Explorer, Finder or your file manager.
               </li>
               <li>
                 Made changes outside GitGo, for example a new commit in a terminal? Press <Kbd>F5</Kbd> or click{' '}

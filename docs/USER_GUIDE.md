@@ -14,6 +14,8 @@ The checked-out branch is shown first. Use the **Branch** menu in the header to 
 
 Made changes outside GitGo, for example a new commit in a terminal? Press `F5` or click **↻** to reload.
 
+The folder button next to **>_** shows the repository folder in Explorer, Finder or your Linux file manager.
+
 ## Pushed and unpushed commits
 
 GitGo only edits commits you have not pushed yet. Each row in the commit list starts with a dot:

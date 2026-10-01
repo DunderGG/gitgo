@@ -323,7 +323,7 @@ Found in the follow-up review (2026-09-25):
 
 > Handing the repository or its data to other programs.
 
-- [ ] **Open folder** button next to the terminal button, showing the repository in Explorer / Finder / the Linux file manager
+- [x] **Open folder** button next to the terminal button, showing the repository in Explorer / Finder / the Linux file manager (`OpenFolder`: `explorer.exe`, `open` or `xdg-open`; `TestFileManagerCommand`)
 - [ ] **Run menu**: one header dropdown (not a button per command) with ready-made Git commands, so common tasks need no external terminal. Output is shown in a read-only dialog with Copy and Save buttons
   - [ ] **History as text**: `git log --format=…` over the selected commits or the whole list, with a few presets (one line per commit, full metadata, authors and dates as CSV)
   - [ ] **Export as patches**: `git format-patch` for the selected commits, into a folder picked in a native dialog

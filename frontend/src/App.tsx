@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { OpenTerminal } from '../wailsjs/go/app/App'
+import { OpenFolder, OpenTerminal } from '../wailsjs/go/app/App'
 import { WindowSetTitle } from '../wailsjs/runtime/runtime'
 import BranchSelector from './components/BranchSelector'
 import RepoSelector from './components/RepoSelector'
@@ -50,6 +50,16 @@ function App() {
       await OpenTerminal()
       setError(null)
       setStatus('Opened a terminal in the repository folder')
+    } catch (error) {
+      setError(String(error))
+    }
+  }
+
+  async function openFolder() {
+    try {
+      await OpenFolder()
+      setError(null)
+      setStatus('Opened the repository folder')
     } catch (error) {
       setError(String(error))
     }
@@ -107,6 +117,18 @@ function App() {
                 className="rounded-md border border-gray-700 px-2 py-1 font-mono text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
               >
                 &gt;_
+              </button>
+              <button
+                type="button"
+                onClick={openFolder}
+                title="Show the repository folder in the file manager"
+                aria-label="Open folder"
+                className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+              >
+                {/* An outline folder; the folder emoji would be in colour. */}
+                <svg viewBox="0 0 16 16" className="h-5 w-4" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+                  <path d="M1.5 3.5h4.5l1.5 1.5h7v7.5h-13z" strokeLinejoin="round" />
+                </svg>
               </button>
             </>
           )}
