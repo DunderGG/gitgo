@@ -49,16 +49,17 @@ func RebaseRewrite(state *RepoState, targetHash plumbing.Hash, opts AmendOptions
 // EditCommits applies the same change to each commit in hashes, in one rewrite
 // (see RewriteCommits): the author date moves by opts.Shift or is set to the
 // commit's entry in opts.Dates, and with opts.SetAuthor the author name and
-// email are replaced; opts.Committer does the same for the committer. Each
-// commit keeps its message, and its committer date, except that with
+// email are replaced; opts.Committer does the same for the committer, and
+// opts.Trailers adds and removes trailers in the messages. Each commit keeps
+// the rest of its message, and its committer date, except that with
 // opts.ShiftCommitter the committer date moves by as much as the author date.
 //
 // Returns ErrCommitNotUnpushed if any commit is not in state.UnpushedHashes,
 // ErrInvalidIdentity for an author or committer that would produce a
 // malformed commit, and an error when opts changes nothing, sets both Shift
-// and Dates, or has no date for one of the commits.
+// and Dates, has no date for one of the commits, or has an invalid trailer.
 func EditCommits(state *RepoState, hashes []plumbing.Hash, opts BulkEditOptions) error {
-	if opts.Shift == 0 && opts.Dates == nil && !opts.SetAuthor && opts.Committer == KeepCommitter {
+	if opts.Shift == 0 && opts.Dates == nil && !opts.SetAuthor && opts.Committer == KeepCommitter && opts.Trailers.IsEmpty() {
 		return fmt.Errorf("the edit changes nothing")
 	}
 	if opts.Shift != 0 && opts.Dates != nil {
@@ -70,6 +71,9 @@ func EditCommits(state *RepoState, hashes []plumbing.Hash, opts BulkEditOptions)
 		}
 	}
 	if err := validateCommitterChange(opts.Committer, opts.CommitterName, opts.CommitterEmail); err != nil {
+		return err
+	}
+	if err := opts.Trailers.Validate(); err != nil {
 		return err
 	}
 	edits := make(map[plumbing.Hash]CommitEdit, len(hashes))
@@ -102,7 +106,7 @@ func bulkEdit(opts BulkEditOptions, date time.Time) CommitEdit {
 			author.Email = opts.AuthorEmail
 		}
 		committer = changeCommitter(committer, author, opts.Committer, opts.CommitterName, opts.CommitterEmail)
-		return author, committer, original.Message
+		return author, committer, opts.Trailers.Apply(original.Message)
 	}
 }
 

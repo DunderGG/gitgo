@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { GetAffectedRefs, GetCommitDetail, GetCommitLog, GetSignedCommits, OpenCommitOnWeb, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
-import type { app } from '../../wailsjs/go/models'
+import {
+  ChangeTrailers,
+  GetAffectedRefs,
+  GetCommitDetail,
+  GetCommitLog,
+  GetGitIdentity,
+  GetSignedCommits,
+  OpenCommitOnWeb,
+  RefreshLog,
+  UpdateCommit,
+} from '../../wailsjs/go/app/App'
+import { app } from '../../wailsjs/go/models'
 import ConfirmDialog, { CommitComparison, ConfirmValues } from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
 import DateTimeField from './DateTimeField'
@@ -17,6 +27,8 @@ import { errorText, friendlyError } from '../errors'
 import { identityErrors, NO_IDENTITY_ERRORS, type CommitterMode } from '../identity'
 import { lineLength, messageGuideHints } from '../messageGuides'
 import { useRepoStore } from '../store/repoStore'
+import { CO_AUTHORED_BY, formatPerson, formatTrailer, SIGNED_OFF_BY } from '../trailers'
+import CoAuthorPicker from './CoAuthorPicker'
 import CommitterFields from './CommitterFields'
 import UseMyIdentityButton from './UseMyIdentityButton'
 
@@ -348,6 +360,35 @@ export default function EditPanel() {
     }
   }
 
+  // Adds trailer to the end of the message (see ChangeTrailers), unless the
+  // message already has it.
+  async function addTrailer(trailer: app.Trailer) {
+    try {
+      const message = await ChangeTrailers(form.message, app.TrailerChange.createFrom({ add: [trailer], remove: [] }))
+      if (message === form.message) {
+        setStatus(`The message already has ${formatTrailer(trailer)}`)
+        return
+      }
+      setForm((current) => ({ ...current, message }))
+      setError(null)
+    } catch (error) {
+      setError(errorText(error))
+    }
+  }
+
+  async function signOff() {
+    try {
+      const identity = await GetGitIdentity()
+      if (!identity.name || !identity.email) {
+        setError('Git needs both user.name and user.email set to sign off. Set them with git config.')
+        return
+      }
+      await addTrailer({ key: SIGNED_OFF_BY, value: formatPerson(identity) })
+    } catch (error) {
+      setError(errorText(error))
+    }
+  }
+
   async function openOnWeb(hash: string) {
     try {
       await OpenCommitOnWeb(hash)
@@ -478,6 +519,23 @@ export default function EditPanel() {
                 ))}
               </ul>
             )}
+            <div className="mt-1.5 flex flex-wrap items-center justify-end gap-1">
+              <CoAuthorPicker
+                label="Add co-author"
+                title="Add a Co-authored-by line for someone who worked on this commit"
+                disabled={fieldsDisabled}
+                onPick={(person) => void addTrailer({ key: CO_AUTHORED_BY, value: formatPerson(person) })}
+              />
+              <button
+                type="button"
+                title="Add a Signed-off-by line with your user.name and user.email"
+                disabled={fieldsDisabled}
+                onClick={() => void signOff()}
+                className={DATE_BUTTON_CLASS}
+              >
+                Sign off
+              </button>
+            </div>
           </div>
 
           <div>

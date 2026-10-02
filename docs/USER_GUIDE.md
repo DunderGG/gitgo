@@ -37,6 +37,15 @@ Click an unpushed commit, or move to it with `↑` / `↓` and press `Enter`. Th
 
 Type the new message. The first line is the subject. If commit message guides are on (see [Settings](#settings)), a ruler marks the subject length limit and a counter turns yellow when the subject is longer.
 
+### Trailers
+
+Trailers are `Key: value` lines in the last paragraph of a message, such as `Co-authored-by: Ada Lovelace <ada@example.com>` (GitHub and GitLab show co-authors on the commit) and `Signed-off-by: …` (the Developer Certificate of Origin sign-off that `git commit -s` adds). The buttons under the message add them for you:
+
+- **Add co-author** lists the people in the branch's history: the authors of its last 2,000 commits and the co-authors already named in them, most recent first. Type to filter, or type `Name <email>` to add someone who isn't listed.
+- **Sign off** adds a `Signed-off-by` line with your `user.name` and `user.email`.
+
+The line goes at the end of the message's trailers, or in a new last paragraph if it has none. A line the message already has is not added twice (co-authors are matched by email). To remove a trailer, delete its line from the message.
+
 ### Author date
 
 The date is shown in the commit's own time zone, to the second.
@@ -71,7 +80,7 @@ Select several unpushed commits:
 - `Shift`+`↑` / `↓` extends the selection.
 - **Select all unpushed**, or `Ctrl+A`, selects every unpushed commit.
 
-The **Edit Several Commits** panel replaces the edit panel. All of its changes are applied as one rewrite, which one undo reverts. Messages can't be changed for several commits at once.
+The **Edit Several Commits** panel replaces the edit panel. All of its changes are applied as one rewrite, which one undo reverts. Messages can't be changed for several commits at once, apart from their [trailers](#co-authors-and-sign-offs).
 
 ### Dates
 
@@ -117,7 +126,17 @@ The list at the bottom of the panel shows each commit's new date, with the time 
 
 Tick **Set Author** and type a name and email, or click **Use my identity**. Every selected commit gets that author. Under **Committer**, choose **Keep name and email**, **Same as each commit's author** (its new author, if you set one), or **Set name and email** to give all of them the same committer.
 
-The list at the bottom of the panel shows each commit's new date, author and committer before you review.
+### Co-authors and sign-offs
+
+Under **Trailers** (see [Trailers](#trailers) for what they are):
+
+- **Add co-author** adds a `Co-authored-by` line for the person you pick to every selected commit that doesn't already have it.
+- **Remove co-author** lists the co-authors of the selected commits. Pick one to remove their line wherever it appears, matched by email, or **All co-authors** to remove every `Co-authored-by` line.
+- **Sign-offs**: **Keep** leaves the `Signed-off-by` lines alone, **Add mine** adds yours (`user.name` and `user.email`) where it is missing, and **Remove all** removes every `Signed-off-by` line.
+
+Each change shows as a chip; click its **×** to drop it. The rest of every message is kept. If the changes would leave every selected message as it is (for example, every commit already has that co-author), the panel says so and there is nothing to apply.
+
+The list at the bottom of the panel shows each commit's new date, author, committer and the trailer lines added (`+`) and removed (`−`) before you review.
 
 ## Reviewing and applying
 

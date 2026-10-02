@@ -188,12 +188,40 @@ type BulkEditRequest struct {
 	Committer      string `json:"committer"`
 	CommitterName  string `json:"committerName"`
 	CommitterEmail string `json:"committerEmail"`
+	// Trailers adds and removes trailers in each commit's message, as
+	// previewed by PreviewTrailers. Empty keeps the messages.
+	Trailers TrailerChange `json:"trailers"`
 	// MoveBranches names other local branches (from GetAffectedRefs) to move
 	// to the rewritten commits along with the edited branch.
 	MoveBranches []string `json:"moveBranches"`
 	// Backup saves the branch and MoveBranches as an automatic backup before
 	// the edit.
 	Backup bool `json:"backup"`
+}
+
+// Trailer is a "Key: value" line at the end of a commit message, such as
+// "Co-authored-by: Name <email>".
+type Trailer struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// TrailerChange adds and removes trailers in commit messages (see
+// git.TrailerChange). A Remove with an empty value removes every trailer with
+// its key; co-authors are matched by email.
+type TrailerChange struct {
+	Add    []Trailer `json:"add"`
+	Remove []Trailer `json:"remove"`
+}
+
+// TrailerPreview is one commit's trailers before and after a TrailerChange,
+// from PreviewTrailers.
+type TrailerPreview struct {
+	Hash   string    `json:"hash"`
+	Before []Trailer `json:"before"`
+	After  []Trailer `json:"after"`
+	// Changed is false when the change leaves the message as it is.
+	Changed bool `json:"changed"`
 }
 
 // SpreadRequest asks SpreadDates for new author dates that fit several

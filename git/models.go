@@ -53,6 +53,9 @@ type BulkEditOptions struct {
 	Committer      CommitterChange
 	CommitterName  string
 	CommitterEmail string
+	// Trailers adds and removes trailers in each commit's message, such as
+	// Co-authored-by and Signed-off-by. The rest of the messages is kept.
+	Trailers TrailerChange
 	// MoveBranches names other local branches to move along with the
 	// rewrite, as in AmendOptions.
 	MoveBranches []string

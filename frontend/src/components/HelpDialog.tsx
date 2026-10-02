@@ -159,6 +159,11 @@ export default function HelpDialog() {
                 <Ui>Use my identity</Ui> fills in the author from your Git config (user.name and user.email).
               </li>
               <li>
+                Under the message, <Ui>Add co-author</Ui> adds a Co-authored-by line for someone from the
+                branch&apos;s history (or type Name &lt;email&gt;), and <Ui>Sign off</Ui> adds a Signed-off-by line
+                with your identity. To remove one, delete its line from the message.
+              </li>
+              <li>
                 For the date, type a new time (to the second) and pick a time zone, or use the quick buttons:{' '}
                 <Ui>−1d</Ui> <Ui>−1h</Ui> <Ui>+1h</Ui> <Ui>+1d</Ui> and <Ui>Now</Ui>. Tick{' '}
                 <Ui>Also set committer date</Ui> to give the committer date the same value.
@@ -206,12 +211,16 @@ export default function HelpDialog() {
                 the same name and email on all of them.
               </li>
               <li>
-                The list below shows each new date, author and committer. Click <Ui>Review Changes</Ui>.
+                Under <Ui>Trailers</Ui>, <Ui>Add co-author</Ui> and <Ui>Remove co-author</Ui> add or remove a
+                Co-authored-by line on every selected commit, and <Ui>Sign-offs</Ui> adds yours or removes them all.
+              </li>
+              <li>
+                The list below shows each new date, author, committer and trailer. Click <Ui>Review Changes</Ui>.
               </li>
             </Steps>
             <p className="text-gray-400">
-              Messages cannot be changed for several commits at once. New dates, a new author and a new committer can
-              be applied together, as one rewrite that one undo reverts.
+              Messages cannot be changed for several commits at once, apart from their trailers. New dates, a new
+              author, a new committer and trailers can be applied together, as one rewrite that one undo reverts.
             </p>
           </Section>
 

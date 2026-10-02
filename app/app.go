@@ -314,8 +314,8 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 // EditCommits applies the same change to each unpushed commit in req: its
 // author date moves by req.Minutes (keeping its own time zone offset) or is
 // set to its entry in req.Dates and, with req.SetAuthor, its author name and
-// email are replaced, and req.Committer can replace its committer name and
-// email. It is a single rewrite that one undo reverts; see UpdateCommit for
+// email are replaced, req.Committer can replace its committer name and email,
+// and req.Trailers changes the trailers in its message. It is a single rewrite that one undo reverts; see UpdateCommit for
 // what is left alone.
 func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 	hashes := make([]plumbing.Hash, len(req.Hashes))
@@ -347,6 +347,7 @@ func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 		Committer:      committer,
 		CommitterName:  req.CommitterName,
 		CommitterEmail: req.CommitterEmail,
+		Trailers:       gitTrailerChange(req.Trailers),
 		MoveBranches:   req.MoveBranches,
 	}
 
