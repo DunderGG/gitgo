@@ -158,6 +158,46 @@ func TestUndo_RestoresUnpushedEdit(test *testing.T) {
 	}
 }
 
+// TestHasExternalChanges_IgnoresOwnEditsOnly verifies that GitGo's own edit
+// and undo are not reported as outside changes, a terminal commit is, and a
+// reload clears it.
+func TestHasExternalChanges_IgnoresOwnEditsOnly(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	local := runGit(test, dir, "rev-parse", "HEAD")
+
+	if app.HasExternalChanges() {
+		test.Fatal("HasExternalChanges = true right after opening")
+	}
+	if _, err := app.UpdateCommit(editRequest(local)); err != nil {
+		test.Fatalf("UpdateCommit: %v", err)
+	}
+	if app.HasExternalChanges() {
+		test.Fatal("HasExternalChanges = true after an edit in GitGo")
+	}
+	if _, err := app.UndoLastOperation(); err != nil {
+		test.Fatalf("UndoLastOperation: %v", err)
+	}
+	if app.HasExternalChanges() {
+		test.Fatal("HasExternalChanges = true after an undo in GitGo")
+	}
+
+	commitFile(test, dir, "from a terminal")
+	if !app.HasExternalChanges() {
+		test.Fatal("HasExternalChanges = false after a commit outside GitGo")
+	}
+	if _, err := app.ReloadRepository(); err != nil {
+		test.Fatalf("ReloadRepository: %v", err)
+	}
+	if app.HasExternalChanges() {
+		test.Fatal("HasExternalChanges = true after reloading")
+	}
+
+	app.CloseRepository()
+	if app.HasExternalChanges() {
+		test.Fatal("HasExternalChanges = true with no repository open")
+	}
+}
+
 // TestCloseRepository_ForgetsRepositoryAndUndo verifies that closing drops
 // both the open repository and the undo record, and that another repository
 // can be opened afterwards.

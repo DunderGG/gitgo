@@ -4,6 +4,7 @@ import {
   CloseRepository,
   GetCommitLog,
   GetSettings,
+  HasExternalChanges,
   OpenRepository,
   RefreshLog,
   ReloadRepository,
@@ -81,6 +82,10 @@ export async function loadSettings(): Promise<void> {
     backupSettings,
   })
 }
+
+// How many git operations runGitOperation has started; see
+// checkForExternalChanges.
+let operationCount = 0
 
 // The last SetTerminalCommand call; see setTerminalCommand.
 let terminalSave: Promise<unknown> = Promise.resolve()
@@ -182,6 +187,10 @@ interface RepoStore {
   // or null when idle. StatusBar shows it with a spinner, and controls that
   // start another git operation are disabled while it is set.
   activity: string | null
+  // True when the repository changed on disk since GitGo last read it (a
+  // commit, checkout or fetch in a terminal). useExternalChangeWatcher keeps
+  // it up to date and ExternalChangeBar offers a reload while it is set.
+  hasExternalChanges: boolean
   // Set by the Enter shortcut on a commit row. EditPanel consumes it once the
   // commit has loaded and focuses the first field if the commit is editable.
   pendingEditFocus: boolean
@@ -225,6 +234,9 @@ interface RepoStore {
   runGitOperation: <T>(label: string, operation: () => Promise<T>) => Promise<T | undefined>
   undoLastOperation: () => Promise<void>
   reloadRepository: () => Promise<void>
+  // Asks the backend whether the repository changed outside GitGo and updates
+  // hasExternalChanges. Does nothing while a git operation runs.
+  checkForExternalChanges: () => Promise<void>
   setStatus: (message: string) => void
   // Accepts raw error text; stores a friendly message plus the raw detail.
   setError: (error: string | null) => void
@@ -248,6 +260,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   selectionAnchor: null,
   canUndo: false,
   activity: null,
+  hasExternalChanges: false,
   pendingEditFocus: false,
   isHelpOpen: false,
   isSettingsOpen: false,
@@ -268,6 +281,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
         recentRepos,
         ...NO_SELECTION,
         canUndo: false,
+        hasExternalChanges: false,
         error: null,
         errorDetail: null,
         status: `Opened: ${info.path}`,
@@ -445,11 +459,32 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       return undefined
     }
 
+    operationCount++
     set({ activity: label })
     try {
       return await operation()
     } finally {
       set({ activity: null })
+      // Most operations re-read the repository, so a pending notice may no
+      // longer apply.
+      void get().checkForExternalChanges()
+    }
+  },
+
+  checkForExternalChanges: async () => {
+    if (!get().repoInfo || get().activity !== null) {
+      return
+    }
+    // GitGo's own edits move refs before the backend re-reads the
+    // repository, so a check that overlaps an operation can see them as an
+    // outside change; its answer is dropped.
+    const startCount = operationCount
+    const hasExternalChanges = await HasExternalChanges().catch(() => false)
+    if (operationCount !== startCount || get().activity !== null) {
+      return
+    }
+    if (get().hasExternalChanges !== hasExternalChanges) {
+      set({ hasExternalChanges })
     }
   },
 
@@ -479,6 +514,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
           selectionAnchor: exists(selectionAnchor) ? selectionAnchor : null,
           // A different branch means the undo record belongs elsewhere.
           canUndo: branchChanged ? false : canUndo,
+          hasExternalChanges: false,
           error: null,
           errorDetail: null,
           status: branchChanged
@@ -540,6 +576,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       commits: [],
       ...NO_SELECTION,
       canUndo: false,
+      hasExternalChanges: false,
       pendingEditFocus: false,
       status: path ? `Closed: ${path}` : '',
       error: null,

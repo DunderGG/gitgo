@@ -78,6 +78,10 @@ func OpenBranch(path string, branch string) (*RepoState, error) {
 		branchName = checkedOutBranch
 	}
 
+	// Taken before the branch and remote refs are read, so a change made while
+	// the state is being computed is still reported by HasChanged.
+	stateFingerprint := fingerprint(repo, rootPath, branchName)
+
 	branchRef, err := repo.Reference(plumbing.NewBranchReferenceName(branchName), true)
 	if err != nil {
 		if errors.Is(err, plumbing.ErrReferenceNotFound) {
@@ -107,6 +111,7 @@ func OpenBranch(path string, branch string) (*RepoState, error) {
 		HasUpstream:    hasUpstream,
 		LastFetch:      lastFetchTime(repo),
 		UnpushedHashes: unpushed,
+		fingerprint:    stateFingerprint,
 	}, nil
 }
 

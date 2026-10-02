@@ -313,8 +313,9 @@ export default function HelpDialog() {
                 output can be copied or saved. It needs git installed, and is disabled without it.
               </li>
               <li>
-                Made changes outside GitGo, for example a new commit in a terminal? Press <Kbd>F5</Kbd> or click{' '}
-                <Ui>↻</Ui> in the header to reload.
+                Made changes outside GitGo, for example a new commit, checkout or fetch in a terminal? GitGo notices
+                and shows a bar under the header with a <Ui>Reload</Ui> button. You can also press <Kbd>F5</Kbd> or
+                click <Ui>↻</Ui> at any time. Reloading keeps the selected commit and anything typed in the form.
               </li>
               <li>
                 To switch repository, pick one of your recent repositories (or <Ui>Open another folder…</Ui>) from the

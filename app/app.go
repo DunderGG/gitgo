@@ -121,6 +121,22 @@ func (app *App) ReloadRepository() (RepoInfo, error) {
 	return repoInfoFromState(newState), nil
 }
 
+// HasExternalChanges reports whether the repository changed on disk since the
+// app last read it, for example after a commit, checkout, fetch or push in a
+// terminal. The frontend polls it to offer a reload. GitGo's own edits re-read
+// the repository, so they do not count. With no repository open it returns
+// false.
+func (app *App) HasExternalChanges() bool {
+	app.mutex.Lock()
+	state := app.repoState
+	app.mutex.Unlock()
+
+	if state == nil {
+		return false
+	}
+	return gitpkg.HasChanged(state)
+}
+
 // ListBranches returns the short names of all local branches in the open
 // repository, sorted alphabetically.
 func (app *App) ListBranches() ([]string, error) {

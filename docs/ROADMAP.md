@@ -293,7 +293,7 @@ Found in the follow-up review (2026-09-25):
 
 > Protecting history and getting back to an earlier state.
 
-- [ ] **Backups**: save the branch's history before an edit and restore it later, persistently and with multiple steps, unlike the one in-memory `Ctrl+Z` step. Design: [BACKUPS.md](BACKUPS.md)
+- [x] **Backups**: save the branch's history before an edit and restore it later, persistently and with multiple steps, unlike the one in-memory `Ctrl+Z` step. Design: [BACKUPS.md](BACKUPS.md)
   - [x] `git/backup.go`: create, list, delete, prune and restore backups, one ref per branch at `refs/gitgo/backups/<time>-<manual|auto>/<branch>` (never pushed, kept by `git gc`). `PlanRestore` lists the commits a restore removes and brings back per branch and refuses it when pushed commits would be removed (`ErrRestorePushed`) or the checked-out branch's files changed since the backup (`ErrRestoreFilesChanged`); `RestoreBackup` is a compare-and-swap against the planned tips, recorded in the reflog as `gitgo: restore backup <id>`; branches deleted since are skipped (`TestCreateBackup_*`, `TestListBackups_*`, `TestDeleteBackup_*`, `TestPruneBackups_*`, `TestRestoreBackup_*`, `TestPlanRestore_*`)
   - [x] Bound methods `CreateBackup`, `ListBackups`, `PlanRestore`, `RestoreBackup`, `DeleteBackup` (`app/backup.go`); a restore first saves the branches' current tips as an automatic backup (not when it is refused) and can be undone with `Ctrl+Z`
   - [x] **Back up** button in the header and a **Backups** list with Restore and Delete (this replaces the reflog-based history panel idea)
@@ -329,7 +329,7 @@ Found in the follow-up review (2026-09-25):
 - [ ] Ahead-of-remote details in the status area (for example: exact number of commits ahead)
 - [ ] **Open a repository from the command line** (`gitgo <path>`), so it can be started from a terminal or used as an external tool in an editor
 - [ ] **Drag and drop** a folder onto the window to open it (as in GitHub Desktop)
-- [ ] **Watch the repository** for changes made outside GitGo and offer to reload, instead of relying on `F5`
+- [x] **Watch the repository** for changes made outside GitGo and offer to reload, instead of relying on `F5`. No file watcher: the backend keeps a fingerprint of what the view depends on (HEAD, the branch tip and upstream setting, remotes and remote-tracking refs, `FETCH_HEAD` time, an in-progress merge or rebase), taken in `OpenBranch` so GitGo's own edits never count. The frontend asks `HasExternalChanges` when the window gets focus and every 3 s while it is visible, and `ExternalChangeBar` offers a reload. Other branches, tags and the working tree are ignored (`TestHasChanged_*`, `TestHasExternalChanges_IgnoresOwnEditsOnly`)
 
 ### External tools and export
 

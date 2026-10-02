@@ -123,4 +123,8 @@ type RepoState struct {
 	// edit). All commits are considered unpushed when there are no
 	// remote-tracking refs.
 	UnpushedHashes map[plumbing.Hash]bool
+
+	// fingerprint is the repository's fingerprint when the state was opened,
+	// for HasChanged.
+	fingerprint string
 }

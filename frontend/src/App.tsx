@@ -9,6 +9,7 @@ import RunMenu from './components/RunMenu'
 import StatusBar from './components/StatusBar'
 import CommitList from './components/CommitList'
 import EditPanel from './components/EditPanel'
+import ExternalChangeBar from './components/ExternalChangeBar'
 import BulkEditPanel from './components/BulkEditPanel'
 import HelpDialog from './components/HelpDialog'
 import SettingsDialog from './components/SettingsDialog'
@@ -174,6 +175,8 @@ function App() {
         </div>
         {frameless && <WindowControls />}
       </header>
+
+      {repoInfo && <ExternalChangeBar />}
 
       <main className="flex-1 overflow-hidden">
         {!repoInfo ? (
