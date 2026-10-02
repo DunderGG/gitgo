@@ -132,7 +132,9 @@ export default function HelpDialog() {
               </li>
               <li>
                 <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-gray-600" />
-                <Ui>Pushed</Ui>: dimmed and read-only. You can still select it to see its details.
+                <Ui>Pushed</Ui>: dimmed and read-only. You can still select it to see its details, and when the
+                remote is on GitHub, GitLab or Bitbucket, <Ui>View on GitHub</Ui> (or GitLab, Bitbucket) opens its page
+                in your browser.
               </li>
             </Bullets>
             <p className="text-gray-400">

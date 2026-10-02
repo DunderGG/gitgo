@@ -118,6 +118,11 @@ type RepoState struct {
 	// remote-tracking refs behind UnpushedHashes are only as fresh as this.
 	LastFetch time.Time
 
+	// Web is the repository's page on GitHub, GitLab or Bitbucket, worked out
+	// from the URL of the remote the branch tracks (else "origin"), or the
+	// zero value when that remote is elsewhere.
+	Web WebHost
+
 	// UnpushedHashes is the set of commit hashes reachable from the branch tip
 	// but not from its upstream or any other remote-tracking ref (i.e. safe to
 	// edit). All commits are considered unpushed when there are no

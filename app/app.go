@@ -164,6 +164,7 @@ func repoInfoFromState(state *gitpkg.RepoState) RepoInfo {
 		HasRemote:    state.HasRemote,
 		HasUpstream:  state.HasUpstream,
 		LastFetch:    lastFetch,
+		WebHost:      state.Web.Provider,
 	}
 }
 

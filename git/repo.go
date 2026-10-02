@@ -110,6 +110,7 @@ func OpenBranch(path string, branch string) (*RepoState, error) {
 		HasRemote:      hasRemote,
 		HasUpstream:    hasUpstream,
 		LastFetch:      lastFetchTime(repo),
+		Web:            resolveWebHost(repo, branchName),
 		UnpushedHashes: unpushed,
 		fingerprint:    stateFingerprint,
 	}, nil

@@ -342,7 +342,7 @@ Found in the follow-up review (2026-09-25):
   - [x] Needs the native `git` binary, which is otherwise not a runtime dependency (see Phase 4): look for it on `PATH` and disable the menu with an explanation when it is missing, rather than failing per command (`GetGitStatus`)
   - [x] A fixed list of commands with arguments built by GitGo, never free text, so nothing in the menu can change the repository (only full commit hashes come from the frontend; `TestHistoryArgs_RejectsUnknownFormatAndHashes`)
 - [ ] **Open in editor** button, opening the repository in the user's editor (VS Code, or the one set in `core.editor` / an app preference)
-- [ ] **View on GitHub / GitLab / Bitbucket** for pushed commits, building the commit URL from the remote URL
+- [x] **View on GitHub / GitLab / Bitbucket** for pushed commits, building the commit URL from the remote URL: a link next to the selected commit's hash in `EditPanel` (`OpenCommitOnWeb`, which refuses unpushed commits). The remote is the one the branch tracks, else `origin`, else the first by name; https, `ssh://` and scp-like URLs are understood, as are GitHub Enterprise, self-managed GitLab and `github.com-work` style SSH aliases. Bitbucket Server is not, since its pages use another layout (`git.ParseWebHost`, `RepoInfo.WebHost`; `TestParseWebHost`, `TestOpen_WebHostFollowsTrackedRemote`, `TestCommitWebURL`)
 - [x] Header button that opens a terminal in the repository folder (`OpenTerminal`; Windows Terminal or cmd, Terminal.app, `$TERMINAL` or a common Linux emulator, unless a terminal command is set in `SettingsDialog`)
 
 ### App settings and help

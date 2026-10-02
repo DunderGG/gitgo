@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { GetAffectedRefs, GetCommitDetail, GetCommitLog, GetSignedCommits, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
+import { GetAffectedRefs, GetCommitDetail, GetCommitLog, GetSignedCommits, OpenCommitOnWeb, RefreshLog, UpdateCommit } from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
 import ConfirmDialog, { CommitComparison, ConfirmValues } from './ConfirmDialog'
 import DateShiftButtons, { DATE_BUTTON_CLASS } from './DateShiftButtons'
@@ -348,6 +348,16 @@ export default function EditPanel() {
     }
   }
 
+  async function openOnWeb(hash: string) {
+    try {
+      await OpenCommitOnWeb(hash)
+      setError(null)
+      setStatus(`Opened the commit on ${repoInfo?.webHost}`)
+    } catch (error) {
+      setError(String(error))
+    }
+  }
+
   return (
     <>
       <aside className={PANEL_CLASS}>
@@ -372,8 +382,21 @@ export default function EditPanel() {
         )}
 
         {selectedHash && (
-          <div className="mt-3 rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-xs text-gray-400">
-            Commit: <span className="font-mono text-gray-300">{selectedHash.slice(0, 12)}</span>
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-xs text-gray-400">
+            <span>
+              Commit: <span className="font-mono text-gray-300">{selectedHash.slice(0, 12)}</span>
+            </span>
+            {/* Unpushed commits are not on the hosting service yet. */}
+            {repoInfo?.webHost && !isUnpushed && (
+              <button
+                type="button"
+                onClick={() => void openOnWeb(selectedHash)}
+                title={`Open this commit on ${repoInfo.webHost} in your browser`}
+                className="text-indigo-300 hover:text-indigo-200 hover:underline"
+              >
+                View on {repoInfo.webHost} ↗
+              </button>
+            )}
           </div>
         )}
 

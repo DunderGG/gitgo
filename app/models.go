@@ -103,6 +103,9 @@ type RepoInfo struct {
 	// LastFetch is when the repository was last fetched, as RFC 3339, or
 	// empty when no fetch is recorded.
 	LastFetch string `json:"lastFetch"`
+	// WebHost is "GitHub", "GitLab" or "Bitbucket" when pushed commits can be
+	// opened there with OpenCommitOnWeb, and empty otherwise.
+	WebHost string `json:"webHost"`
 }
 
 // CommitSummary is a lightweight representation of a commit for the commit list.

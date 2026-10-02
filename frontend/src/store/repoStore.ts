@@ -126,6 +126,9 @@ export interface RepoInfo {
   // When the repository was last fetched, as RFC 3339, or empty when no
   // fetch is recorded (see lastFetch.ts).
   lastFetch: string
+  // "GitHub", "GitLab" or "Bitbucket" when pushed commits can be opened there
+  // with OpenCommitOnWeb, and empty otherwise.
+  webHost: string
 }
 
 export interface CommitSummary {
