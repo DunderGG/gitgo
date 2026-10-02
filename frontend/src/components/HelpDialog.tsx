@@ -265,6 +265,42 @@ export default function HelpDialog() {
             </p>
           </Section>
 
+          <Section title="8. Run git commands">
+            <p>
+              The <Ui>Run...</Ui> menu in the header runs ready-made git commands, so common tasks need no terminal.
+              GitGo builds every command itself, and the commands only read the repository: nothing in the menu can
+              change it.
+            </p>
+            <Bullets>
+              <li>
+                <Ui>History of all commits in the list</Ui> runs <span className="font-mono">git log</span> over the
+                commits the list shows (the latest 100 on the branch). <Ui>History of the selected commits</Ui> does the
+                same for just the commits you selected, and only appears once you select some.
+              </li>
+              <li>
+                Each history comes in three formats: <Ui>One line per commit</Ui> (short hash, date, author and
+                subject), <Ui>Full metadata</Ui> (author, committer, both dates and the whole message) and{' '}
+                <Ui>Authors and dates (CSV)</Ui>, one row per commit with the full hash, author, committer, both dates
+                and the subject, for a spreadsheet.
+              </li>
+              <li>
+                <Ui>Export</Ui> saves the selected commits as patch files with{' '}
+                <span className="font-mono">git format-patch</span>, into a folder you pick: one file per commit,
+                numbered from the oldest. Merge commits get no patch. Someone else can apply them with{' '}
+                <span className="font-mono">git am</span>.
+              </li>
+            </Bullets>
+            <p>
+              The output opens in a window that shows the exact command that ran, so you can run it yourself in a
+              terminal. <Ui>Copy</Ui> puts the output on the clipboard and <Ui>Save…</Ui> writes it to a file. Output
+              longer than 10 MB is cut off.
+            </p>
+            <p className="text-gray-400">
+              The menu needs git installed (GitGo itself does not), and is disabled without it; hover over it to see
+              why. Installed git while GitGo was open? Reopen the repository.
+            </p>
+          </Section>
+
           <Section title="Keyboard shortcuts">
             <table className="w-full text-left text-sm">
               <tbody>
@@ -308,11 +344,6 @@ export default function HelpDialog() {
                 repository folder. Running git there needs git installed; GitGo itself does not. To use another
                 terminal or shell, set a <Ui>Terminal command</Ui> in the settings (<Kbd>Ctrl</Kbd>+<Kbd>,</Kbd>). The
                 folder button next to it shows the repository folder in Explorer, Finder or your file manager.
-              </li>
-              <li>
-                The <Ui>Run</Ui> menu in the header runs ready-made git commands that never change the repository: the
-                history of the list or the selected commits as text or CSV, or the selected commits as patch files. The
-                output can be copied or saved. It needs git installed, and is disabled without it.
               </li>
               <li>
                 Made changes outside GitGo, for example a new commit, checkout or fetch in a terminal? GitGo notices

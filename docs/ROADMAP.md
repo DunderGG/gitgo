@@ -359,7 +359,7 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens (level remembered in `settings.json`, shown with a Reset button in `SettingsDialog`)
 - [ ] **Update check** against GitHub Releases, once Phase 6 publishes binaries (with an off switch in `SettingsDialog`, since it contacts GitHub)
 - [x] In-app help (`HelpDialog`, `?` button in the header or `F1`): walkthrough of single and bulk edits, review and undo, keyboard shortcuts and safety notes
-- [ ] The "Run" commands need to be explained in the in-app help (`HelpDialog`)
+- [x] The **Run** menu explained in the in-app help (`HelpDialog`, section 8): the history formats, patch export, the output window and the git requirement
 
 ---
 
