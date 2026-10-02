@@ -27,6 +27,10 @@ const rules: FriendlyRule[] = [
     message: 'That commit could not be found. The history may have changed outside GitGo; reopen the repository.',
   },
   {
+    pattern: /backup not found/i,
+    message: 'That backup no longer exists. It may have been deleted outside GitGo.',
+  },
+  {
     pattern: /writing reflog/i,
     message:
       'GitGo could not write the reflog in .git/logs, so nothing was changed. Check that the repository folder is writable.',

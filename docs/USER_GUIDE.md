@@ -145,6 +145,28 @@ Every rewrite and undo is also written to the reflog, with messages starting wit
 git reset --hard <branch>@{1}
 ```
 
+### Backups
+
+Undo only covers the last rewrite and is gone when you switch branch or close GitGo. For more, click **Back up** in the header: it saves the branch as it is now, instantly, whatever the repository size. Backups stay in the repository until you delete them, survive `git gc`, and are never pushed.
+
+The clock button next to **Back up** opens the list of backups of the branch you are viewing; tick **Show all branches** to see the others too. Each backup shows when it was made, whether you made it (**Manual**) or GitGo did (**Automatic**), and the commit it saved for each branch, marked **same as now** when the branch still points there.
+
+- **Restore…** shows, per branch, the commits that would be removed from it and the ones that would come back. Click **Restore** to move the branches back. The current state is saved as an automatic backup first, and `Ctrl+Z` undoes the restore.
+- **Delete** removes the backup after you confirm.
+
+A restore changes nothing and explains why when:
+
+- it would remove commits that have been **pushed**;
+- the branch is **checked out** and commits made since the backup changed files: moving the branch back would leave those changes behind as uncommitted changes. Use the terminal (`git reset --hard`) if you really want to discard them;
+- a branch **changed** while you were reviewing; review again.
+
+A branch deleted since the backup is not recreated. Backups are refs under `refs/gitgo/backups/`, so they can also be used from the command line:
+
+```bash
+git for-each-ref refs/gitgo/backups          # list backups
+git reset --hard refs/gitgo/backups/<id>/main  # restore one by hand
+```
+
 ## Run menu
 
 The **Run** menu in the header runs a few ready-made git commands, so common tasks need no terminal. None of them change the repository.

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { OpenFolder, OpenTerminal } from '../wailsjs/go/app/App'
 import { WindowSetTitle } from '../wailsjs/runtime/runtime'
+import BackupsMenu from './components/BackupsMenu'
 import BranchSelector from './components/BranchSelector'
 import RepoSelector from './components/RepoSelector'
 import RepoSwitcher from './components/RepoSwitcher'
@@ -131,6 +132,7 @@ function App() {
                   <path d="M1.5 3.5h4.5l1.5 1.5h7v7.5h-13z" strokeLinejoin="round" />
                 </svg>
               </button>
+              <BackupsMenu />
               <RunMenu />
             </>
           )}
