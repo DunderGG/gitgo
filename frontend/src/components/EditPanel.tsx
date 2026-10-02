@@ -147,6 +147,8 @@ export default function EditPanel() {
   const [affectedRefs, setAffectedRefs] = useState<app.AffectedRef[]>([])
   const [signedCommits, setSignedCommits] = useState<app.SignedCommit[]>([])
   const [moveBranches, setMoveBranches] = useState(true)
+  // "Back up first" in ConfirmDialog; starts from the setting each time it opens.
+  const [backup, setBackup] = useState(true)
 
   useEffect(() => {
     let isActive = true
@@ -268,6 +270,7 @@ export default function EditPanel() {
       return
     }
     setMoveBranches(true)
+    setBackup(useRepoStore.getState().backupSettings.backupBeforeApply)
     setShowConfirmDialog(true)
   }
 
@@ -307,6 +310,7 @@ export default function EditPanel() {
             moveBranches: moveBranches
               ? affectedRefs.filter((ref) => ref.kind === 'branch').map((ref) => ref.name)
               : [],
+            backup,
           })
         } catch (error) {
           // The backend re-reads the repository before editing. When the
@@ -590,6 +594,8 @@ export default function EditPanel() {
           affectedRefs={affectedRefs}
           moveBranches={moveBranches}
           onMoveBranchesChange={setMoveBranches}
+          backup={backup}
+          onBackupChange={setBackup}
           onCancel={() => setShowConfirmDialog(false)}
           onConfirm={handleConfirmApply}
         >

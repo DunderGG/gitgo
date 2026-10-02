@@ -176,6 +176,8 @@ export default function BulkEditPanel() {
   const [affectedRefs, setAffectedRefs] = useState<app.AffectedRef[]>([])
   const [signedCommits, setSignedCommits] = useState<app.SignedCommit[]>([])
   const [moveBranches, setMoveBranches] = useState(true)
+  // "Back up first" in ConfirmDialog; starts from the setting each time it opens.
+  const [backup, setBackup] = useState(true)
 
   const selectedSet = new Set(selectedHashes)
   // Newest first, like the commit list.
@@ -279,6 +281,7 @@ export default function BulkEditPanel() {
       return
     }
     setMoveBranches(true)
+    setBackup(useRepoStore.getState().backupSettings.backupBeforeApply)
     setShowConfirmDialog(true)
   }
 
@@ -306,6 +309,7 @@ export default function BulkEditPanel() {
             moveBranches: moveBranches
               ? affectedRefs.filter((ref) => ref.kind === 'branch').map((ref) => ref.name)
               : [],
+            backup,
           })
         } catch (error) {
           // Show the fresh pushed/unpushed state so the pushed commits are
@@ -658,6 +662,8 @@ export default function BulkEditPanel() {
         affectedRefs={affectedRefs}
         moveBranches={moveBranches}
         onMoveBranchesChange={setMoveBranches}
+        backup={backup}
+        onBackupChange={setBackup}
         onCancel={() => setShowConfirmDialog(false)}
         onConfirm={handleConfirmApply}
       >

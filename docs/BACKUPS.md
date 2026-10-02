@@ -1,6 +1,6 @@
 # Backups: design proposal
 
-> **Status:** in progress: the git layer (`git/backup.go`), bound methods (`app/backup.go`), and the Back up button and Backups list (`BackupsMenu`, `BackupsDialog`) are done. Tracked in [ROADMAP.md](ROADMAP.md) under *Safety and recovery*.
+> **Status:** implemented, except exporting a backup to a bundle file: the git layer (`git/backup.go`), bound methods (`app/backup.go`), the Back up button and Backups list (`BackupsMenu`, `BackupsDialog`), and the automatic backup before each edit with retention (`ConfirmDialog`, `SettingsDialog`). Tracked in [ROADMAP.md](ROADMAP.md) under *Safety and recovery*.
 
 Let the user save a backup of a branch's history before editing it (for example before shifting dates), and restore that backup later if something goes wrong.
 

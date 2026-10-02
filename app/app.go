@@ -289,7 +289,7 @@ func (app *App) UpdateCommit(req EditRequest) (OperationResult, error) {
 	}
 	commitHash := plumbing.NewHash(req.Hash)
 
-	return app.runRewrite([]plumbing.Hash{commitHash}, req.MoveBranches, "commit updated", func(state *gitpkg.RepoState) error {
+	return app.runRewrite([]plumbing.Hash{commitHash}, req.MoveBranches, req.Backup, "commit updated", func(state *gitpkg.RepoState) error {
 		return gitpkg.RebaseRewrite(state, commitHash, opts)
 	})
 }
@@ -337,7 +337,7 @@ func (app *App) EditCommits(req BulkEditRequest) (OperationResult, error) {
 	if len(hashes) == 1 {
 		message = "1 commit updated"
 	}
-	return app.runRewrite(hashes, req.MoveBranches, message, func(state *gitpkg.RepoState) error {
+	return app.runRewrite(hashes, req.MoveBranches, req.Backup, message, func(state *gitpkg.RepoState) error {
 		return gitpkg.EditCommits(state, hashes, opts)
 	})
 }
@@ -444,7 +444,10 @@ func (app *App) GetGitIdentity() (Identity, error) {
 // read repository state, then records it for undo and refreshes the stored
 // state. successMessage is returned when everything, including moving
 // moveBranches, succeeded.
-func (app *App) runRewrite(hashes []plumbing.Hash, moveBranches []string, successMessage string, rewrite func(state *gitpkg.RepoState) error) (OperationResult, error) {
+//
+// With backup, the branch and moveBranches are first saved as an automatic
+// backup (see backUpBeforeEdit); the edit is refused if that fails.
+func (app *App) runRewrite(hashes []plumbing.Hash, moveBranches []string, backup bool, successMessage string, rewrite func(state *gitpkg.RepoState) error) (OperationResult, error) {
 	app.mutex.Lock()
 	state := app.repoState
 	app.mutex.Unlock()
@@ -487,6 +490,15 @@ func (app *App) runRewrite(hashes []plumbing.Hash, moveBranches []string, succes
 	// be moved back by undo.
 	otherTipsBefore := branchTips(state, moveBranches)
 
+	var saved *gitpkg.Backup
+	if backup {
+		created, err := gitpkg.CreateBackup(state, gitpkg.BackupAuto, moveBranches)
+		if err != nil {
+			return OperationResult{}, fmt.Errorf("saving a backup before the edit: %w", err)
+		}
+		saved = &created
+	}
+
 	rewriteErr := rewrite(state)
 
 	// Some requested branches could not be moved, but the edit itself stands:
@@ -496,7 +508,14 @@ func (app *App) runRewrite(hashes []plumbing.Hash, moveBranches []string, succes
 		rewriteErr = nil
 	}
 	if rewriteErr != nil {
+		if saved != nil {
+			// Nothing was changed, so the backup is not needed.
+			_ = gitpkg.DeleteBackup(state.Repo, saved.ID)
+		}
 		return OperationResult{}, rewriteErr
+	}
+	if saved != nil {
+		app.pruneAutoBackups(state.Repo, *saved)
 	}
 
 	// Record the pre- and post-rewrite tips so the operation can be undone.

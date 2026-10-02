@@ -156,6 +156,32 @@ func (app *App) SetStaleFetchDays(days int) error {
 	return app.saveSettings(settings)
 }
 
+// SetBackupSettings saves whether the confirm dialog's "Back up first"
+// checkbox starts ticked, and how many automatic backups to keep per branch.
+func (app *App) SetBackupSettings(backupBeforeApply bool, autoBackupsKept int) error {
+	if !validAutoBackupsKept(autoBackupsKept) {
+		return fmt.Errorf("automatic backups kept must be between 1 and %d", maxAutoBackupsKept)
+	}
+	app.settingsMutex.Lock()
+	defer app.settingsMutex.Unlock()
+
+	settings := app.loadSettings()
+	settings.BackupBeforeApply = backupBeforeApply
+	settings.AutoBackupsKept = autoBackupsKept
+	return app.saveSettings(settings)
+}
+
+// The last 20 automatic backups of a branch are kept by default. At least one
+// is always kept, or the backup made before an edit would be pruned at once.
+const (
+	defaultAutoBackupsKept = 20
+	maxAutoBackupsKept     = 1000
+)
+
+func validAutoBackupsKept(count int) bool {
+	return count >= 1 && count <= maxAutoBackupsKept
+}
+
 // A week without a fetch counts as stale by default.
 const (
 	defaultStaleFetchDays = 7
@@ -214,6 +240,9 @@ func defaultSettings() Settings {
 		OfficeHours:  defaultOfficeHours(),
 
 		StaleFetchDays: defaultStaleFetchDays,
+
+		BackupBeforeApply: true,
+		AutoBackupsKept:   defaultAutoBackupsKept,
 	}
 }
 
@@ -243,6 +272,9 @@ func (app *App) loadSettings() Settings {
 	}
 	if !validStaleFetchDays(settings.StaleFetchDays) {
 		settings.StaleFetchDays = defaultStaleFetchDays
+	}
+	if !validAutoBackupsKept(settings.AutoBackupsKept) {
+		settings.AutoBackupsKept = defaultAutoBackupsKept
 	}
 	return settings
 }

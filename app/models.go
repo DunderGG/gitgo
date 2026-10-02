@@ -57,6 +57,12 @@ type Settings struct {
 	// StaleFetchDays is how many days after the last fetch the app warns that
 	// the pushed / unpushed split may be out of date. 0 turns the warning off.
 	StaleFetchDays int `json:"staleFetchDays"`
+	// BackupBeforeApply is the starting state of the "Back up first" checkbox
+	// in the confirm dialog.
+	BackupBeforeApply bool `json:"backupBeforeApply"`
+	// AutoBackupsKept is how many automatic backups are kept per branch; older
+	// ones are pruned when a new one is made. Manual backups are never pruned.
+	AutoBackupsKept int `json:"autoBackupsKept"`
 }
 
 // OfficeHours is a daily window of working time on chosen weekdays.
@@ -149,6 +155,9 @@ type EditRequest struct {
 	// MoveBranches names other local branches (from GetAffectedRefs) to move
 	// to the rewritten commits along with the edited branch.
 	MoveBranches []string `json:"moveBranches"`
+	// Backup saves the branch and MoveBranches as an automatic backup before
+	// the edit.
+	Backup bool `json:"backup"`
 }
 
 // BulkEditRequest describes the same change applied to several unpushed
@@ -179,6 +188,9 @@ type BulkEditRequest struct {
 	// MoveBranches names other local branches (from GetAffectedRefs) to move
 	// to the rewritten commits along with the edited branch.
 	MoveBranches []string `json:"moveBranches"`
+	// Backup saves the branch and MoveBranches as an automatic backup before
+	// the edit.
+	Backup bool `json:"backup"`
 }
 
 // SpreadRequest asks SpreadDates for new author dates that fit several

@@ -10,6 +10,7 @@ import {
   SetMessageGuides,
   SetOfficeHours,
   SetRecentRepos,
+  SetBackupSettings,
   SetStaleFetchDays,
   SetTerminalCommand,
   SetTheme,
@@ -69,7 +70,16 @@ export async function loadSettings(): Promise<void> {
   const terminalCommand = settings.terminalCommand
   const officeHours = settings.officeHours
   const staleFetchDays = settings.staleFetchDays
-  useRepoStore.setState({ recentRepos, theme, messageGuides, terminalCommand, officeHours, staleFetchDays })
+  const backupSettings = { backupBeforeApply: settings.backupBeforeApply, autoBackupsKept: settings.autoBackupsKept }
+  useRepoStore.setState({
+    recentRepos,
+    theme,
+    messageGuides,
+    terminalCommand,
+    officeHours,
+    staleFetchDays,
+    backupSettings,
+  })
 }
 
 // The last SetTerminalCommand call; see setTerminalCommand.
@@ -89,6 +99,15 @@ function withRecentRepo(paths: string[], path: string): string[] {
   const deduped = [path, ...paths.filter((candidate) => candidate !== path)]
   return deduped.slice(0, maxRecentRepos)
 }
+
+export interface BackupSettings {
+  backupBeforeApply: boolean
+  autoBackupsKept: number
+}
+
+// Same as the Go defaults, used until the settings have loaded.
+export const DEFAULT_BACKUP_SETTINGS: BackupSettings = { backupBeforeApply: true, autoBackupsKept: 20 }
+export const MAX_AUTO_BACKUPS_KEPT = 1000
 
 export interface RepoInfo {
   path: string
@@ -139,6 +158,10 @@ interface RepoStore {
   // that the pushed / unpushed split may be out of date; 0 never warns.
   // Saved in the settings file.
   staleFetchDays: number
+  // Whether the confirm dialog's "Back up first" checkbox starts ticked, and
+  // how many automatic backups the backend keeps per branch. Saved in the
+  // settings file.
+  backupSettings: BackupSettings
   // Hash of the commit currently selected in CommitList; null when nothing is
   // selected. EditPanel reads this to know which commit to load. With several
   // commits selected it is the one last clicked or moved to.
@@ -180,6 +203,7 @@ interface RepoStore {
   setMessageGuides: (messageGuides: MessageGuides) => void
   setOfficeHours: (officeHours: OfficeHours) => void
   setStaleFetchDays: (staleFetchDays: number) => void
+  setBackupSettings: (backupSettings: BackupSettings) => void
   // Saves the terminal command. Resolves to an error message when the backend
   // rejects it (for example an unclosed quote), or null.
   setTerminalCommand: (command: string) => Promise<string | null>
@@ -216,6 +240,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   terminalCommand: '',
   officeHours: DEFAULT_OFFICE_HOURS,
   staleFetchDays: DEFAULT_STALE_FETCH_DAYS,
+  backupSettings: DEFAULT_BACKUP_SETTINGS,
   selectedHash: null,
   selectedHashes: [],
   selectionAnchor: null,
@@ -307,6 +332,15 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     // Like the guides, the setting already applies, so a failed save only
     // loses it for the next run.
     SetStaleFetchDays(staleFetchDays).catch((error) => console.error('Saving the stale fetch days failed:', error))
+  },
+
+  setBackupSettings: (backupSettings) => {
+    set({ backupSettings })
+    // Like the guides, the settings already apply, so a failed save only
+    // loses them for the next run.
+    SetBackupSettings(backupSettings.backupBeforeApply, backupSettings.autoBackupsKept).catch((error) =>
+      console.error('Saving the backup settings failed:', error),
+    )
   },
 
   setTerminalCommand: (command) => {

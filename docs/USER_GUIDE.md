@@ -129,6 +129,8 @@ The dialog also warns you when:
 - **Other branches** point at a rewritten commit. Tick the box to move them along with the edit.
 - **Tags** point at a rewritten commit. Tags are never moved and keep pointing at the old commit.
 
+**Back up first**, at the bottom of the dialog, saves the branch, and every other branch the edit moves, as an automatic backup before applying, so you can [restore](#backups) them later even after undo is no longer possible. It starts ticked; change that in the settings.
+
 ### What a rewrite changes
 
 - The edited commit and every commit above it get new hashes, because a commit's hash covers its parent. Their content (the files) doesn't change.
@@ -186,5 +188,6 @@ Open the settings with the **⚙** button in the header or `Ctrl+,`. Changes app
 - **Theme:** System (follows your operating system's setting), Light or Dark. The **◐** button in the header switches between them too.
 - **Commit message guides:** the subject line length (default 50) draws a ruler in the message field and warns about longer subjects. The body line length (default 72) warns about longer body lines. 0 turns either one off.
 - **Office hours:** your working hours, From and to, and the working days (default Mon–Fri, 09:00–17:00). They are used by **Only office hours** when [spreading dates](#only-office-hours). The start must be before the end, on the same day, so hours that run past midnight aren't supported, and at least one day must be picked.
+- **Backups:** whether **Back up first** starts ticked when you review an edit (default on), and how many automatic backups to keep per branch (default 20). Older automatic backups beyond that number are deleted when a new one is made; backups you make with **Back up** are kept until you delete them. See [Backups](#backups).
 - **Remote:** how many days after your last fetch GitGo warns that the [pushed and unpushed split](#pushed-and-unpushed-commits) may be out of date (default 7). 0 turns the warning off; the status bar still shows when you last fetched.
 - **Terminal command:** what the **>_** button in the header runs. `{dir}` stands for the repository folder. Leave it empty to use the default: Windows Terminal (or cmd) on Windows, Terminal on macOS, and `$TERMINAL` or the first common terminal found on Linux. Running git in that terminal needs git installed; GitGo itself doesn't.

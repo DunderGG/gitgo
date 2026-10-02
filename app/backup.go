@@ -7,6 +7,7 @@ import (
 
 	gitpkg "gitgo/git"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
@@ -146,6 +147,7 @@ func (app *App) RestoreBackup(id string, expectedTips map[string]string) (Operat
 		_ = gitpkg.DeleteBackup(backupState.Repo, saved.ID)
 		return OperationResult{}, restoreErr
 	}
+	app.pruneAutoBackups(backupState.Repo, saved)
 
 	app.recordRestore(path, state.Branch, done)
 
@@ -159,6 +161,19 @@ func (app *App) RestoreBackup(id string, expectedTips map[string]string) (Operat
 		return OperationResult{Success: false, Message: restoreErr.Error()}, nil
 	}
 	return OperationResult{Success: true, Message: "backup restored; the previous state was saved as a backup"}, nil
+}
+
+// pruneAutoBackups keeps the newest automatic backups of each branch in
+// saved, as many as Settings.AutoBackupsKept, after saved was made. Failing to
+// prune only leaves extra backups behind, so errors are ignored.
+func (app *App) pruneAutoBackups(repo *gogit.Repository, saved gitpkg.Backup) {
+	app.settingsMutex.Lock()
+	keep := app.loadSettings().AutoBackupsKept
+	app.settingsMutex.Unlock()
+
+	for _, branch := range saved.Branches {
+		_, _ = gitpkg.PruneBackups(repo, branch.Name, keep)
+	}
 }
 
 // recordRestore records the branches a restore moved so Ctrl+Z can move them

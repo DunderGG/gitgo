@@ -299,8 +299,10 @@ Found in the follow-up review (2026-09-25):
     - [x] `BackupsMenu`: **Back up** saves the viewed branch at once; the clock button next to it opens `BackupsDialog`
     - [x] `BackupsDialog`: backups of the viewed branch (with **Show all branches**), each with its date, Manual / Automatic and the saved commit per branch ("same as now", "deleted"); **Restore…** reviews the `PlanRestore` result (commits removed and brought back per branch, and why a restore is refused) before restoring; **Delete** asks for confirmation
     - [x] Documented in `docs/USER_GUIDE.md` and `HelpDialog`
-  - [ ] **Back up before applying** checkbox in `ConfirmDialog` (on by default), keeping the last ~20 automatic backups per branch (the checkbox default and the number kept as settings in `SettingsDialog`)
-  - [ ] Back up every branch an edit moves, so a restore brings them all back
+  - [x] **Back up before applying** checkbox in `ConfirmDialog` (on by default), keeping the last ~20 automatic backups per branch (the checkbox default and the number kept as settings in `SettingsDialog`)
+    - [x] "Back up first" in `ConfirmDialog`'s footer, reset from the setting each time the dialog opens; `EditRequest.Backup` / `BulkEditRequest.Backup`. `runRewrite` saves the backup after the safety checks and refuses the edit if that fails; a failed edit deletes it again (`TestUpdateCommit_BacksUpFirst`, `TestUpdateCommit_WithoutBackup`)
+    - [x] `Settings.BackupBeforeApply` (default on) and `Settings.AutoBackupsKept` (1–1000, default 20) with `SetBackupSettings`, a Backups section in `SettingsDialog`; automatic backups are pruned per branch after an edit or restore (`TestSetBackupSettings_*`, `TestEditCommits_KeepsAutoBackupsKept`)
+  - [x] Back up every branch an edit moves, so a restore brings them all back (the backup holds the edited branch and `MoveBranches`)
   - [ ] Optional: export a backup to a `git bundle` file
   - [ ] **Backup names** (later): an optional name for a manual backup, such as "before date spread", shown in the list. A ref holds only a hash, so the name needs a small object stored next to the backup's refs
 - [ ] **Redo** after an undo (`Ctrl+Shift+Z` / `Ctrl+Y` and a button in the status bar), by keeping the undone tip the way `lastRewrite` keeps the pre-rewrite one

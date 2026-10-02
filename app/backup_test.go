@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	gitpkg "gitgo/git"
@@ -170,5 +171,109 @@ func TestDeleteBackup_RemovesBackup(test *testing.T) {
 	}
 	if err := app.DeleteBackup(backup.ID); !errors.Is(err, gitpkg.ErrBackupNotFound) {
 		test.Errorf("second DeleteBackup error = %v, want ErrBackupNotFound", err)
+	}
+}
+
+// TestUpdateCommit_BacksUpFirst verifies that an edit with Backup saves the
+// edited branch and the branches it moves, and that a restore of that backup
+// undoes the edit.
+func TestUpdateCommit_BacksUpFirst(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	app.settingsPath = filepath.Join(test.TempDir(), "settings.json")
+	local := runGit(test, dir, "rev-parse", "HEAD")
+	runGit(test, dir, "branch", "same-tip")
+
+	req := editRequest(local)
+	req.MoveBranches = []string{"same-tip"}
+	req.Backup = true
+	if result, err := app.UpdateCommit(req); err != nil || !result.Success {
+		test.Fatalf("UpdateCommit = %+v, %v", result, err)
+	}
+
+	backups := mustListBackups(test, app)
+	if len(backups) != 1 || backups[0].Kind != "auto" || len(backups[0].Branches) != 2 {
+		test.Fatalf("ListBackups = %+v, want one automatic backup of main and same-tip", backups)
+	}
+	for _, branch := range backups[0].Branches {
+		if branch.Hash != local {
+			test.Errorf("backup of %s = %s, want %s", branch.Name, branch.Hash, local)
+		}
+	}
+
+	plan, err := app.PlanRestore(backups[0].ID)
+	if err != nil {
+		test.Fatalf("PlanRestore: %v", err)
+	}
+	if _, err := app.RestoreBackup(backups[0].ID, currentTips(plan)); err != nil {
+		test.Fatalf("RestoreBackup: %v", err)
+	}
+	for _, branch := range []string{"main", "same-tip"} {
+		if got := runGit(test, dir, "rev-parse", branch); got != local {
+			test.Errorf("%s = %s after restore, want %s", branch, got, local)
+		}
+	}
+}
+
+// TestUpdateCommit_WithoutBackup verifies that no backup is made when the
+// checkbox is off, nor when the edit is refused.
+func TestUpdateCommit_WithoutBackup(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	local := runGit(test, dir, "rev-parse", "HEAD")
+
+	if _, err := app.UpdateCommit(editRequest(local)); err != nil {
+		test.Fatalf("UpdateCommit: %v", err)
+	}
+	if backups := mustListBackups(test, app); len(backups) != 0 {
+		test.Fatalf("ListBackups = %+v after an edit without backup, want none", backups)
+	}
+
+	req := editRequest(runGit(test, dir, "rev-parse", "HEAD"))
+	req.AuthorName = ""
+	req.Backup = true
+	if _, err := app.UpdateCommit(req); !errors.Is(err, gitpkg.ErrInvalidIdentity) {
+		test.Fatalf("UpdateCommit error = %v, want ErrInvalidIdentity", err)
+	}
+	if backups := mustListBackups(test, app); len(backups) != 0 {
+		test.Errorf("ListBackups = %+v after a refused edit, want none", backups)
+	}
+}
+
+// TestEditCommits_KeepsAutoBackupsKept verifies that automatic backups beyond
+// the setting are pruned, newest kept, and manual ones are left alone.
+func TestEditCommits_KeepsAutoBackupsKept(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	app.settingsPath = filepath.Join(test.TempDir(), "settings.json")
+	if err := app.SetBackupSettings(true, 2); err != nil {
+		test.Fatalf("SetBackupSettings: %v", err)
+	}
+	if _, err := app.CreateBackup(); err != nil {
+		test.Fatalf("CreateBackup: %v", err)
+	}
+
+	var tips []string
+	for range 3 {
+		tip := runGit(test, dir, "rev-parse", "HEAD")
+		tips = append(tips, tip)
+		req := BulkEditRequest{Hashes: []string{tip}, Minutes: 60, Backup: true}
+		if result, err := app.EditCommits(req); err != nil || !result.Success {
+			test.Fatalf("EditCommits = %+v, %v", result, err)
+		}
+	}
+
+	var auto, manual int
+	var kept []string
+	for _, backup := range mustListBackups(test, app) {
+		if backup.Kind == "manual" {
+			manual++
+			continue
+		}
+		auto++
+		kept = append(kept, backup.Branches[0].Hash)
+	}
+	if manual != 1 || auto != 2 {
+		test.Fatalf("manual = %d, auto = %d, want 1 and 2", manual, auto)
+	}
+	if kept[0] != tips[2] || kept[1] != tips[1] {
+		test.Errorf("kept automatic backups of %v, want the newest two of %v", kept, tips)
 	}
 }

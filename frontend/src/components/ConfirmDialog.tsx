@@ -15,6 +15,9 @@ interface ConfirmDialogProps {
   affectedRefs: app.AffectedRef[]
   moveBranches: boolean
   onMoveBranchesChange: (moveBranches: boolean) => void
+  // Save the branches as an automatic backup before applying.
+  backup: boolean
+  onBackupChange: (backup: boolean) => void
   onCancel: () => void
   onConfirm: () => void
 }
@@ -186,6 +189,8 @@ export default function ConfirmDialog({
   affectedRefs,
   moveBranches,
   onMoveBranchesChange,
+  backup,
+  onBackupChange,
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
@@ -247,6 +252,19 @@ export default function ConfirmDialog({
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-gray-800 px-5 py-4">
+          <label
+            className="mr-auto flex items-center gap-2 text-sm text-gray-300"
+            title="Save the branches as they are now, so you can restore them from Backups (the clock button in the header)"
+          >
+            <input
+              type="checkbox"
+              checked={backup}
+              onChange={(e) => onBackupChange(e.target.checked)}
+              disabled={isSubmitting}
+              className="accent-indigo-500 disabled:cursor-not-allowed"
+            />
+            Back up first
+          </label>
           <button
             type="button"
             onClick={onCancel}

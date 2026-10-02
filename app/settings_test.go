@@ -311,3 +311,44 @@ func TestSetStaleFetchDays_RejectsOutOfRange(test *testing.T) {
 		test.Fatalf("out-of-range StaleFetchDays = %d, want 7", got)
 	}
 }
+
+func TestSetBackupSettings_SavedForNextRun(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	settings := app.GetSettings()
+	if !settings.BackupBeforeApply || settings.AutoBackupsKept != 20 {
+		test.Fatalf("defaults = %v, %d, want true, 20", settings.BackupBeforeApply, settings.AutoBackupsKept)
+	}
+	if err := app.SetBackupSettings(false, 5); err != nil {
+		test.Fatalf("SetBackupSettings: %v", err)
+	}
+
+	nextRun := &App{settingsPath: path}
+	settings = nextRun.GetSettings()
+	if settings.BackupBeforeApply || settings.AutoBackupsKept != 5 {
+		test.Fatalf("saved = %v, %d, want false, 5", settings.BackupBeforeApply, settings.AutoBackupsKept)
+	}
+}
+
+func TestSetBackupSettings_RejectsOutOfRange(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	for _, count := range []int{0, -1, 1001} {
+		if err := app.SetBackupSettings(true, count); err == nil {
+			test.Fatalf("SetBackupSettings(%d) accepted an out-of-range value", count)
+		}
+	}
+
+	// A file from before backups existed gets the defaults, and an
+	// out-of-range count, edited by hand, falls back to the default.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		test.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"autoBackupsKept": 0}`), 0o644); err != nil {
+		test.Fatal(err)
+	}
+	settings := app.GetSettings()
+	if !settings.BackupBeforeApply || settings.AutoBackupsKept != 20 {
+		test.Fatalf("settings = %v, %d, want true, 20", settings.BackupBeforeApply, settings.AutoBackupsKept)
+	}
+}

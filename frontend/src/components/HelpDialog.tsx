@@ -249,6 +249,11 @@ export default function HelpDialog() {
               automatic backup, and <Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd> undoes it.
             </p>
             <p>
+              <Ui>Back up first</Ui> in the review dialog does the same automatically before every edit, for the branch
+              and every branch the edit moves. GitGo keeps the last 20 automatic backups per branch; both can be
+              changed in the settings.
+            </p>
+            <p>
               A restore is refused when it would remove commits that have been pushed, or, on the checked-out branch,
               commits that changed files since the backup, since those changes would be left behind as uncommitted
               changes.

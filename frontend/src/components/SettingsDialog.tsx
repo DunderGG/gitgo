@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { DEFAULT_STALE_FETCH_DAYS, MAX_STALE_FETCH_DAYS } from '../lastFetch'
 import { DEFAULT_MESSAGE_GUIDES, MAX_GUIDE_COLUMN, type MessageGuides } from '../messageGuides'
 import { DEFAULT_OFFICE_HOURS, formatOfficeHours, officeHoursError, WEEKDAYS, type OfficeHours } from '../officeHours'
-import { useRepoStore } from '../store/repoStore'
+import { DEFAULT_BACKUP_SETTINGS, MAX_AUTO_BACKUPS_KEPT, useRepoStore } from '../store/repoStore'
 import { themePreferences, type ThemePreference } from '../theme'
 
 const themeLabels: Record<ThemePreference, string> = { system: 'System', light: 'Light', dark: 'Dark' }
@@ -18,25 +18,27 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 // The number typed in a NumberField, or null when it is not a whole number
 // from 0 to max.
-function parseWholeNumber(text: string, max: number): number | null {
+function parseWholeNumber(text: string, max: number, min = 0): number | null {
   if (!/^\d+$/.test(text.trim())) {
     return null
   }
   const value = Number(text)
-  return value <= max ? value : null
+  return value >= min && value <= max ? value : null
 }
 
 interface NumberFieldProps {
   id: string
   label: string
   description: string
+  // The smallest value allowed; 0 when left out.
+  min?: number
   max: number
   text: string
   onChange: (text: string) => void
 }
 
-function NumberField({ id, label, description, max, text, onChange }: NumberFieldProps) {
-  const isValid = parseWholeNumber(text, max) !== null
+function NumberField({ id, label, description, min = 0, max, text, onChange }: NumberFieldProps) {
+  const isValid = parseWholeNumber(text, max, min) !== null
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
@@ -46,7 +48,7 @@ function NumberField({ id, label, description, max, text, onChange }: NumberFiel
         <input
           id={id}
           type="number"
-          min={0}
+          min={min}
           max={max}
           value={text}
           onChange={(event) => onChange(event.target.value)}
@@ -56,7 +58,7 @@ function NumberField({ id, label, description, max, text, onChange }: NumberFiel
       </div>
       <p className="mt-1 text-xs text-gray-500">{description}</p>
       {!isValid && (
-        <p className="mt-1 text-xs text-red-300">Enter a whole number from 0 to {max}.</p>
+        <p className="mt-1 text-xs text-red-300">Enter a whole number from {min} to {max}.</p>
       )}
     </div>
   )
@@ -238,6 +240,52 @@ function StaleFetchField() {
   )
 }
 
+// Whether "Back up first" starts ticked in the confirm dialog, and how many
+// automatic backups to keep per branch. Like the guide fields, a valid count
+// is saved at once.
+function BackupFields() {
+  const backupSettings = useRepoStore((s) => s.backupSettings)
+  const setBackupSettings = useRepoStore((s) => s.setBackupSettings)
+  const [text, setText] = useState(String(backupSettings.autoBackupsKept))
+
+  function changeKept(value: string) {
+    setText(value)
+    const count = parseWholeNumber(value, MAX_AUTO_BACKUPS_KEPT, 1)
+    if (count !== null && count !== backupSettings.autoBackupsKept) {
+      setBackupSettings({ ...backupSettings, autoBackupsKept: count })
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <label className="flex items-start gap-2 text-sm text-gray-200">
+        <input
+          type="checkbox"
+          checked={backupSettings.backupBeforeApply}
+          onChange={(event) => setBackupSettings({ ...backupSettings, backupBeforeApply: event.target.checked })}
+          className="mt-1 accent-indigo-500"
+        />
+        <span>
+          Back up before applying
+          <span className="mt-1 block text-xs text-gray-500">
+            Whether “Back up first” starts ticked when you review an edit. The backup saves every branch the edit
+            moves, so a restore brings them all back.
+          </span>
+        </span>
+      </label>
+      <NumberField
+        id="settings-backups-kept"
+        label="Automatic backups kept per branch"
+        description={`When GitGo makes an automatic backup, older ones of the same branch beyond this number are deleted. Backups you make with Back up are kept until you delete them. Default ${DEFAULT_BACKUP_SETTINGS.autoBackupsKept}.`}
+        min={1}
+        max={MAX_AUTO_BACKUPS_KEPT}
+        text={text}
+        onChange={changeKept}
+      />
+    </div>
+  )
+}
+
 // The dialog's content, mounted only while it is open so the guide fields
 // start from the saved values each time.
 function SettingsContent({ onClose }: { onClose: () => void }) {
@@ -388,6 +436,10 @@ function SettingsContent({ onClose }: { onClose: () => void }) {
 
           <Section title="Office hours">
             <OfficeHoursField />
+          </Section>
+
+          <Section title="Backups">
+            <BackupFields />
           </Section>
 
           <Section title="Remote">
