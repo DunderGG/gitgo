@@ -96,7 +96,7 @@ Turns raw backend error text into friendly messages (friendlyError). setError in
 
 ### src/theme.ts
 
-Applies the colour theme: sets data-theme="light" or "dark" on the page (which switches the CSS variables from tailwind.config.ts), and updates the window background and, on Windows, the title bar. With the 'system' theme it follows the operating system, also when that changes while GitGo is open.
+Applies the colour theme: sets data-theme="light" or "dark" on the page (which switches the CSS variables from tailwind.config.ts), and updates the window background and, on Windows, the window border. With the 'system' theme it follows the operating system, also when that changes while GitGo is open.
 
 ### src/components/ErrorBoundary.tsx
 
@@ -104,7 +104,15 @@ Catches errors thrown while rendering and shows a "Something went wrong" screen 
 
 ### src/index.css
 
-Global stylesheet. Imports Tailwind's layers and gives the page the theme's background colour.
+Global stylesheet. Imports Tailwind's layers and gives the page the theme's background colour. Also marks the header as the window's drag area (the .titlebar rules): on Windows the window is frameless, and Wails moves it when a mousedown lands where --wails-draggable is drag. Its buttons and menus opt out; give an element the titlebar-drag class to let it move the window.
+
+### src/titlebar.ts
+
+useFramelessWindow tells App whether it draws its own title bar (Windows only), and toggleMaximiseOnDoubleClick maximises or restores the window on a double-click on the header's empty parts.
+
+### src/components/WindowControls.tsx
+
+The minimise, maximise/restore and close buttons at the right end of the header on Windows. The maximise icon follows the window, so it is also right after a double-click, Win+Up or snapping. Close calls Quit, which still saves the window size (OnBeforeClose).
 
 ### src/App.tsx
 

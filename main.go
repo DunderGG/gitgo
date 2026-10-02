@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"runtime"
 
 	"gitgo/app"
 
@@ -50,8 +51,9 @@ func main() {
 	if !app.PrefersDark(theme) {
 		background = &options.RGBA{R: 249, G: 250, B: 251, A: 1}
 	}
-	// The title bar follows the theme too. The frontend updates it on Windows
-	// when the theme changes; macOS picks it up at the next start.
+	// The window frame follows the theme too (on Windows only its border is
+	// left). The frontend updates it on Windows when the theme changes; macOS
+	// picks it up at the next start.
 	windowsTheme, macAppearance := windows.SystemDefault, mac.DefaultAppearance
 	switch theme {
 	case app.ThemeLight:
@@ -67,6 +69,10 @@ func main() {
 		WindowStartState: startState,
 		MinWidth:         minimumWindowSize.Width,
 		MinHeight:        minimumWindowSize.Height,
+		// On Windows the frontend draws the title bar (its header, with its own
+		// window buttons) like GitHub Desktop does. Wails keeps the system
+		// border, shadow and rounded corners of a frameless window there.
+		Frameless: runtime.GOOS == "windows",
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

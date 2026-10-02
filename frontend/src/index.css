@@ -8,3 +8,17 @@
     @apply bg-gray-900;
   }
 }
+
+/* The header doubles as the title bar of the frameless window on Windows.
+   Wails starts a window drag on mousedown where --wails-draggable is drag.
+   The property inherits, so the buttons and menus inside opt out and only the
+   bar's empty parts and the app name move the window. */
+.titlebar {
+  --wails-draggable: drag;
+}
+.titlebar * {
+  --wails-draggable: no-drag;
+}
+.titlebar .titlebar-drag {
+  --wails-draggable: drag;
+}

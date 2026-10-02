@@ -129,6 +129,7 @@
 - [x] Application icon and Wails window configuration (title, min size)
   - [x] Square `appicon.png`; icon embedded for Linux and the macOS About panel
   - [x] Native title bar matching the theme on Windows and macOS
+  - [x] Windows: frameless window; the header is the title bar, with its own minimise / maximise / close buttons (like GitHub Desktop)
   - [x] Window title shows the open repository and branch
 - [x] `CommitList` row selection state (highlight selected commit, drive `EditPanel`)
 - [x] Reload / refresh button in header to re-read the repo from disk

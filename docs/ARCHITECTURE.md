@@ -571,7 +571,7 @@ Configures Vite to use the React plugin. In `wails dev` mode Wails injects a pro
 
 #### `frontend/tailwind.config.ts`
 
-Configures Tailwind to scan `src/**/*.{ts,tsx}` for class names, and makes the themes. The gray, indigo, yellow, red and sky palettes are CSS variables (`--color-gray-900`, …): `:root` holds Tailwind's own colours for the dark theme, and `:root[data-theme="light"]` maps each shade to the one that plays the same part on a light background (grays and tints swap ends of the scale; the 500–700 accent shades stay). The mapping lives in `lightShades`; `src/theme.ts` sets `data-theme` on `<html>`, following `prefers-color-scheme` for the system theme, and updates the Wails window background and Windows title bar.
+Configures Tailwind to scan `src/**/*.{ts,tsx}` for class names, and makes the themes. The gray, indigo, yellow, red and sky palettes are CSS variables (`--color-gray-900`, …): `:root` holds Tailwind's own colours for the dark theme, and `:root[data-theme="light"]` maps each shade to the one that plays the same part on a light background (grays and tints swap ends of the scale; the 500–700 accent shades stay). The mapping lives in `lightShades`; `src/theme.ts` sets `data-theme` on `<html>`, following `prefers-color-scheme` for the system theme, and updates the Wails window background and the Windows window border.
 
 #### `build/appicon.png` and `build/windows/icon.ico`
 
@@ -601,6 +601,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `ConfirmDialog` | *(Phase 2)* Side-by-side old/new diff before confirming a rewrite |
 | `repoStore.ts` | Zustand store; single source of truth for `repoInfo`, `commits`, `recentRepos`, `selectedHash`, `canUndo`, `activity`, `pendingEditFocus`, `status`, `error`; also owns the shared `runGitOperation` and `undoLastOperation` actions |
 | `Spinner` | *(Phase 3)* Inline loading indicator used wherever a git operation is in progress |
+| `WindowControls` | Minimise, maximise/restore and close buttons at the right of the header, shown on Windows where the window is frameless and the header is the title bar (`titlebar.ts`) |
 | `ErrorBoundary` | *(Phase 3)* Catches render errors and shows a recovery screen (try again / close repository / reload) |
 | `errors.ts` | *(Phase 3)* Maps raw backend error text to user-friendly messages |
 
@@ -683,6 +684,7 @@ GitGo/
 │       │   ├── HelpDialog.tsx      # In-app help (? button / F1)
 │       │   ├── Kbd.tsx             # Keyboard key label
 │       │   ├── SettingsDialog.tsx  # Theme, message guides, office hours, terminal (⚙ button / Ctrl+,)
+│       │   ├── WindowControls.tsx  # Windows title bar buttons (frameless window)
 │       │   └── StatusBar.tsx
 │       ├── hooks/
 │       │   └── useKeyboardShortcuts.ts  # (Phase 3)

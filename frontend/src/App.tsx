@@ -13,8 +13,10 @@ import BulkEditPanel from './components/BulkEditPanel'
 import HelpDialog from './components/HelpDialog'
 import SettingsDialog from './components/SettingsDialog'
 import Spinner from './components/Spinner'
+import WindowControls from './components/WindowControls'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { reloadActivityLabel, useRepoStore } from './store/repoStore'
+import { toggleMaximiseOnDoubleClick, useFramelessWindow } from './titlebar'
 import type { ThemePreference } from './theme'
 
 // windowTitle names the open repository and branch, e.g. "GitGo — myrepo (main)",
@@ -45,6 +47,7 @@ function App() {
   const setTheme = useRepoStore((s) => s.setTheme)
   const setStatus = useRepoStore((s) => s.setStatus)
   const setError = useRepoStore((s) => s.setError)
+  const frameless = useFramelessWindow()
   useKeyboardShortcuts()
 
   async function openTerminal() {
@@ -80,90 +83,96 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
-      <header className="flex items-center px-4 py-3 bg-gray-800 border-b border-gray-700 shrink-0">
-        <h1 className="text-lg font-semibold text-gray-50 tracking-tight">GitGo</h1>
-        {repoInfo && (
-          <>
-            <RepoSwitcher />
-            <button
-              type="button"
-              onClick={closeRepository}
-              disabled={activity !== null}
-              title="Close the repository and go back to the start screen"
-              aria-label="Close repository"
-              className="ml-2 shrink-0 rounded-md px-1.5 text-sm text-gray-300 transition hover:bg-gray-700 hover:text-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              ×
-            </button>
-          </>
-        )}
-        <div className="ml-auto flex items-center gap-3 pl-4">
+      <header
+        className="titlebar flex items-stretch bg-gray-800 border-b border-gray-700 shrink-0"
+        onDoubleClick={frameless ? toggleMaximiseOnDoubleClick : undefined}
+      >
+        <div className="titlebar-drag flex min-w-0 flex-1 items-center px-4 py-3">
+          <h1 className="titlebar-drag select-none text-lg font-semibold text-gray-50 tracking-tight">GitGo</h1>
           {repoInfo && (
             <>
-              <BranchSelector />
+              <RepoSwitcher />
               <button
                 type="button"
-                onClick={reloadRepository}
+                onClick={closeRepository}
                 disabled={activity !== null}
-                title="Reload the repository from disk (F5)"
-                aria-label="Reload repository"
-                className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Close the repository and go back to the start screen"
+                aria-label="Close repository"
+                className="ml-2 shrink-0 rounded-md px-1.5 text-sm text-gray-300 transition hover:bg-gray-700 hover:text-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {activity === reloadActivityLabel ? <Spinner className="h-4 w-4" /> : '↻'}
+                ×
               </button>
-              <button
-                type="button"
-                onClick={openTerminal}
-                title="Open a terminal in the repository folder"
-                aria-label="Open terminal"
-                className="rounded-md border border-gray-700 px-2 py-1 font-mono text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
-              >
-                &gt;_
-              </button>
-              <button
-                type="button"
-                onClick={openFolder}
-                title="Show the repository folder in the file manager"
-                aria-label="Open folder"
-                className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
-              >
-                {/* An outline folder; the folder emoji would be in colour. */}
-                <svg viewBox="0 0 16 16" className="h-5 w-4" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
-                  <path d="M1.5 3.5h4.5l1.5 1.5h7v7.5h-13z" strokeLinejoin="round" />
-                </svg>
-              </button>
-              <BackupsMenu />
-              <RunMenu />
             </>
           )}
-          <button
-            type="button"
-            onClick={() => setTheme(nextTheme[theme])}
-            title={`Theme: ${themeLabels[theme]}. Click for ${themeLabels[nextTheme[theme]]}`}
-            aria-label={`Theme: ${themeLabels[theme]}`}
-            className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
-          >
-            {themeIcons[theme]}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            title="Settings (Ctrl+,)"
-            aria-label="Settings"
-            className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
-          >
-            ⚙︎
-          </button>
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            title="How to use GitGo (F1)"
-            aria-label="Help"
-            className="rounded-md border border-gray-700 px-2.5 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
-          >
-            ?
-          </button>
+          <div className="ml-auto flex items-center gap-3 pl-4">
+            {repoInfo && (
+              <>
+                <BranchSelector />
+                <button
+                  type="button"
+                  onClick={reloadRepository}
+                  disabled={activity !== null}
+                  title="Reload the repository from disk (F5)"
+                  aria-label="Reload repository"
+                  className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {activity === reloadActivityLabel ? <Spinner className="h-4 w-4" /> : '↻'}
+                </button>
+                <button
+                  type="button"
+                  onClick={openTerminal}
+                  title="Open a terminal in the repository folder"
+                  aria-label="Open terminal"
+                  className="rounded-md border border-gray-700 px-2 py-1 font-mono text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+                >
+                  &gt;_
+                </button>
+                <button
+                  type="button"
+                  onClick={openFolder}
+                  title="Show the repository folder in the file manager"
+                  aria-label="Open folder"
+                  className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+                >
+                  {/* An outline folder; the folder emoji would be in colour. */}
+                  <svg viewBox="0 0 16 16" className="h-5 w-4" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+                    <path d="M1.5 3.5h4.5l1.5 1.5h7v7.5h-13z" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <BackupsMenu />
+                <RunMenu />
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setTheme(nextTheme[theme])}
+              title={`Theme: ${themeLabels[theme]}. Click for ${themeLabels[nextTheme[theme]]}`}
+              aria-label={`Theme: ${themeLabels[theme]}`}
+              className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+            >
+              {themeIcons[theme]}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              title="Settings (Ctrl+,)"
+              aria-label="Settings"
+              className="rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+            >
+              ⚙︎
+            </button>
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              title="How to use GitGo (F1)"
+              aria-label="Help"
+              className="rounded-md border border-gray-700 px-2.5 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-700"
+            >
+              ?
+            </button>
+          </div>
         </div>
+        {frameless && <WindowControls />}
       </header>
 
       <main className="flex-1 overflow-hidden">
