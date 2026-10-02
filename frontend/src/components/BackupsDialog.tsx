@@ -124,6 +124,10 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
   // The restore being reviewed; the dialog shows it instead of the list.
   const [plan, setPlan] = useState<app.RestorePlanInfo | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
+  // The backup whose export options are shown, and whether the bundle leaves
+  // out the commits already on a remote.
+  const [choosingExport, setChoosingExport] = useState<string | null>(null)
+  const [partialExport, setPartialExport] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -232,14 +236,26 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
     }
   }
 
-  async function exportBackup(id: string) {
+  function chooseExport(id: string) {
     setProblem(null)
     setConfirmingDelete(null)
+    setChoosingExport(id)
+  }
+
+  function chooseDelete(id: string) {
+    setChoosingExport(null)
+    setConfirmingDelete(id)
+  }
+
+  async function exportBackup(id: string, partial: boolean) {
+    setProblem(null)
     try {
-      const path = await runGitOperation('Exporting backup…', () => ExportBackup(id))
-      // An empty path means the save dialog was cancelled.
+      const path = await runGitOperation('Exporting backup…', () => ExportBackup(id, partial))
+      // An empty path means the save dialog was cancelled; the options stay
+      // open to try again.
       if (path) {
-        setStatus(`Exported the backup to ${path}`)
+        setChoosingExport(null)
+        setStatus(`Exported the backup${partial ? ' (only commits not on a remote)' : ''} to ${path}`)
       }
     } catch (error) {
       setProblem(friendlyError(errorText(error)))
@@ -264,6 +280,8 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
   )
   const hiddenCount = (backups?.length ?? 0) - shown.length
   const isBusy = activity !== null
+  // Without a remote, a partial bundle would be the same as a full one.
+  const canExportPartial = repoInfo?.hasRemote === true
   const canRestore = plan !== null && !plan.problem && plan.branches.some((entry) => !entry.missing && !entry.unchanged)
 
   return (
@@ -363,7 +381,43 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
                         <span className="text-sm text-gray-200">{formatCreated(backup.created)}</span>
                         <KindBadge kind={backup.kind} />
                         <div className="ml-auto flex items-center gap-2">
-                          {confirmingDelete === backup.id ? (
+                          {choosingExport === backup.id ? (
+                            <>
+                              <label
+                                className="flex items-center gap-1.5 text-xs text-gray-300"
+                                title={
+                                  canExportPartial
+                                    ? 'A much smaller file, but it can only be fetched into a clone that already has the pushed history, so it does not protect against losing the repository'
+                                    : 'This repository has no remote, so the bundle always holds the whole history'
+                                }
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={partialExport && canExportPartial}
+                                  onChange={(event) => setPartialExport(event.target.checked)}
+                                  disabled={isBusy || !canExportPartial}
+                                  className="accent-indigo-500 disabled:cursor-not-allowed"
+                                />
+                                Only commits not on a remote
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => exportBackup(backup.id, partialExport && canExportPartial)}
+                                disabled={isBusy}
+                                className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Save…
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setChoosingExport(null)}
+                                disabled={isBusy}
+                                className="rounded-md border border-gray-700 px-2.5 py-1 text-xs text-gray-300 transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : confirmingDelete === backup.id ? (
                             <>
                               <span className="text-xs text-gray-400">Delete this backup?</span>
                               <button
@@ -400,7 +454,7 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
                               <span title={exportTitle} className="flex">
                                 <button
                                   type="button"
-                                  onClick={() => exportBackup(backup.id)}
+                                  onClick={() => chooseExport(backup.id)}
                                   disabled={isBusy || !gitStatus?.available}
                                   className="rounded-md border border-gray-700 px-2.5 py-1 text-xs text-gray-200 transition hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
@@ -409,7 +463,7 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setConfirmingDelete(backup.id)}
+                                onClick={() => chooseDelete(backup.id)}
                                 disabled={isBusy}
                                 className="rounded-md px-2.5 py-1 text-xs text-gray-400 transition hover:bg-gray-800 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-60"
                               >

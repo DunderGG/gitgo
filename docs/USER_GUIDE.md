@@ -155,7 +155,11 @@ The clock button next to **Back up** opens the list of backups of the branch you
 
 - **Restore…** shows, per branch, the commits that would be removed from it and the ones that would come back. Click **Restore** to move the branches back. The current state is saved as an automatic backup first, and `Ctrl+Z` undoes the restore.
 - **Delete** removes the backup after you confirm.
-- **Export…** saves the backup to a git bundle file outside the repository, with each branch's whole history, so it survives the repository being deleted or cloned again. It needs git installed, like the [Run menu](#run-menu). To get the backup back, in the original repository or a fresh clone, run the command below; it then appears in the Backups list again:
+- **Export…** saves the backup to a git bundle file outside the repository, with each branch's whole history, so it survives the repository being deleted or cloned again. Click **Save…** to pick the file. It needs git installed, like the [Run menu](#run-menu).
+
+  Tick **Only commits not on a remote** for a much smaller file that leaves out everything already pushed. Such a file can only be fetched into a clone that already has the pushed history, so it does not protect you if the repository is lost; and when every commit in the backup is on a remote, there is nothing to export. The checkbox is disabled in a repository without a remote.
+
+  To get the backup back, in the original repository or a fresh clone, run the command below; it then appears in the Backups list again:
 
   ```bash
   git fetch <file>.bundle 'refs/gitgo/backups/*:refs/gitgo/backups/*'

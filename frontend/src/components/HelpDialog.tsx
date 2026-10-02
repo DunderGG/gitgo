@@ -246,7 +246,8 @@ export default function HelpDialog() {
               the repository until you delete them, also after GitGo is closed, and are never pushed. The clock button
               next to it lists them: <Ui>Restore…</Ui> shows which commits would be removed and which come back before
               anything changes, <Ui>Export…</Ui> saves it to a git bundle file outside the repository (needs git
-              installed), and <Ui>Delete</Ui> removes it. A restore first saves the current state as an automatic
+              installed; tick <Ui>Only commits not on a remote</Ui> for a smaller file that only works in a clone of
+              the same remote), and <Ui>Delete</Ui> removes it. A restore first saves the current state as an automatic
               backup, and <Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd> undoes it.
             </p>
             <p>

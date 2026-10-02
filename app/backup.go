@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -166,14 +167,17 @@ func (app *App) RestoreBackup(id string, expectedTips map[string]string) (Operat
 }
 
 // ExportBackup writes the backup with the given ID to a git bundle file picked
-// in a native save dialog, so it survives the repository being deleted or
-// re-cloned. It returns the path written, or an empty string when the dialog
-// is cancelled. go-git cannot write bundles, so this needs the native git
-// program, like the Run menu.
+// in a native save dialog, so it can be kept outside the repository. It
+// returns the path written, or an empty string when the dialog is cancelled.
+// go-git cannot write bundles, so this needs the native git program, like the
+// Run menu.
 //
-// The bundle holds each branch's whole history, so it can restore them in any
-// repository: `git fetch <file> 'refs/gitgo/backups/*:refs/gitgo/backups/*'`.
-func (app *App) ExportBackup(id string) (string, error) {
+// A full bundle holds each branch's whole history, so it can restore them in
+// any repository: `git fetch <file> 'refs/gitgo/backups/*:refs/gitgo/backups/*'`.
+// With partial, it leaves out the commits on any remote-tracking branch: a
+// much smaller file, which can only be fetched into a clone that already has
+// those commits.
+func (app *App) ExportBackup(id string, partial bool) (string, error) {
 	state, err := app.openState()
 	if err != nil {
 		return "", err
@@ -182,30 +186,71 @@ func (app *App) ExportBackup(id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Check before asking for a file, so an empty partial bundle is refused
+	// without a pointless dialog.
+	if partial {
+		if err := checkPartialBundle(state.Path, backup); err != nil {
+			return "", err
+		}
+	}
 	path, err := runtime.SaveFileDialog(app.ctx, runtime.SaveDialogOptions{
 		Title:           "Export backup",
-		DefaultFilename: bundleFileName(state.Path, backup),
+		DefaultFilename: bundleFileName(state.Path, backup, partial),
 		Filters:         []runtime.FileFilter{{DisplayName: "Git bundle (*.bundle)", Pattern: "*.bundle"}},
 	})
 	if err != nil || path == "" {
 		return "", err
 	}
-	if err := exportBackup(state.Path, backup, path); err != nil {
+	if err := exportBackup(state.Path, backup, path, partial); err != nil {
 		return "", err
 	}
 	return path, nil
 }
 
+// errEmptyPartialBundle is returned for a partial export when every commit of
+// the backup is already on a remote; git refuses to write an empty bundle.
+var errEmptyPartialBundle = errors.New("every commit in this backup is already on a remote, so a bundle of only the other commits would be empty; export the whole history instead")
+
+// backupRefs returns the full ref names of backup, one per branch.
+func backupRefs(backup gitpkg.Backup) []string {
+	refs := make([]string, len(backup.Branches))
+	for i, branch := range backup.Branches {
+		refs[i] = gitpkg.BackupRefPrefix + backup.ID + "/" + branch.Name
+	}
+	return refs
+}
+
+// checkPartialBundle returns errEmptyPartialBundle when a partial bundle of
+// backup would hold no commits.
+func checkPartialBundle(repoPath string, backup gitpkg.Backup) error {
+	args := append([]string{"rev-list", "--count"}, backupRefs(backup)...)
+	args = append(args, "--not", "--remotes")
+	output, err := gitCommand(repoPath, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git rev-list failed: %v: %s", err, strings.TrimSpace(string(output)))
+	}
+	if strings.TrimSpace(string(output)) == "0" {
+		return errEmptyPartialBundle
+	}
+	return nil
+}
+
 // exportBackup runs `git bundle create` for every ref of backup in the
-// repository at repoPath, writing the bundle to file.
-func exportBackup(repoPath string, backup gitpkg.Backup, file string) error {
+// repository at repoPath, writing the bundle to file. With partial, commits
+// on remote-tracking branches are left out.
+func exportBackup(repoPath string, backup gitpkg.Backup, file string, partial bool) error {
 	if !filepath.IsAbs(file) {
 		// Never let a file name be read as an option.
 		return fmt.Errorf("the bundle path must be absolute: %s", file)
 	}
-	args := []string{"bundle", "create", "--quiet", file}
-	for _, branch := range backup.Branches {
-		args = append(args, gitpkg.BackupRefPrefix+backup.ID+"/"+branch.Name)
+	if partial {
+		if err := checkPartialBundle(repoPath, backup); err != nil {
+			return err
+		}
+	}
+	args := append([]string{"bundle", "create", "--quiet", file}, backupRefs(backup)...)
+	if partial {
+		args = append(args, "--not", "--remotes")
 	}
 	output, err := gitCommand(repoPath, args...).CombinedOutput()
 	if err != nil {
@@ -215,14 +260,19 @@ func exportBackup(repoPath string, backup gitpkg.Backup, file string) error {
 }
 
 // bundleFileName suggests a file name such as
-// "myrepo-main-2026-09-25-1403.bundle", using the backup's local time.
-func bundleFileName(repoPath string, backup gitpkg.Backup) string {
+// "myrepo-main-2026-09-25-1403.bundle", using the backup's local time, with
+// "-partial" before the extension for a partial bundle.
+func bundleFileName(repoPath string, backup gitpkg.Backup, partial bool) string {
 	branch := "branches"
 	if len(backup.Branches) == 1 {
 		branch = strings.ReplaceAll(backup.Branches[0].Name, "/", "-")
 	}
 	created := backup.Created.Local().Format("2006-01-02-1504")
-	return fmt.Sprintf("%s-%s-%s.bundle", filepath.Base(repoPath), branch, created)
+	suffix := ""
+	if partial {
+		suffix = "-partial"
+	}
+	return fmt.Sprintf("%s-%s-%s%s.bundle", filepath.Base(repoPath), branch, created, suffix)
 }
 
 // pruneAutoBackups keeps the newest automatic backups of each branch in

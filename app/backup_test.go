@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -302,7 +303,7 @@ func TestExportBackup_BundleRestoresInFreshRepository(test *testing.T) {
 		test.Fatal(err)
 	}
 
-	if err := exportBackup(dir, backup, file); err != nil {
+	if err := exportBackup(dir, backup, file, false); err != nil {
 		test.Fatalf("exportBackup: %v", err)
 	}
 
@@ -335,7 +336,7 @@ func TestExportBackup_RejectsRelativePath(test *testing.T) {
 	if err != nil {
 		test.Fatal(err)
 	}
-	if err := exportBackup(dir, found, "--output=x.bundle"); err == nil {
+	if err := exportBackup(dir, found, "--output=x.bundle", false); err == nil {
 		test.Fatal("exportBackup accepted a relative path")
 	}
 }
@@ -343,11 +344,83 @@ func TestExportBackup_RejectsRelativePath(test *testing.T) {
 func TestBundleFileName(test *testing.T) {
 	created := time.Date(2026, 9, 25, 14, 3, 0, 0, time.Local)
 	one := gitpkg.Backup{Created: created, Branches: []gitpkg.BackupBranch{{Name: "feature/x"}}}
-	if got := bundleFileName("/work/myrepo", one); got != "myrepo-feature-x-2026-09-25-1403.bundle" {
+	if got := bundleFileName("/work/myrepo", one, false); got != "myrepo-feature-x-2026-09-25-1403.bundle" {
 		test.Errorf("one branch = %q", got)
 	}
 	two := gitpkg.Backup{Created: created, Branches: []gitpkg.BackupBranch{{Name: "a"}, {Name: "main"}}}
-	if got := bundleFileName("/work/myrepo", two); got != "myrepo-branches-2026-09-25-1403.bundle" {
+	if got := bundleFileName("/work/myrepo", two, false); got != "myrepo-branches-2026-09-25-1403.bundle" {
 		test.Errorf("two branches = %q", got)
+	}
+}
+
+// TestExportBackup_PartialLeavesOutPushedCommits verifies that a partial
+// bundle holds only the unpushed commit: it cannot be fetched into an empty
+// repository, but can into a clone that has the pushed history.
+func TestExportBackup_PartialLeavesOutPushedCommits(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	local := runGit(test, dir, "rev-parse", "HEAD")
+	remote := runGit(test, dir, "remote", "get-url", "origin")
+
+	backup, err := app.CreateBackup()
+	if err != nil {
+		test.Fatalf("CreateBackup: %v", err)
+	}
+	found, err := gitpkg.FindBackup(app.repoState.Repo, backup.ID)
+	if err != nil {
+		test.Fatal(err)
+	}
+	file := filepath.Join(test.TempDir(), "partial.bundle")
+	if err := exportBackup(dir, found, file, true); err != nil {
+		test.Fatalf("exportBackup: %v", err)
+	}
+
+	empty := test.TempDir()
+	runGit(test, empty, "init", "-b", "main")
+	verify := exec.Command("git", "bundle", "verify", file)
+	verify.Dir = empty
+	if err := verify.Run(); err == nil {
+		test.Errorf("partial bundle verified in an empty repository; it should need the pushed commit")
+	}
+
+	clone := filepath.Join(test.TempDir(), "clone")
+	runGit(test, filepath.Dir(clone), "clone", "--quiet", remote, clone)
+	runGit(test, clone, "fetch", file, "refs/gitgo/backups/*:refs/gitgo/backups/*")
+	if got := runGit(test, clone, "rev-parse", "refs/gitgo/backups/"+backup.ID+"/main"); got != local {
+		test.Errorf("main in bundle = %s, want %s", got, local)
+	}
+}
+
+// TestExportBackup_PartialRefusesEmptyBundle verifies the error when every
+// commit of the backup has been pushed, and that no file is written.
+func TestExportBackup_PartialRefusesEmptyBundle(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	runGit(test, dir, "push")
+
+	backup, err := app.CreateBackup()
+	if err != nil {
+		test.Fatalf("CreateBackup: %v", err)
+	}
+	found, err := gitpkg.FindBackup(app.repoState.Repo, backup.ID)
+	if err != nil {
+		test.Fatal(err)
+	}
+	file := filepath.Join(test.TempDir(), "partial.bundle")
+	if err := exportBackup(dir, found, file, true); !errors.Is(err, errEmptyPartialBundle) {
+		test.Fatalf("exportBackup error = %v, want errEmptyPartialBundle", err)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		test.Errorf("a bundle file was written: %v", err)
+	}
+	// The full history can still be exported.
+	if err := exportBackup(dir, found, file, false); err != nil {
+		test.Errorf("full export: %v", err)
+	}
+}
+
+func TestBundleFileName_Partial(test *testing.T) {
+	created := time.Date(2026, 9, 25, 14, 3, 0, 0, time.Local)
+	backup := gitpkg.Backup{Created: created, Branches: []gitpkg.BackupBranch{{Name: "main"}}}
+	if got := bundleFileName("/work/myrepo", backup, true); got != "myrepo-main-2026-09-25-1403-partial.bundle" {
+		test.Errorf("partial = %q", got)
 	}
 }
