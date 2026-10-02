@@ -155,6 +155,11 @@ The clock button next to **Back up** opens the list of backups of the branch you
 
 - **Restore…** shows, per branch, the commits that would be removed from it and the ones that would come back. Click **Restore** to move the branches back. The current state is saved as an automatic backup first, and `Ctrl+Z` undoes the restore.
 - **Delete** removes the backup after you confirm.
+- **Export…** saves the backup to a git bundle file outside the repository, with each branch's whole history, so it survives the repository being deleted or cloned again. It needs git installed, like the [Run menu](#run-menu). To get the backup back, in the original repository or a fresh clone, run the command below; it then appears in the Backups list again:
+
+  ```bash
+  git fetch <file>.bundle 'refs/gitgo/backups/*:refs/gitgo/backups/*'
+  ```
 
 A restore changes nothing and explains why when:
 

@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CanUndo, DeleteBackup, ListBackups, PlanRestore, RefreshLog, RestoreBackup } from '../../wailsjs/go/app/App'
+import {
+  CanUndo,
+  DeleteBackup,
+  ExportBackup,
+  GetGitStatus,
+  ListBackups,
+  PlanRestore,
+  RefreshLog,
+  RestoreBackup,
+} from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
 import { errorText, friendlyError } from '../errors'
 import { formatAge } from '../lastFetch'
@@ -130,6 +139,20 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
     load()
   }, [load])
 
+  // Export runs the native git program (go-git cannot write bundles), so it
+  // is disabled with the Run menu's explanation when git is missing.
+  const [gitStatus, setGitStatus] = useState<app.GitStatus | null>(null)
+  useEffect(() => {
+    GetGitStatus()
+      .then(setGitStatus)
+      .catch((error) => setGitStatus({ available: false, version: '', problem: String(error) }))
+  }, [])
+  const exportTitle = !gitStatus
+    ? 'Looking for git…'
+    : gitStatus.available
+      ? 'Save this backup, with its whole history, to a git bundle file outside the repository'
+      : gitStatus.problem
+
   // Like the other dialogs, it owns Escape while open (going back from a
   // restore review to the list first) and blocks Ctrl+Z and Ctrl+A so the
   // app-wide shortcuts cannot act behind it.
@@ -206,6 +229,20 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
       if (!replanned) {
         await load()
       }
+    }
+  }
+
+  async function exportBackup(id: string) {
+    setProblem(null)
+    setConfirmingDelete(null)
+    try {
+      const path = await runGitOperation('Exporting backup…', () => ExportBackup(id))
+      // An empty path means the save dialog was cancelled.
+      if (path) {
+        setStatus(`Exported the backup to ${path}`)
+      }
+    } catch (error) {
+      setProblem(friendlyError(errorText(error)))
     }
   }
 
@@ -359,6 +396,17 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
                               >
                                 Restore…
                               </button>
+                              {/* The title is on a wrapper, since a disabled control may not show one. */}
+                              <span title={exportTitle} className="flex">
+                                <button
+                                  type="button"
+                                  onClick={() => exportBackup(backup.id)}
+                                  disabled={isBusy || !gitStatus?.available}
+                                  className="rounded-md border border-gray-700 px-2.5 py-1 text-xs text-gray-200 transition hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Export…
+                                </button>
+                              </span>
                               <button
                                 type="button"
                                 onClick={() => setConfirmingDelete(backup.id)}

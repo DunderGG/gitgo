@@ -2,8 +2,10 @@ package app
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	gitpkg "gitgo/git"
 )
@@ -275,5 +277,77 @@ func TestEditCommits_KeepsAutoBackupsKept(test *testing.T) {
 	}
 	if kept[0] != tips[2] || kept[1] != tips[1] {
 		test.Errorf("kept automatic backups of %v, want the newest two of %v", kept, tips)
+	}
+}
+
+// TestExportBackup_BundleRestoresInFreshRepository verifies that an exported
+// backup holds every branch with its whole history: fetching the bundle into
+// an empty repository brings back the backup refs.
+func TestExportBackup_BundleRestoresInFreshRepository(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	local := runGit(test, dir, "rev-parse", "HEAD")
+	runGit(test, dir, "branch", "feature/x", "HEAD~1")
+	base := runGit(test, dir, "rev-parse", "feature/x")
+
+	state, err := app.openState()
+	if err != nil {
+		test.Fatal(err)
+	}
+	backup, err := gitpkg.CreateBackup(state, gitpkg.BackupManual, []string{"feature/x"})
+	if err != nil {
+		test.Fatalf("CreateBackup: %v", err)
+	}
+	file := filepath.Join(test.TempDir(), "with space", "backup.bundle")
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		test.Fatal(err)
+	}
+
+	if err := exportBackup(dir, backup, file); err != nil {
+		test.Fatalf("exportBackup: %v", err)
+	}
+
+	fresh := test.TempDir()
+	runGit(test, fresh, "init", "-b", "main")
+	runGit(test, fresh, "bundle", "verify", file)
+	runGit(test, fresh, "fetch", file, "refs/gitgo/backups/*:refs/gitgo/backups/*")
+	prefix := "refs/gitgo/backups/" + backup.ID + "/"
+	if got := runGit(test, fresh, "rev-parse", prefix+"main"); got != local {
+		test.Errorf("main in bundle = %s, want %s", got, local)
+	}
+	if got := runGit(test, fresh, "rev-parse", prefix+"feature/x"); got != base {
+		test.Errorf("feature/x in bundle = %s, want %s", got, base)
+	}
+	// The whole history came along, down to the root commit.
+	if count := runGit(test, fresh, "rev-list", "--count", prefix+"main"); count != "2" {
+		test.Errorf("commits in bundle = %s, want 2", count)
+	}
+}
+
+// TestExportBackup_RejectsRelativePath verifies that a path that could be
+// read as an option is refused.
+func TestExportBackup_RejectsRelativePath(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	backup, err := app.CreateBackup()
+	if err != nil {
+		test.Fatalf("CreateBackup: %v", err)
+	}
+	found, err := gitpkg.FindBackup(app.repoState.Repo, backup.ID)
+	if err != nil {
+		test.Fatal(err)
+	}
+	if err := exportBackup(dir, found, "--output=x.bundle"); err == nil {
+		test.Fatal("exportBackup accepted a relative path")
+	}
+}
+
+func TestBundleFileName(test *testing.T) {
+	created := time.Date(2026, 9, 25, 14, 3, 0, 0, time.Local)
+	one := gitpkg.Backup{Created: created, Branches: []gitpkg.BackupBranch{{Name: "feature/x"}}}
+	if got := bundleFileName("/work/myrepo", one); got != "myrepo-feature-x-2026-09-25-1403.bundle" {
+		test.Errorf("one branch = %q", got)
+	}
+	two := gitpkg.Backup{Created: created, Branches: []gitpkg.BackupBranch{{Name: "a"}, {Name: "main"}}}
+	if got := bundleFileName("/work/myrepo", two); got != "myrepo-branches-2026-09-25-1403.bundle" {
+		test.Errorf("two branches = %q", got)
 	}
 }

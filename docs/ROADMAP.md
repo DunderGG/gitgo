@@ -303,7 +303,9 @@ Found in the follow-up review (2026-09-25):
     - [x] "Back up first" in `ConfirmDialog`'s footer, reset from the setting each time the dialog opens; `EditRequest.Backup` / `BulkEditRequest.Backup`. `runRewrite` saves the backup after the safety checks and refuses the edit if that fails; a failed edit deletes it again (`TestUpdateCommit_BacksUpFirst`, `TestUpdateCommit_WithoutBackup`)
     - [x] `Settings.BackupBeforeApply` (default on) and `Settings.AutoBackupsKept` (1–1000, default 20) with `SetBackupSettings`, a Backups section in `SettingsDialog`; automatic backups are pruned per branch after an edit or restore (`TestSetBackupSettings_*`, `TestEditCommits_KeepsAutoBackupsKept`)
   - [x] Back up every branch an edit moves, so a restore brings them all back (the backup holds the edited branch and `MoveBranches`)
-  - [ ] Optional: export a backup to a `git bundle` file
+  - [x] Optional: export a backup to a `git bundle` file
+    - [x] **Export…** on each backup in `BackupsDialog` (`ExportBackup`): a native save dialog, then `git bundle create` with every ref of the backup, so the file holds each branch's whole history and restores in any repository with `git fetch <file> 'refs/gitgo/backups/*:refs/gitgo/backups/*'`. go-git cannot write bundles, so it needs the native git program and is disabled with the Run menu's explanation without it (`TestExportBackup_*`, `TestBundleFileName`)
+    - [ ] **Only commits not on a remote** checkbox for a partial bundle (`--not --remotes`): a much smaller file, but it can only be restored in a clone that already has the rest of the history, so it does not protect against losing the repository
   - [ ] **Backup names** (later): an optional name for a manual backup, such as "before date spread", shown in the list. A ref holds only a hash, so the name needs a small object stored next to the backup's refs
 - [ ] **Redo** after an undo (`Ctrl+Shift+Z` / `Ctrl+Y` and a button in the status bar), by keeping the undone tip the way `lastRewrite` keeps the pre-rewrite one
 - [ ] Handle signed commits: an edit silently drops the GPG/SSH signature of the edited commit and of every commit rebuilt above it (a copied signature would no longer verify)
@@ -353,6 +355,7 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens (level remembered in `settings.json`, shown with a Reset button in `SettingsDialog`)
 - [ ] **Update check** against GitHub Releases, once Phase 6 publishes binaries (with an off switch in `SettingsDialog`, since it contacts GitHub)
 - [x] In-app help (`HelpDialog`, `?` button in the header or `F1`): walkthrough of single and bulk edits, review and undo, keyboard shortcuts and safety notes
+- [ ] The "Run" commands need to be explained in the in-app help (`HelpDialog`)
 
 ---
 

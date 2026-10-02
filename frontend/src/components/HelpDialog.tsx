@@ -245,8 +245,9 @@ export default function HelpDialog() {
               Click <Ui>Back up</Ui> in the header before a risky edit to save the branch as it is now. Backups stay in
               the repository until you delete them, also after GitGo is closed, and are never pushed. The clock button
               next to it lists them: <Ui>Restore…</Ui> shows which commits would be removed and which come back before
-              anything changes, and <Ui>Delete</Ui> removes a backup. A restore first saves the current state as an
-              automatic backup, and <Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd> undoes it.
+              anything changes, <Ui>Export…</Ui> saves it to a git bundle file outside the repository (needs git
+              installed), and <Ui>Delete</Ui> removes it. A restore first saves the current state as an automatic
+              backup, and <Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd> undoes it.
             </p>
             <p>
               <Ui>Back up first</Ui> in the review dialog does the same automatically before every edit, for the branch

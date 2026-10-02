@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Backups save branch tips as refs under refs/gitgo/backups/ (see
@@ -161,6 +163,66 @@ func (app *App) RestoreBackup(id string, expectedTips map[string]string) (Operat
 		return OperationResult{Success: false, Message: restoreErr.Error()}, nil
 	}
 	return OperationResult{Success: true, Message: "backup restored; the previous state was saved as a backup"}, nil
+}
+
+// ExportBackup writes the backup with the given ID to a git bundle file picked
+// in a native save dialog, so it survives the repository being deleted or
+// re-cloned. It returns the path written, or an empty string when the dialog
+// is cancelled. go-git cannot write bundles, so this needs the native git
+// program, like the Run menu.
+//
+// The bundle holds each branch's whole history, so it can restore them in any
+// repository: `git fetch <file> 'refs/gitgo/backups/*:refs/gitgo/backups/*'`.
+func (app *App) ExportBackup(id string) (string, error) {
+	state, err := app.openState()
+	if err != nil {
+		return "", err
+	}
+	backup, err := gitpkg.FindBackup(state.Repo, id)
+	if err != nil {
+		return "", err
+	}
+	path, err := runtime.SaveFileDialog(app.ctx, runtime.SaveDialogOptions{
+		Title:           "Export backup",
+		DefaultFilename: bundleFileName(state.Path, backup),
+		Filters:         []runtime.FileFilter{{DisplayName: "Git bundle (*.bundle)", Pattern: "*.bundle"}},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	if err := exportBackup(state.Path, backup, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// exportBackup runs `git bundle create` for every ref of backup in the
+// repository at repoPath, writing the bundle to file.
+func exportBackup(repoPath string, backup gitpkg.Backup, file string) error {
+	if !filepath.IsAbs(file) {
+		// Never let a file name be read as an option.
+		return fmt.Errorf("the bundle path must be absolute: %s", file)
+	}
+	args := []string{"bundle", "create", "--quiet", file}
+	for _, branch := range backup.Branches {
+		args = append(args, gitpkg.BackupRefPrefix+backup.ID+"/"+branch.Name)
+	}
+	output, err := gitCommand(repoPath, args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git bundle create failed: %v: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// bundleFileName suggests a file name such as
+// "myrepo-main-2026-09-25-1403.bundle", using the backup's local time.
+func bundleFileName(repoPath string, backup gitpkg.Backup) string {
+	branch := "branches"
+	if len(backup.Branches) == 1 {
+		branch = strings.ReplaceAll(backup.Branches[0].Name, "/", "-")
+	}
+	created := backup.Created.Local().Format("2006-01-02-1504")
+	return fmt.Sprintf("%s-%s-%s.bundle", filepath.Base(repoPath), branch, created)
 }
 
 // pruneAutoBackups keeps the newest automatic backups of each branch in

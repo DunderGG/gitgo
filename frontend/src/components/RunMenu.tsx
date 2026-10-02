@@ -107,7 +107,7 @@ export default function RunMenu() {
           className="rounded-md border border-gray-700 bg-transparent px-2 py-1 text-sm text-gray-300 outline-none transition hover:border-gray-600 hover:bg-gray-700 focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <option value="" disabled hidden>
-            Run
+            Run...
           </option>
           <optgroup label="History of all commits in the list" className={optionClass}>
             {HISTORY_FORMATS.map(({ format, label }) => (
