@@ -234,6 +234,65 @@ type SignedCommit struct {
 	Edited    bool   `json:"edited"`
 }
 
+// BackupInfo is a saved set of branch tips (see CreateBackup).
+type BackupInfo struct {
+	ID string `json:"id"`
+	// Kind is "manual" or "auto" (made before an edit or restore).
+	Kind string `json:"kind"`
+	// Created is when the backup was made, as RFC 3339.
+	Created  string             `json:"created"`
+	Branches []BackupBranchInfo `json:"branches"`
+}
+
+// BackupBranchInfo is one branch saved in a backup.
+type BackupBranchInfo struct {
+	Name      string `json:"name"`
+	Hash      string `json:"hash"`
+	ShortHash string `json:"shortHash"`
+	Subject   string `json:"subject"`
+	// Exists is false when the branch has been deleted since.
+	Exists bool `json:"exists"`
+	// Current is true when the branch still points at the saved commit.
+	Current bool `json:"current"`
+}
+
+// RestorePlanInfo says what restoring a backup would do (see PlanRestore).
+type RestorePlanInfo struct {
+	Backup   BackupInfo          `json:"backup"`
+	Branches []RestoreBranchInfo `json:"branches"`
+	// Problem is why the restore is refused, or empty when it can go ahead.
+	Problem string `json:"problem"`
+}
+
+// RestoreBranchInfo says what a restore would do to one branch.
+type RestoreBranchInfo struct {
+	Name string `json:"name"`
+	// CurrentTip is the branch's tip now, to pass back to RestoreBackup.
+	// Empty when Missing.
+	CurrentTip string `json:"currentTip"`
+	// Missing is true when the branch was deleted since the backup; it is not
+	// recreated. Unchanged is true when it already matches the backup.
+	Missing    bool `json:"missing"`
+	Unchanged  bool `json:"unchanged"`
+	CheckedOut bool `json:"checkedOut"`
+	// Removed are commits the restore takes off the branch, and Returned the
+	// backup's commits it brings back; both lists are capped, the counts are
+	// not.
+	Removed       []RestoreCommitInfo `json:"removed"`
+	RemovedCount  int                 `json:"removedCount"`
+	Returned      []RestoreCommitInfo `json:"returned"`
+	ReturnedCount int                 `json:"returnedCount"`
+	// Problem is why this branch blocks the restore, or empty.
+	Problem string `json:"problem"`
+}
+
+// RestoreCommitInfo is a commit listed in a RestoreBranchInfo.
+type RestoreCommitInfo struct {
+	Hash      string `json:"hash"`
+	ShortHash string `json:"shortHash"`
+	Subject   string `json:"subject"`
+}
+
 // OperationResult is returned by all mutating bound methods to convey
 // success or failure to the frontend.
 // Note that even if Success is true, the Message may contain warnings or other

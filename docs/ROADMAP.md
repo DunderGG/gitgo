@@ -293,12 +293,13 @@ Found in the follow-up review (2026-09-25):
 > Protecting history and getting back to an earlier state.
 
 - [ ] **Backups**: save the branch's history before an edit and restore it later, persistently and with multiple steps, unlike the one in-memory `Ctrl+Z` step. Design: [BACKUPS.md](BACKUPS.md)
-  - [ ] `git/backup.go`: create, list, delete and restore backup refs under `refs/gitgo/backups/` (never pushed, kept by `git gc`)
-  - [ ] Bound methods `CreateBackup`, `ListBackups`, `RestoreBackup`, `DeleteBackup`
+  - [x] `git/backup.go`: create, list, delete, prune and restore backups, one ref per branch at `refs/gitgo/backups/<time>-<manual|auto>/<branch>` (never pushed, kept by `git gc`). `PlanRestore` lists the commits a restore removes and brings back per branch and refuses it when pushed commits would be removed (`ErrRestorePushed`) or the checked-out branch's files changed since the backup (`ErrRestoreFilesChanged`); `RestoreBackup` is a compare-and-swap against the planned tips, recorded in the reflog as `gitgo: restore backup <id>`; branches deleted since are skipped (`TestCreateBackup_*`, `TestListBackups_*`, `TestDeleteBackup_*`, `TestPruneBackups_*`, `TestRestoreBackup_*`, `TestPlanRestore_*`)
+  - [x] Bound methods `CreateBackup`, `ListBackups`, `PlanRestore`, `RestoreBackup`, `DeleteBackup` (`app/backup.go`); a restore first saves the branches' current tips as an automatic backup (not when it is refused) and can be undone with `Ctrl+Z`
   - [ ] **Back up** button in the header and a **Backups** list with Restore and Delete (this replaces the reflog-based history panel idea)
   - [ ] **Back up before applying** checkbox in `ConfirmDialog` (on by default), keeping the last ~20 automatic backups per branch (the checkbox default and the number kept as settings in `SettingsDialog`)
   - [ ] Back up every branch an edit moves, so a restore brings them all back
   - [ ] Optional: export a backup to a `git bundle` file
+  - [ ] **Backup names** (later): an optional name for a manual backup, such as "before date spread", shown in the list. A ref holds only a hash, so the name needs a small object stored next to the backup's refs
 - [ ] **Redo** after an undo (`Ctrl+Shift+Z` / `Ctrl+Y` and a button in the status bar), by keeping the undone tip the way `lastRewrite` keeps the pre-rewrite one
 - [ ] Handle signed commits: an edit silently drops the GPG/SSH signature of the edited commit and of every commit rebuilt above it (a copied signature would no longer verify)
   - [x] Warn in `ConfirmDialog` when any commit that will be rebuilt is signed (`FindSignedCommits` / `GetSignedCommits`, which also detect `gpgsig-sha256`, which go-git does not parse; `TestFindSignedCommits_*`)

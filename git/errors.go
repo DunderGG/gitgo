@@ -33,6 +33,20 @@ var ErrUndoPushed = errors.New("the edited commits have been pushed since; undo 
 // rewrite was running. The branch is left untouched.
 var ErrBranchChanged = errors.New("the branch changed on disk during the operation; reload and try again")
 
+// ErrBackupNotFound is returned when no backup has the requested ID, e.g.
+// because it was deleted from a terminal.
+var ErrBackupNotFound = errors.New("backup not found")
+
+// ErrRestorePushed is returned when restoring a backup would remove commits
+// from a branch that have been pushed since the backup was made. The wrapping
+// error names the branch.
+var ErrRestorePushed = errors.New("restoring this backup would remove commits that have been pushed")
+
+// ErrRestoreFilesChanged is returned when the checked-out branch's files have
+// changed since the backup: moving the branch back would leave those changes
+// behind as uncommitted changes. The wrapping error names the branch.
+var ErrRestoreFilesChanged = errors.New("the checked-out branch has commits with file changes made since this backup; restore it from a terminal (git reset --hard) if you want to discard them")
+
 // ErrBranchNotFound is returned by OpenBranch when the requested local branch
 // does not exist.
 var ErrBranchNotFound = errors.New("branch not found")

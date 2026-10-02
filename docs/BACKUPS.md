@@ -1,6 +1,6 @@
 # Backups: design proposal
 
-> **Status:** proposed, not implemented. Tracked in [ROADMAP.md](ROADMAP.md) under *Larger additions*.
+> **Status:** in progress: the git layer (`git/backup.go`) and bound methods (`app/backup.go`) are done. Tracked in [ROADMAP.md](ROADMAP.md) under *Safety and recovery*.
 
 Let the user save a backup of a branch's history before editing it (for example before shifting dates), and restore that backup later if something goes wrong.
 
@@ -85,6 +85,15 @@ refs/gitgo/backups/2026-09-25T14-03-00/feature-x
 ```
 
 Restore then moves them together, with the same compare-and-swap and pushed checks for each. This layout replaces the per-branch one shown above. Tags are never moved by GitGo, so they need no backup.
+
+**As implemented**, the backup name is the UTC time with milliseconds plus the kind, so manual and automatic backups can be told apart without storing anything else:
+
+```
+refs/gitgo/backups/2026-09-25T14-03-00.000Z-auto/main
+refs/gitgo/backups/2026-09-25T14-03-00.000Z-auto/feature-x
+```
+
+A restore is refused as a whole when any branch is blocked; branches deleted since the backup are skipped, not recreated. Retention works per branch: pruning removes a branch's ref from its older automatic backups, keeping the other branches in them.
 
 ---
 
