@@ -37,7 +37,7 @@ func TestCreateBackup_ListsBackup(test *testing.T) {
 	dir, app := setupRepoWithUnpushedCommit(test)
 	tip := runGit(test, dir, "rev-parse", "HEAD")
 
-	backup, err := app.CreateBackup()
+	backup, err := app.CreateBackup("")
 	if err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRestoreBackup_RestoresAndSavesCurrentState(test *testing.T) {
 	dir, app := setupRepoWithUnpushedCommit(test)
 	original := runGit(test, dir, "rev-parse", "HEAD")
 
-	backup, err := app.CreateBackup()
+	backup, err := app.CreateBackup("")
 	if err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestRestoreBackup_RefusalLeavesNoBackup(test *testing.T) {
 	dir, app := setupRepoWithUnpushedCommit(test)
 	original := runGit(test, dir, "rev-parse", "HEAD")
 
-	backup, err := app.CreateBackup()
+	backup, err := app.CreateBackup("")
 	if err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestRestoreBackup_RefusalLeavesNoBackup(test *testing.T) {
 func TestRestoreBackup_RejectsStalePlan(test *testing.T) {
 	dir, app := setupRepoWithUnpushedCommit(test)
 
-	backup, err := app.CreateBackup()
+	backup, err := app.CreateBackup("")
 	if err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestRestoreBackup_RejectsStalePlan(test *testing.T) {
 func TestDeleteBackup_RemovesBackup(test *testing.T) {
 	_, app := setupRepoWithUnpushedCommit(test)
 
-	backup, err := app.CreateBackup()
+	backup, err := app.CreateBackup("")
 	if err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestEditCommits_KeepsAutoBackupsKept(test *testing.T) {
 	if err := app.SetBackupSettings(true, 2); err != nil {
 		test.Fatalf("SetBackupSettings: %v", err)
 	}
-	if _, err := app.CreateBackup(); err != nil {
+	if _, err := app.CreateBackup(""); err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
 
@@ -328,7 +328,7 @@ func TestExportBackup_BundleRestoresInFreshRepository(test *testing.T) {
 // read as an option is refused.
 func TestExportBackup_RejectsRelativePath(test *testing.T) {
 	dir, app := setupRepoWithUnpushedCommit(test)
-	backup, err := app.CreateBackup()
+	backup, err := app.CreateBackup("")
 	if err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestExportBackup_PartialLeavesOutPushedCommits(test *testing.T) {
 	local := runGit(test, dir, "rev-parse", "HEAD")
 	remote := runGit(test, dir, "remote", "get-url", "origin")
 
-	backup, err := app.CreateBackup()
+	backup, err := app.CreateBackup("")
 	if err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
@@ -396,7 +396,7 @@ func TestExportBackup_PartialRefusesEmptyBundle(test *testing.T) {
 	dir, app := setupRepoWithUnpushedCommit(test)
 	runGit(test, dir, "push")
 
-	backup, err := app.CreateBackup()
+	backup, err := app.CreateBackup("")
 	if err != nil {
 		test.Fatalf("CreateBackup: %v", err)
 	}
@@ -422,5 +422,63 @@ func TestBundleFileName_Partial(test *testing.T) {
 	backup := gitpkg.Backup{Created: created, Branches: []gitpkg.BackupBranch{{Name: "main"}}}
 	if got := bundleFileName("/work/myrepo", backup, true); got != "myrepo-main-2026-09-25-1403-partial.bundle" {
 		test.Errorf("partial = %q", got)
+	}
+}
+
+// TestCreateBackup_WithName verifies naming at creation, renaming, and that a
+// refused name leaves no backup behind.
+func TestCreateBackup_WithName(test *testing.T) {
+	_, app := setupRepoWithUnpushedCommit(test)
+
+	backup, err := app.CreateBackup("before date spread")
+	if err != nil {
+		test.Fatalf("CreateBackup: %v", err)
+	}
+	if backup.Name != "before date spread" {
+		test.Errorf("Name = %q", backup.Name)
+	}
+	if err := app.RenameBackup(backup.ID, "renamed"); err != nil {
+		test.Fatalf("RenameBackup: %v", err)
+	}
+	if backups := mustListBackups(test, app); len(backups) != 1 || backups[0].Name != "renamed" {
+		test.Errorf("ListBackups = %+v, want the renamed backup", backups)
+	}
+
+	if _, err := app.CreateBackup("two\nlines"); !errors.Is(err, gitpkg.ErrInvalidBackupName) {
+		test.Fatalf("CreateBackup error = %v, want ErrInvalidBackupName", err)
+	}
+	if backups := mustListBackups(test, app); len(backups) != 1 {
+		test.Errorf("ListBackups = %+v, want no backup for the refused name", backups)
+	}
+}
+
+// TestExportBackup_KeepsName verifies that a named backup keeps its name
+// through a bundle export and fetch.
+func TestExportBackup_KeepsName(test *testing.T) {
+	dir, app := setupRepoWithUnpushedCommit(test)
+	backup, err := app.CreateBackup("keep me")
+	if err != nil {
+		test.Fatalf("CreateBackup: %v", err)
+	}
+	found, err := gitpkg.FindBackup(app.repoState.Repo, backup.ID)
+	if err != nil {
+		test.Fatal(err)
+	}
+	file := filepath.Join(test.TempDir(), "named.bundle")
+	if err := exportBackup(dir, found, file, false); err != nil {
+		test.Fatalf("exportBackup: %v", err)
+	}
+
+	fresh := test.TempDir()
+	runGit(test, fresh, "init", "-b", "main")
+	runGit(test, fresh, "fetch", file, "refs/gitgo/backups/*:refs/gitgo/backups/*")
+	commitFile(test, fresh, "unrelated")
+	freshApp := New()
+	if _, err := freshApp.OpenRepository(fresh); err != nil {
+		test.Fatalf("OpenRepository: %v", err)
+	}
+	backups := mustListBackups(test, freshApp)
+	if len(backups) != 1 || backups[0].Name != "keep me" {
+		test.Errorf("ListBackups after fetch = %+v, want the named backup", backups)
 	}
 }

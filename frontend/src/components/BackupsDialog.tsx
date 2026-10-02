@@ -7,12 +7,13 @@ import {
   ListBackups,
   PlanRestore,
   RefreshLog,
+  RenameBackup,
   RestoreBackup,
 } from '../../wailsjs/go/app/App'
 import type { app } from '../../wailsjs/go/models'
 import { errorText, friendlyError } from '../errors'
 import { formatAge } from '../lastFetch'
-import { useRepoStore } from '../store/repoStore'
+import { MAX_BACKUP_NAME_LENGTH, useRepoStore } from '../store/repoStore'
 import Spinner from './Spinner'
 
 // When a backup was made, e.g. "25 Sep 2026, 14:03 (3 hours ago)".
@@ -128,6 +129,9 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
   // out the commits already on a remote.
   const [choosingExport, setChoosingExport] = useState<string | null>(null)
   const [partialExport, setPartialExport] = useState(false)
+  // The backup being renamed and the name typed for it.
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameText, setRenameText] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -172,19 +176,26 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
-        if (plan) {
+        if (renaming) {
+          setRenaming(null)
+        } else if (plan) {
           setPlan(null)
         } else {
           onClose()
         }
-      } else if ((event.ctrlKey || event.metaKey) && (key === 'z' || key === 'a')) {
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
+        (key === 'z' || key === 'a') &&
+        !(event.target instanceof HTMLInputElement && event.target.type === 'text')
+      ) {
+        // The name fields keep the browser's own text undo and select all.
         event.preventDefault()
         event.stopPropagation()
       }
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [plan, onClose])
+  }, [renaming, plan, onClose])
 
   async function review(id: string) {
     setProblem(null)
@@ -236,15 +247,42 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
     }
   }
 
+  // Only one row shows extra controls at a time: export options, delete
+  // confirmation or the rename field.
+  function closeRowControls() {
+    setChoosingExport(null)
+    setConfirmingDelete(null)
+    setRenaming(null)
+  }
+
   function chooseExport(id: string) {
     setProblem(null)
-    setConfirmingDelete(null)
+    closeRowControls()
     setChoosingExport(id)
   }
 
   function chooseDelete(id: string) {
-    setChoosingExport(null)
+    closeRowControls()
     setConfirmingDelete(id)
+  }
+
+  function startRename(backup: app.BackupInfo) {
+    setProblem(null)
+    closeRowControls()
+    setRenameText(backup.name)
+    setRenaming(backup.id)
+  }
+
+  async function saveName(id: string) {
+    setProblem(null)
+    try {
+      await RenameBackup(id, renameText)
+      setRenaming(null)
+      setStatus(renameText.trim() ? `Backup named “${renameText.trim()}”` : 'Backup name removed')
+    } catch (error) {
+      setProblem(friendlyError(errorText(error)))
+    }
+    await load()
   }
 
   async function exportBackup(id: string, partial: boolean) {
@@ -284,6 +322,7 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
   const canExportPartial = repoInfo?.hasRemote === true
   const canRestore = plan !== null && !plan.problem && plan.branches.some((entry) => !entry.missing && !entry.unchanged)
 
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
@@ -302,7 +341,7 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
             </h2>
             <p className="mt-1 text-sm text-gray-400">
               {plan
-                ? `Made ${formatCreated(plan.backup.created)}`
+                ? `${plan.backup.name ? `“${plan.backup.name}”, made` : 'Made'} ${formatCreated(plan.backup.created)}`
                 : 'Saved states of your branches. Restoring one moves the branches back to it.'}
             </p>
           </div>
@@ -378,10 +417,55 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
                   {shown.map((backup) => (
                     <li key={backup.id} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm text-gray-200">{formatCreated(backup.created)}</span>
-                        <KindBadge kind={backup.kind} />
+                        {renaming === backup.id ? (
+                          <form
+                            className="flex min-w-0 flex-1 items-center gap-2"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              saveName(backup.id)
+                            }}
+                          >
+                            <input
+                              type="text"
+                              value={renameText}
+                              onChange={(event) => setRenameText(event.target.value)}
+                              maxLength={MAX_BACKUP_NAME_LENGTH}
+                              placeholder="Name (empty for none)"
+                              aria-label="Backup name"
+                              autoFocus
+                              className="min-w-0 flex-1 rounded-md border border-gray-700 bg-gray-800 px-2 py-1 text-sm text-gray-100 outline-none focus:border-indigo-500"
+                            />
+                            <button
+                              type="submit"
+                              className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-indigo-500"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRenaming(null)}
+                              className="rounded-md border border-gray-700 px-2.5 py-1 text-xs text-gray-300 transition hover:bg-gray-800"
+                            >
+                              Cancel
+                            </button>
+                          </form>
+                        ) : (
+                          <>
+                            {backup.name ? (
+                              <>
+                                <span className="min-w-0 truncate text-sm font-medium text-gray-100" title={backup.name}>
+                                  {backup.name}
+                                </span>
+                                <span className="text-xs text-gray-400">{formatCreated(backup.created)}</span>
+                              </>
+                            ) : (
+                              <span className="text-sm text-gray-200">{formatCreated(backup.created)}</span>
+                            )}
+                            <KindBadge kind={backup.kind} />
+                          </>
+                        )}
                         <div className="ml-auto flex items-center gap-2">
-                          {choosingExport === backup.id ? (
+                          {renaming === backup.id ? null : choosingExport === backup.id ? (
                             <>
                               <label
                                 className="flex items-center gap-1.5 text-xs text-gray-300"
@@ -461,6 +545,15 @@ export default function BackupsDialog({ onClose }: BackupsDialogProps) {
                                   Export…
                                 </button>
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => startRename(backup)}
+                                disabled={isBusy}
+                                title={backup.name ? 'Change or remove the name' : 'Give this backup a name'}
+                                className="rounded-md px-2.5 py-1 text-xs text-gray-400 transition hover:bg-gray-800 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {backup.name ? 'Rename' : 'Name'}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => chooseDelete(backup.id)}

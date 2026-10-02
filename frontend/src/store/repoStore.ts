@@ -108,6 +108,8 @@ export interface BackupSettings {
 // Same as the Go defaults, used until the settings have loaded.
 export const DEFAULT_BACKUP_SETTINGS: BackupSettings = { backupBeforeApply: true, autoBackupsKept: 20 }
 export const MAX_AUTO_BACKUPS_KEPT = 1000
+// The longest backup name, as in git/backup.go.
+export const MAX_BACKUP_NAME_LENGTH = 100
 
 export interface RepoInfo {
   path: string

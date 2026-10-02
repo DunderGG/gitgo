@@ -93,6 +93,8 @@ refs/gitgo/backups/2026-09-25T14-03-00.000Z-auto/main
 refs/gitgo/backups/2026-09-25T14-03-00.000Z-auto/feature-x
 ```
 
+A **named** backup's refs point at annotated tag objects (tag name `gitgo-backup`, the message is the name) that target the saved commits, instead of at the commits themselves. The name thus travels with the refs, through `git gc` and bundle exports, and git peels the tag wherever a commit is expected, so `git reset --hard refs/gitgo/backups/<id>/main` still works.
+
 A restore is refused as a whole when any branch is blocked; branches deleted since the backup are skipped, not recreated. Retention works per branch: pruning removes a branch's ref from its older automatic backups, keeping the other branches in them.
 
 ---

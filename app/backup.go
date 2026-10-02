@@ -18,8 +18,9 @@ import (
 // git/backup.go and docs/BACKUPS.md), so a branch can be restored after any
 // number of edits, also after the app was closed.
 
-// CreateBackup saves the current tip of the open branch as a manual backup.
-func (app *App) CreateBackup() (BackupInfo, error) {
+// CreateBackup saves the current tip of the open branch as a manual backup,
+// with an optional name (empty for none).
+func (app *App) CreateBackup(name string) (BackupInfo, error) {
 	app.mutex.Lock()
 	state := app.repoState
 	app.mutex.Unlock()
@@ -36,7 +37,27 @@ func (app *App) CreateBackup() (BackupInfo, error) {
 	if err != nil {
 		return BackupInfo{}, err
 	}
+	if strings.TrimSpace(name) != "" {
+		if err := gitpkg.SetBackupName(state, backup.ID, name); err != nil {
+			// Leave no unnamed backup behind for a name that was refused.
+			_ = gitpkg.DeleteBackup(state.Repo, backup.ID)
+			return BackupInfo{}, err
+		}
+		if backup, err = gitpkg.FindBackup(state.Repo, backup.ID); err != nil {
+			return BackupInfo{}, err
+		}
+	}
 	return backupInfo(state, backup), nil
+}
+
+// RenameBackup sets the name of the backup with the given ID, or removes it
+// when name is empty.
+func (app *App) RenameBackup(id, name string) error {
+	state, err := app.openState()
+	if err != nil {
+		return err
+	}
+	return gitpkg.SetBackupName(state, id, name)
 }
 
 // ListBackups returns every backup in the open repository, newest first. The
@@ -335,6 +356,7 @@ func backupInfo(state *gitpkg.RepoState, backup gitpkg.Backup) BackupInfo {
 		ID:       backup.ID,
 		Kind:     string(backup.Kind),
 		Created:  backup.Created.Format(time.RFC3339),
+		Name:     backup.Name,
 		Branches: make([]BackupBranchInfo, len(backup.Branches)),
 	}
 	for i, saved := range backup.Branches {

@@ -37,6 +37,10 @@ var ErrBranchChanged = errors.New("the branch changed on disk during the operati
 // because it was deleted from a terminal.
 var ErrBackupNotFound = errors.New("backup not found")
 
+// ErrInvalidBackupName is returned for a backup name that is too long or
+// spans several lines. The wrapping error says which.
+var ErrInvalidBackupName = errors.New("invalid backup name")
+
 // ErrRestorePushed is returned when restoring a backup would remove commits
 // from a branch that have been pushed since the backup was made. The wrapping
 // error names the branch.

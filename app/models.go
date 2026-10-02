@@ -252,7 +252,9 @@ type BackupInfo struct {
 	// Kind is "manual" or "auto" (made before an edit or restore).
 	Kind string `json:"kind"`
 	// Created is when the backup was made, as RFC 3339.
-	Created  string             `json:"created"`
+	Created string `json:"created"`
+	// Name is the user's name for the backup, or empty.
+	Name     string             `json:"name"`
 	Branches []BackupBranchInfo `json:"branches"`
 }
 

@@ -6,9 +6,12 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 // BackupRefPrefix is the namespace that holds backups. A backup is one ref per
@@ -46,8 +49,17 @@ const (
 type BackupBranch struct {
 	// Name is the short branch name, e.g. "feature/x".
 	Name string
+	// Hash is the saved commit. For a named backup the ref points at a tag
+	// object holding the name, and Hash is the commit it peels to.
 	Hash plumbing.Hash
 }
+
+// maxBackupNameLength is the longest backup name, in characters.
+const maxBackupNameLength = 100
+
+// backupTagName is the tag name recorded in a named backup's tag objects. It
+// is never a ref under refs/tags/, so it shows up nowhere else.
+const backupTagName = "gitgo-backup"
 
 // Backup is a saved set of branch tips.
 type Backup struct {
@@ -55,6 +67,8 @@ type Backup struct {
 	ID      string
 	Kind    BackupKind
 	Created time.Time
+	// Name is the user's name for the backup, or empty (see SetBackupName).
+	Name string
 	// Branches are sorted by name.
 	Branches []BackupBranch
 }
@@ -177,16 +191,28 @@ func ListBackups(repo *gogit.Repository) ([]Backup, error) {
 		if !found || branch == "" {
 			return nil
 		}
+		if _, _, valid := parseBackupID(id); !valid {
+			return nil
+		}
+		// A named backup's refs point at tag objects carrying the name.
+		hash, label := ref.Hash(), ""
+		tag, err := repo.TagObject(hash)
+		if err == nil {
+			hash, label = tag.Target, strings.TrimSpace(tag.Message)
+		} else if !errors.Is(err, plumbing.ErrObjectNotFound) {
+			return fmt.Errorf("reading %s: %w", name, err)
+		}
+
 		backup, ok := byID[id]
 		if !ok {
-			created, kind, valid := parseBackupID(id)
-			if !valid {
-				return nil
-			}
+			created, kind, _ := parseBackupID(id)
 			backup = &Backup{ID: id, Kind: kind, Created: created}
 			byID[id] = backup
 		}
-		backup.Branches = append(backup.Branches, BackupBranch{Name: branch, Hash: ref.Hash()})
+		if label != "" {
+			backup.Name = label
+		}
+		backup.Branches = append(backup.Branches, BackupBranch{Name: branch, Hash: hash})
 		return nil
 	})
 	if err != nil {
@@ -219,6 +245,73 @@ func FindBackup(repo *gogit.Repository, id string) (Backup, error) {
 		}
 	}
 	return Backup{}, fmt.Errorf("%w: %s", ErrBackupNotFound, id)
+}
+
+// SetBackupName gives the backup with the given ID a name, or removes it when
+// name is empty. The name is stored in the backup itself: each of its refs is
+// pointed at an annotated tag object whose message is the name and whose
+// target is the saved commit, so it survives `git gc` and bundle exports, and
+// git peels the tag wherever a commit is expected.
+//
+// Names are trimmed, must be a single line without control characters, and
+// may be at most maxBackupNameLength characters (ErrInvalidBackupName).
+func SetBackupName(state *RepoState, id, name string) error {
+	name = strings.TrimSpace(name)
+	if err := validateBackupName(name); err != nil {
+		return err
+	}
+	backup, err := FindBackup(state.Repo, id)
+	if err != nil {
+		return err
+	}
+
+	var tagger object.Signature
+	if name != "" {
+		identity, _ := ConfiguredIdentity(state)
+		tagger = object.Signature{Name: identity.Name, Email: identity.Email, When: time.Now()}
+		if tagger.Name == "" {
+			tagger.Name = "GitGo"
+		}
+	}
+
+	for _, branch := range backup.Branches {
+		target := branch.Hash
+		if name != "" {
+			tag := &object.Tag{
+				Name:       backupTagName,
+				Tagger:     tagger,
+				Message:    name + "\n",
+				TargetType: plumbing.CommitObject,
+				Target:     branch.Hash,
+			}
+			encoded := state.Repo.Storer.NewEncodedObject()
+			if err := tag.Encode(encoded); err != nil {
+				return fmt.Errorf("encoding backup name: %w", err)
+			}
+			target, err = state.Repo.Storer.SetEncodedObject(encoded)
+			if err != nil {
+				return fmt.Errorf("writing backup name: %w", err)
+			}
+		}
+		ref := plumbing.NewHashReference(backupRefName(id, branch.Name), target)
+		if err := state.Repo.Storer.SetReference(ref); err != nil {
+			return fmt.Errorf("writing backup ref: %w", err)
+		}
+	}
+	return nil
+}
+
+// validateBackupName checks a trimmed backup name.
+func validateBackupName(name string) error {
+	if utf8.RuneCountInString(name) > maxBackupNameLength {
+		return fmt.Errorf("%w: at most %d characters", ErrInvalidBackupName, maxBackupNameLength)
+	}
+	for _, char := range name {
+		if unicode.IsControl(char) {
+			return fmt.Errorf("%w: it must be a single line", ErrInvalidBackupName)
+		}
+	}
+	return nil
 }
 
 // DeleteBackup removes every ref of the backup with the given ID. Its commits

@@ -474,3 +474,76 @@ func TestPlanRestore_UnknownBackup(test *testing.T) {
 		test.Errorf("expected ErrBackupNotFound, got %v", err)
 	}
 }
+
+// TestSetBackupName_NamesAndClears verifies that a name is listed, that the
+// backup still restores and survives gc, and that an empty name removes it.
+func TestSetBackupName_NamesAndClears(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original commit", gitCmd)
+	gitCmd("branch", "feature")
+	original := revParse(test, dir, "main")
+
+	backup := mustBackup(test, mustOpen(test, dir), git.BackupManual, "feature")
+	if err := git.SetBackupName(mustOpen(test, dir), backup.ID, "  before date spread  "); err != nil {
+		test.Fatalf("git.SetBackupName: %v", err)
+	}
+
+	listed := mustListBackups(test, dir)
+	if len(listed) != 1 || listed[0].Name != "before date spread" {
+		test.Fatalf("ListBackups = %+v, want the trimmed name", listed)
+	}
+	for _, branch := range listed[0].Branches {
+		if branch.Hash != original {
+			test.Errorf("%s = %s, want the peeled commit %s", branch.Name, branch.Hash, original)
+		}
+	}
+	// git itself peels the ref to the commit.
+	if got := revParse(test, dir, "refs/gitgo/backups/"+backup.ID+"/main^{commit}"); got != original {
+		test.Errorf("rev-parse = %s, want %s", got, original)
+	}
+
+	amendMessage(test, dir, "edited", "feature")
+	gitCmd("reflog", "expire", "--expire=now", "--all")
+	gitCmd("gc", "--prune=now")
+	plan := mustPlanRestore(test, dir, backup.ID)
+	if _, err := git.RestoreBackup(dir, backup.ID, expectedTips(plan)); err != nil {
+		test.Fatalf("git.RestoreBackup: %v", err)
+	}
+	if got := revParse(test, dir, "main"); got != original {
+		test.Errorf("main = %s, want %s", got, original)
+	}
+
+	if err := git.SetBackupName(mustOpen(test, dir), backup.ID, ""); err != nil {
+		test.Fatalf("clearing the name: %v", err)
+	}
+	listed = mustListBackups(test, dir)
+	if listed[0].Name != "" {
+		test.Errorf("Name = %q after clearing, want empty", listed[0].Name)
+	}
+	if kind := gitOutputFromDir(test, dir, "git", "cat-file", "-t", "refs/gitgo/backups/"+backup.ID+"/main"); kind != "commit" {
+		test.Errorf("ref points at a %s after clearing, want a commit", kind)
+	}
+}
+
+// TestSetBackupName_RejectsInvalidName verifies the length and single-line
+// rules, and the error for an unknown backup.
+func TestSetBackupName_RejectsInvalidName(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "original commit", gitCmd)
+	backup := mustBackup(test, mustOpen(test, dir), git.BackupManual)
+
+	for _, name := range []string{"two\nlines", strings.Repeat("é", 101)} {
+		if err := git.SetBackupName(mustOpen(test, dir), backup.ID, name); !errors.Is(err, git.ErrInvalidBackupName) {
+			test.Errorf("SetBackupName(%q) error = %v, want ErrInvalidBackupName", name, err)
+		}
+	}
+	if err := git.SetBackupName(mustOpen(test, dir), backup.ID, strings.Repeat("é", 100)); err != nil {
+		test.Errorf("100 characters rejected: %v", err)
+	}
+	err := git.SetBackupName(mustOpen(test, dir), "2026-01-01T00-00-00.000Z-manual", "x")
+	if !errors.Is(err, git.ErrBackupNotFound) {
+		test.Errorf("unknown backup error = %v, want ErrBackupNotFound", err)
+	}
+}

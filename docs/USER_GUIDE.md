@@ -149,10 +149,11 @@ git reset --hard <branch>@{1}
 
 ### Backups
 
-Undo only covers the last rewrite and is gone when you switch branch or close GitGo. For more, click **Back up** in the header: it saves the branch as it is now, instantly, whatever the repository size. Backups stay in the repository until you delete them, survive `git gc`, and are never pushed.
+Undo only covers the last rewrite and is gone when you switch branch or close GitGo. For more, click **Back up** in the header, optionally type a name such as "before date spread", and press **Enter**: it saves the branch as it is now, instantly, whatever the repository size. Pressing **Enter** without typing makes an unnamed backup; **Escape** cancels. Backups stay in the repository until you delete them, survive `git gc`, and are never pushed.
 
 The clock button next to **Back up** opens the list of backups of the branch you are viewing; tick **Show all branches** to see the others too. Each backup shows when it was made, whether you made it (**Manual**) or GitGo did (**Automatic**), and the commit it saved for each branch, marked **same as now** when the branch still points there.
 
+- **Name** (or **Rename**) on a backup sets or changes its name, also for automatic backups; clear the field to remove it. Names can be up to 100 characters on one line, and are kept when a backup is exported.
 - **Restore…** shows, per branch, the commits that would be removed from it and the ones that would come back. Click **Restore** to move the branches back. The current state is saved as an automatic backup first, and `Ctrl+Z` undoes the restore.
 - **Delete** removes the backup after you confirm.
 - **Export…** saves the backup to a git bundle file outside the repository, with each branch's whole history, so it survives the repository being deleted or cloned again. Click **Save…** to pick the file. It needs git installed, like the [Run menu](#run-menu).
