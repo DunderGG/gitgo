@@ -292,14 +292,17 @@ Found in the follow-up review (2026-09-25):
   - [x] The store's `commitSearch`: kept across edits, undo and branch switches, cleared for another repository. Shift ranges and **Select all unpushed** (then **Select unpushed matches**, also `Ctrl+A`) only take the shown commits, so a search such as `author:old@example.com` picks the commits for a bulk author fix; selected commits the search hides stay selected and are counted in the legend
   - [x] Keyboard: `Enter` / `↓` in the field move to the list, `↑` on the first row goes back, `Escape` clears the search
   - Not done: searching past the 100 loaded commits (waits for **Load more commits**), highlighting the matched text in the rows, negated words (`-word`), and a committer qualifier
-- [ ] Copy actions for commit metadata (full hash, short hash, author name, author email)
 - [ ] **Load more commits**: the list stops at 100 commits (`DefaultLogDepth` in `git/log.go`); load the next page when scrolling to the end, or show a "Load more" row
 - [ ] **Branch and tag labels** on the rows they point to, as every Git GUI does, so it is clear which other refs an edit will affect before opening `ConfirmDialog`
 - [ ] **Commit graph**: draw the branch and merge lines next to the list (as in Fork, GitKraken and `git log --graph`), making merge commits and where the pushed part starts easier to see
 - [ ] **Changed files list** (names and +/− line counts, read-only) in the commit details. This is much lighter than the file diffs that are out of scope, and helps confirm the right commit is selected
 - [ ] **Relative dates** ("3 hours ago") as an option, with the full date and offset in a tooltip (setting in `SettingsDialog`)
 - [ ] **Flag odd commits** in the list: author date later than the commit above it, committer different from the author, or a date in the future (on/off setting in `SettingsDialog`, since some will find the markers noisy)
-- [ ] **Right-click menu** on commit rows with Edit, Copy hash and, later, Squash / Drop / Reword (every desktop Git client has one)
+- [ ] **Right-click menu** on commit rows (every desktop Git client has one)
+  - [ ] Edit (opens `EditPanel` / `BulkEditPanel` for the selection)
+  - [ ] Copy submenu: full hash, short hash, subject, author name, author email; with several commits selected, one line per commit
+  - [ ] The same copy actions without the menu: click-to-copy on the hash and author in the commit details, `Ctrl+C` copies the selected commits' hashes
+  - Later: Squash / Drop / Reword, as each of those operations is added
 
 ### Safety and recovery
 
