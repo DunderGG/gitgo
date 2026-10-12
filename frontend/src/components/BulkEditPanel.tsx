@@ -523,7 +523,7 @@ export default function BulkEditPanel() {
 
   return (
     <>
-      <aside className={PANEL_CLASS}>
+      <aside data-edit-panel className={PANEL_CLASS}>
         <div className={PANEL_BODY_CLASS}>
           <h2 className="text-base font-semibold text-gray-100">Edit Several Commits</h2>
           <p className="mt-1 text-xs text-gray-400">

@@ -1,8 +1,9 @@
-import { useMemo, type KeyboardEvent, type MouseEvent } from 'react'
+import { useCallback, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { LOG_DEPTH, parseCommitSearch } from '../commitSearch'
 import { focusCommitRow, focusCommitSearch } from '../hooks/useKeyboardShortcuts'
 import { fetchStatus, useNow, type FetchStatus } from '../lastFetch'
 import { useRepoStore, CommitSummary, RepoInfo } from '../store/repoStore'
+import CommitContextMenu from './CommitContextMenu'
 
 interface CommitRowProps {
   commit: CommitSummary
@@ -11,9 +12,10 @@ interface CommitRowProps {
   isPrimary: boolean
   onSelect: (event: MouseEvent<HTMLDivElement>) => void
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void
+  onContextMenu: (event: MouseEvent<HTMLDivElement>) => void
 }
 
-function CommitRow({ commit, isSelected, isPrimary, onSelect, onKeyDown }: CommitRowProps) {
+function CommitRow({ commit, isSelected, isPrimary, onSelect, onKeyDown, onContextMenu }: CommitRowProps) {
   const date = new Date(commit.date)
   const formattedDate = date.toLocaleDateString(undefined, {
     year: 'numeric',
@@ -33,6 +35,7 @@ function CommitRow({ commit, isSelected, isPrimary, onSelect, onKeyDown }: Commi
       // Keep Shift-click from selecting the row text.
       onMouseDown={(event) => event.shiftKey && event.preventDefault()}
       onKeyDown={onKeyDown}
+      onContextMenu={onContextMenu}
       className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-800 cursor-pointer transition-colors ${
         isSelected
           ? `bg-indigo-950/60 border-l-2 ${isPrimary ? 'border-l-indigo-500' : 'border-l-indigo-800'}`
@@ -221,6 +224,16 @@ export default function CommitList() {
     [commits, search],
   )
 
+  // The open right-click menu, with the list it was opened on: a reload
+  // replaces the list, and the menu goes away with it.
+  const [menu, setMenu] = useState<{
+    x: number
+    y: number
+    targets: CommitSummary[]
+    commits: CommitSummary[]
+  } | null>(null)
+  const closeMenu = useCallback(() => setMenu(null), [])
+
   // A plain click selects one commit; Ctrl/Cmd-click and Shift-click build a
   // selection of unpushed commits for BulkEditPanel.
   function handleRowClick(event: MouseEvent<HTMLDivElement>, hash: string) {
@@ -262,6 +275,30 @@ export default function CommitList() {
       }
       focusCommitRow(next.hash)
     }
+  }
+
+  // A right-click on a selected commit keeps the selection, so the menu acts
+  // on all of it; on any other commit it selects that commit first.
+  function handleRowContextMenu(event: MouseEvent<HTMLDivElement>, hash: string) {
+    event.preventDefault()
+    const isInSelection = selectedHashes.includes(hash)
+    if (!isInSelection) {
+      selectCommit(hash)
+    }
+    const wanted = new Set(isInSelection ? selectedHashes : [hash])
+    const targets = commits.filter((commit) => wanted.has(commit.hash))
+
+    // From the keyboard (Shift+F10 or the menu key) there is no pointer, so
+    // the menu opens under the start of the row.
+    const row = event.currentTarget.getBoundingClientRect()
+    const isOnRow =
+      event.clientX >= row.left && event.clientX <= row.right && event.clientY >= row.top && event.clientY <= row.bottom
+    setMenu({
+      x: isOnRow ? event.clientX : row.left + 24,
+      y: isOnRow ? event.clientY : row.bottom,
+      targets,
+      commits,
+    })
   }
 
   if (commits.length === 0) {
@@ -390,9 +427,14 @@ export default function CommitList() {
             isPrimary={commit.hash === selectedHash}
             onSelect={(event) => handleRowClick(event, commit.hash)}
             onKeyDown={(event) => handleRowKeyDown(event, index)}
+            onContextMenu={(event) => handleRowContextMenu(event, commit.hash)}
           />
         ))}
       </div>
+
+      {menu?.commits === commits && (
+        <CommitContextMenu x={menu.x} y={menu.y} targets={menu.targets} onClose={closeMenu} />
+      )}
     </div>
   )
 }

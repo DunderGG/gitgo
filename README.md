@@ -20,6 +20,7 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 - **Edit commit metadata:** message, author name and email, committer name and email, and author date (to the second, in the commit's own time zone), with quick −1d / −1h / +1h / +1d / Now buttons
 - **Edit several commits at once:** select multiple unpushed commits and shift their dates or spread them over a range, or set their author and committer, in one rewrite
 - **Search the commit list:** by message, author, hash or date, with `author:`, `since:` and other qualifiers; select the matches to fix them together
+- **Commit menu:** right-click a commit to edit it or copy its hash, subject or author, for one commit or the whole selection
 - **Preview before applying:** every change is shown old-vs-new in a confirmation dialog
 - **One-step undo:** revert the last rewrite with `Ctrl+Z`
 - **Work on any branch:** view and edit other local branches without checking them out
@@ -53,6 +54,7 @@ Squash, reorder and drop are planned next, followed by CI and installable binari
 | `Ctrl+A` | Select every unpushed commit (also the button above the list); with a search, the matching ones |
 | `Ctrl+F` | Search the commit list by message, author, hash or date |
 | `Enter` | Open the edit panel for the selected commit |
+| `Shift+F10` | Open the commit menu, as a right-click on the row does |
 | `Escape` | Close the edit panel or dialog |
 | `Ctrl+Z` | Undo the last rewrite |
 | `F5` / `Ctrl+R` | Reload the repository from disk |

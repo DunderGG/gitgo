@@ -32,6 +32,7 @@ const SHORTCUTS: { keys: ReactNode; action: string }[] = [
   { keys: <><Kbd>Ctrl</Kbd>+<Kbd>A</Kbd></>, action: 'Select every unpushed commit, or every match of a search (outside text fields)' },
   { keys: <><Kbd>Ctrl</Kbd>+<Kbd>F</Kbd></>, action: 'Search the commit list; Escape clears the search' },
   { keys: <Kbd>Enter</Kbd>, action: 'Open the selected commit and jump to its first field' },
+  { keys: <><Kbd>Shift</Kbd>+<Kbd>F10</Kbd></>, action: 'Open the commit menu (Edit, Copy), as a right-click does' },
   { keys: <Kbd>Escape</Kbd>, action: 'Close the edit panel, confirmation dialog or this help' },
   { keys: <><Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd></>, action: 'Undo the last rewrite (outside text fields)' },
   { keys: <><Kbd>F5</Kbd> / <Kbd>Ctrl</Kbd>+<Kbd>R</Kbd></>, action: 'Reload the repository from disk' },
@@ -154,6 +155,11 @@ export default function HelpDialog() {
               <Ui>author:</Ui>, <Ui>message:</Ui>, <Ui>hash:</Ui> or <Ui>date:</Ui>, or pick a period with{' '}
               <Ui>since:2026-10-01</Ui> and <Ui>until:2026-10-12</Ui>. Only the commits in the list (the latest 100)
               are searched.
+            </p>
+            <p className="text-gray-400">
+              Right-click a commit (or press <Kbd>Shift</Kbd>+<Kbd>F10</Kbd>) for a menu: <Ui>Edit</Ui> opens it, and{' '}
+              <Ui>Copy</Ui> puts its full or short hash, subject, author name or author email on the clipboard.
+              Right-click inside a selection of several commits to copy one line per selected commit.
             </p>
           </Section>
 

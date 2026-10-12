@@ -54,6 +54,15 @@ The search only sees the commits in the list, which is the latest 100. When the 
 
 With a search, **Select all unpushed** becomes **Select unpushed matches** (also `Ctrl+A`), and `Shift` ranges skip the commits the search hides. This is a quick way to pick commits to fix together: search `author:old@example.com`, select the matches, and [set a new author](#author-and-committer). Commits you selected before searching stay selected even when the search hides them; the list says how many are hidden, and they are still edited.
 
+## Commit menu
+
+Right-click a commit for its menu. With the keyboard, press `Shift+F10` (or the menu key) on the selected row; `↑` / `↓` move through the menu, `→` opens **Copy**, `Enter` runs an item, and `Escape` closes the menu without changing the selection.
+
+- **Edit** opens the commit in the edit panel with the cursor in its message, as `Enter` does. It is greyed out for a pushed commit.
+- **Copy** puts the commit's **Full hash**, **Short hash**, **Subject**, **Author name** or **Author email** on the clipboard. Each item shows what it copies.
+
+Right-clicking a commit that isn't selected selects it first. Right-clicking inside a selection of several commits keeps the selection: **Edit 3 commits** (for example) moves to the **Edit Several Commits** panel, and **Copy** copies one line per selected commit, in list order, including selected commits the search hides.
+
 ## Editing one commit
 
 Click an unpushed commit, or move to it with `↑` / `↓` and press `Enter`. The **Edit Commit** panel shows its details.

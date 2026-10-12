@@ -18,6 +18,14 @@ export function focusCommitRow(hash: string) {
   document.querySelector<HTMLElement>(`[data-commit-hash="${hash}"]`)?.focus()
 }
 
+// focusEditPanel moves keyboard focus to the first enabled control of the
+// edit panel (EditPanel or BulkEditPanel).
+export function focusEditPanel() {
+  document
+    .querySelector<HTMLElement>('[data-edit-panel] :is(button, input, select, textarea):not(:disabled)')
+    ?.focus()
+}
+
 // focusCommitSearch moves keyboard focus to the search field above
 // CommitList and selects its text, so typing replaces the last search.
 export function focusCommitSearch() {

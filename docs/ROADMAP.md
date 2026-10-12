@@ -298,9 +298,10 @@ Found in the follow-up review (2026-09-25):
 - [ ] **Changed files list** (names and +/− line counts, read-only) in the commit details. This is much lighter than the file diffs that are out of scope, and helps confirm the right commit is selected
 - [ ] **Relative dates** ("3 hours ago") as an option, with the full date and offset in a tooltip (setting in `SettingsDialog`)
 - [ ] **Flag odd commits** in the list: author date later than the commit above it, committer different from the author, or a date in the future (on/off setting in `SettingsDialog`, since some will find the markers noisy)
-- [ ] **Right-click menu** on commit rows (every desktop Git client has one)
-  - [ ] Edit (opens `EditPanel` / `BulkEditPanel` for the selection)
-  - [ ] Copy submenu: full hash, short hash, subject, author name, author email; with several commits selected, one line per commit
+- [ ] **Right-click menu** on commit rows (every desktop Git client has one). Described in [USER_GUIDE.md](USER_GUIDE.md#commit-menu)
+  - [x] `ContextMenu`: a reusable menu at the pointer with submenus, kept inside the window, with native-menu keys (↑ ↓ Home End, → ←, Enter, Escape, Tab); opened from the keyboard with `Shift+F10` or the menu key. A right-click inside the selection acts on all of it, elsewhere it selects that commit first
+  - [x] Edit (opens `EditPanel` with the message focused, like `Enter`; disabled for pushed commits; "Edit N commits" focuses `BulkEditPanel`)
+  - [x] Copy submenu: full hash, short hash, subject, author name, author email, each showing the value; with several commits selected, one line per commit in list order (`src/clipboard.ts` shared with `RunOutputDialog`)
   - [ ] The same copy actions without the menu: click-to-copy on the hash and author in the commit details, `Ctrl+C` copies the selected commits' hashes
   - Later: Squash / Drop / Reword, as each of those operations is added
 

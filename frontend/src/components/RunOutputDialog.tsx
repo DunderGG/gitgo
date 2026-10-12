@@ -1,18 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { SaveRunOutput } from '../../wailsjs/go/app/App'
-import { ClipboardSetText } from '../../wailsjs/runtime/runtime'
 import type { app } from '../../wailsjs/go/models'
-
-// copyText puts text on the clipboard through Wails, or the browser when the
-// frontend runs without it (npm run dev).
-async function copyText(text: string): Promise<boolean> {
-  try {
-    return await ClipboardSetText(text)
-  } catch {
-    await navigator.clipboard.writeText(text)
-    return true
-  }
-}
+import { copyText } from '../clipboard'
 
 interface RunOutputDialogProps {
   title: string

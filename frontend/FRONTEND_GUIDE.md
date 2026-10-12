@@ -218,6 +218,22 @@ Current behavior:
 - the Select all unpushed button in the legend (or Ctrl+A) selects every unpushed commit at once
 - a banner above the rows explains when the repo has no remote, the branch has no upstream (every commit counts as unpushed), or every commit is already pushed
 - shows "This branch has no commits yet." when the log is empty
+- a right-click (or Shift+F10 / the menu key) on a row opens CommitContextMenu: inside the selection it acts on the whole selection, on any other row it selects that row first. The menu closes when the commit list reloads
+
+### src/components/ContextMenu.tsx
+
+A reusable right-click menu, rendered into document.body at a window position and kept inside the window. Takes a list of items (label, dimmed hint, disabled with a title, onSelect) and separators; an item with a submenu opens it to the side on hover, click or →. Works with the keyboard like a native menu (↑ ↓ Home End, → ←, Enter, Escape, Tab) and takes every key while open, so the app-wide shortcuts cannot act behind it. A click elsewhere, scrolling, resizing or leaving the window closes it, and focus goes back to where it was.
+
+### src/components/CommitContextMenu.tsx
+
+The CommitList rows' menu, built on ContextMenu:
+
+- Edit: opens the commit and focuses its message (like Enter); disabled for a pushed commit; with several commits selected, "Edit N commits" focuses BulkEditPanel
+- Copy: full hash, short hash, subject, author name or author email, each showing the value it copies; with several commits selected, one line per commit in list order. Reports the result in StatusBar
+
+### src/clipboard.ts
+
+copyText puts text on the clipboard through the Wails runtime, or the browser's clipboard when the frontend runs without Wails (npm run dev).
 
 ### src/components/EditPanel.tsx
 
@@ -334,6 +350,8 @@ App-wide keyboard shortcuts, registered once from App.tsx:
 - Escape: close the edit panel by clearing the selection, and return focus to the commit row
 - F1: open the help dialog (skipped while the confirm dialog is open)
 - Ctrl+, (Cmd+, on macOS): open the settings dialog (skipped while another dialog is open)
+
+It also exports focus helpers used across components: focusCommitRow, focusCommitSearch, and focusEditPanel (the first enabled control in the element marked data-edit-panel, which EditPanel and BulkEditPanel set).
 
 ## Wails binding files you will see
 
