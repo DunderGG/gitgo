@@ -15,6 +15,7 @@ import {
   SetStaleFetchDays,
   SetTerminalCommand,
   SetTheme,
+  SetZoom,
   UndoLastOperation,
 } from '../../wailsjs/go/app/App'
 import { errorText, friendlyError } from '../errors'
@@ -22,6 +23,7 @@ import { applyTheme, isThemePreference, type ThemePreference } from '../theme'
 import { DEFAULT_MESSAGE_GUIDES, type MessageGuides } from '../messageGuides'
 import { DEFAULT_OFFICE_HOURS, type OfficeHours } from '../officeHours'
 import { DEFAULT_STALE_FETCH_DAYS } from '../lastFetch'
+import { applyZoom, DEFAULT_ZOOM } from '../zoom'
 
 // Where earlier versions kept the recent repositories, in the WebView's
 // localStorage. loadSettings moves the list to the backend's settings file.
@@ -67,6 +69,7 @@ export async function loadSettings(): Promise<void> {
   removeLegacyRecentRepos()
   const theme = isThemePreference(settings.theme) ? settings.theme : 'system'
   applyTheme(theme)
+  applyZoom(settings.zoom)
   const messageGuides = { subject: settings.subjectGuide, body: settings.bodyGuide }
   const terminalCommand = settings.terminalCommand
   const officeHours = settings.officeHours
@@ -75,6 +78,7 @@ export async function loadSettings(): Promise<void> {
   useRepoStore.setState({
     recentRepos,
     theme,
+    zoom: settings.zoom,
     messageGuides,
     terminalCommand,
     officeHours,
@@ -86,6 +90,9 @@ export async function loadSettings(): Promise<void> {
 // How many git operations runGitOperation has started; see
 // checkForExternalChanges.
 let operationCount = 0
+
+// The last SetZoom call; see setZoom.
+let zoomSave: Promise<unknown> = Promise.resolve()
 
 // The last SetTerminalCommand call; see setTerminalCommand.
 let terminalSave: Promise<unknown> = Promise.resolve()
@@ -155,6 +162,9 @@ interface RepoStore {
   recentRepos: string[]
   // Colour theme the user picked (header theme button), saved in the settings file.
   theme: ThemePreference
+  // Size of the interface in percent (Ctrl+ / Ctrl− / Ctrl+0), saved in the
+  // settings file.
+  zoom: number
   // Commit message guide columns (0 turns a guide off), saved in the
   // settings file.
   messageGuides: MessageGuides
@@ -214,6 +224,7 @@ interface RepoStore {
   openRepository: (path: string) => Promise<void>
   removeRecentRepo: (path: string) => void
   setTheme: (theme: ThemePreference) => void
+  setZoom: (zoom: number) => void
   setMessageGuides: (messageGuides: MessageGuides) => void
   setOfficeHours: (officeHours: OfficeHours) => void
   setStaleFetchDays: (staleFetchDays: number) => void
@@ -253,6 +264,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   commits: [],
   recentRepos: [],
   theme: 'system',
+  zoom: DEFAULT_ZOOM,
   messageGuides: DEFAULT_MESSAGE_GUIDES,
   terminalCommand: '',
   officeHours: DEFAULT_OFFICE_HOURS,
@@ -328,6 +340,20 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     set({ theme })
     // The theme is already showing, so a failed save only loses it for the next run.
     SetTheme(theme).catch((error) => console.error('Saving the theme failed:', error))
+  },
+
+  setZoom: (zoom) => {
+    if (zoom === get().zoom) {
+      return
+    }
+    applyZoom(zoom)
+    set({ zoom })
+    // Like the theme, a failed save only loses the zoom for the next run.
+    // Saves run one after another, so holding Ctrl+ keeps the last level even
+    // when an earlier save is slower.
+    zoomSave = zoomSave
+      .then(() => SetZoom(zoom))
+      .catch((error) => console.error('Saving the zoom failed:', error))
   },
 
   setMessageGuides: (messageGuides) => {

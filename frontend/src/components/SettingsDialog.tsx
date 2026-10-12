@@ -4,6 +4,8 @@ import { DEFAULT_MESSAGE_GUIDES, MAX_GUIDE_COLUMN, type MessageGuides } from '..
 import { DEFAULT_OFFICE_HOURS, formatOfficeHours, officeHoursError, WEEKDAYS, type OfficeHours } from '../officeHours'
 import { DEFAULT_BACKUP_SETTINGS, MAX_AUTO_BACKUPS_KEPT, useRepoStore } from '../store/repoStore'
 import { themePreferences, type ThemePreference } from '../theme'
+import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, zoomIn, zoomOut } from '../zoom'
+import Kbd from './Kbd'
 
 const themeLabels: Record<ThemePreference, string> = { system: 'System', light: 'Light', dark: 'Dark' }
 
@@ -286,6 +288,63 @@ function BackupFields() {
   )
 }
 
+const ZOOM_BUTTON_CLASS =
+  'rounded-md border border-gray-700 px-2 py-1 text-sm text-gray-300 transition hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60'
+
+// The size of the interface, the same setting as Ctrl+ / Ctrl− / Ctrl+0.
+function ZoomField() {
+  const zoom = useRepoStore((s) => s.zoom)
+  const setZoom = useRepoStore((s) => s.setZoom)
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <span id="settings-zoom" className="text-sm text-gray-200">
+          Zoom
+        </span>
+        <div role="group" aria-labelledby="settings-zoom" className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setZoom(zoomOut(zoom))}
+            disabled={zoom <= MIN_ZOOM}
+            title="Zoom out (Ctrl+−)"
+            aria-label="Zoom out"
+            className={ZOOM_BUTTON_CLASS}
+          >
+            −
+          </button>
+          <span aria-live="polite" className="w-12 text-center font-mono text-sm text-gray-100">
+            {zoom}%
+          </span>
+          <button
+            type="button"
+            onClick={() => setZoom(zoomIn(zoom))}
+            disabled={zoom >= MAX_ZOOM}
+            title="Zoom in (Ctrl++)"
+            aria-label="Zoom in"
+            className={ZOOM_BUTTON_CLASS}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom(DEFAULT_ZOOM)}
+            disabled={zoom === DEFAULT_ZOOM}
+            title="Back to 100% (Ctrl+0)"
+            className={`ml-1 ${ZOOM_BUTTON_CLASS}`}
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+      <p className="mt-1 text-xs text-gray-500">
+        Makes text and controls larger or smaller, for small or high-resolution screens. Also{' '}
+        <Kbd>Ctrl</Kbd>+<Kbd>+</Kbd>, <Kbd>Ctrl</Kbd>+<Kbd>−</Kbd> and <Kbd>Ctrl</Kbd>+<Kbd>0</Kbd> anywhere in the app.
+      </p>
+    </div>
+  )
+}
+
 // The dialog's content, mounted only while it is open so the guide fields
 // start from the saved values each time.
 function SettingsContent({ onClose }: { onClose: () => void }) {
@@ -403,6 +462,7 @@ function SettingsContent({ onClose }: { onClose: () => void }) {
               </div>
             </div>
             <p className="text-xs text-gray-500">System follows your operating system&apos;s light or dark setting.</p>
+            <ZoomField />
           </Section>
 
           <Section title="Commit message guides">
@@ -455,7 +515,7 @@ function SettingsContent({ onClose }: { onClose: () => void }) {
   )
 }
 
-// SettingsDialog holds the user's preferences: the colour theme, the
+// SettingsDialog holds the user's preferences: the colour theme and zoom, the
 // commit message guide columns, the office hours and the terminal command.
 // Changes apply and are saved at once, like the header's theme button.
 export default function SettingsDialog() {

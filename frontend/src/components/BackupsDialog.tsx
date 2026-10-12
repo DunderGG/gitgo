@@ -38,7 +38,7 @@ function KindBadge({ kind }: { kind: string }) {
   return (
     <span
       title={isManual ? 'Made with Back up; kept until deleted' : 'Made by GitGo before an edit or restore'}
-      className={`rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide ${
+      className={`rounded px-1.5 py-0.5 text-[0.6875rem] font-medium uppercase tracking-wide ${
         isManual ? 'bg-indigo-950/60 text-indigo-200' : 'bg-gray-800 text-gray-400'
       }`}
     >

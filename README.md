@@ -55,6 +55,7 @@ Squash, reorder and drop are planned next, followed by CI and installable binari
 | `Ctrl+Z` | Undo the last rewrite |
 | `F5` / `Ctrl+R` | Reload the repository from disk |
 | `F1` | Open the in-app help (also the `?` button in the header) |
+| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom in, out, or back to 100% (also in the settings) |
 
 On macOS, `Cmd` works in place of `Ctrl`.
 

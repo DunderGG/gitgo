@@ -50,13 +50,13 @@ function CompareRow({ label, before, after, multiline = false }: CompareRowProps
       <div className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</div>
       <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Current</div>
+          <div className="mb-1 text-[0.6875rem] uppercase tracking-wide text-gray-500">Current</div>
           <div className={`rounded-md border border-gray-800 bg-gray-950/60 px-3 py-2 text-sm text-gray-300 ${valueClassName}`}>
             {before || <span className="text-gray-600">Empty</span>}
           </div>
         </div>
         <div>
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-gray-500">New</div>
+          <div className="mb-1 text-[0.6875rem] uppercase tracking-wide text-gray-500">New</div>
           <div
             className={`rounded-md border px-3 py-2 text-sm ${valueClassName} ${
               changed

@@ -215,6 +215,7 @@ The menu needs git installed, unlike the rest of GitGo. Without it, the menu is 
 Open the settings with the **⚙** button in the header or `Ctrl+,`. Changes apply at once and are saved for next time.
 
 - **Theme:** System (follows your operating system's setting), Light or Dark. The **◐** button in the header switches between them too.
+- **Zoom:** makes text and controls larger or smaller, from 50% to 200%, for small or high-resolution screens. `Ctrl++` (or `Ctrl+=`), `Ctrl+-` and `Ctrl+0` zoom in, out and back to 100% anywhere in the app; **Reset** does the same as `Ctrl+0`.
 - **Commit message guides:** the subject line length (default 50) draws a ruler in the message field and warns about longer subjects. The body line length (default 72) warns about longer body lines. 0 turns either one off.
 - **Office hours:** your working hours, From and to, and the working days (default Mon–Fri, 09:00–17:00). They are used by **Only office hours** when [spreading dates](#only-office-hours). The start must be before the end, on the same day, so hours that run past midnight aren't supported, and at least one day must be picked.
 - **Backups:** whether **Back up first** starts ticked when you review an edit (default on), and how many automatic backups to keep per branch (default 20). Older automatic backups beyond that number are deleted when a new one is made; backups you make with **Back up** are kept until you delete them. See [Backups](#backups).

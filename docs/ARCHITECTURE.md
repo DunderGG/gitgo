@@ -200,6 +200,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `GetSettings() Settings` | *(`app/settings.go`)* Reads `settings.json` in GitGo's config directory (`os.UserConfigDir()/gitgo`). A missing or unreadable file gives the defaults, so it never fails. |
 | `SetRecentRepos(paths []string) error` | *(`app/settings.go`)* Saves the recent repositories list into `settings.json`, keeping the other settings. Files in the config directory are written to a temporary file and renamed, so a crash never leaves a half-written file. |
 | `SetTheme(theme string) error` | *(`app/settings.go`)* Saves the colour theme (`system`, `light` or `dark`) into `settings.json`. `GetSettings` gives `system` for a missing or unknown value. |
+| `SetZoom(zoom int) error` | *(`app/settings.go`)* Saves the size of the interface in percent (50–200) into `settings.json`. Out-of-range values are rejected; `GetSettings` gives 100 for missing or invalid ones. |
 | `SetMessageGuides(subject, body int) error` | *(`app/settings.go`)* Saves the commit message guide columns, for the subject ruler and length hint and for the body line length hint (0–200, 0 turns a guide off), into `settings.json`. `GetSettings` gives 50 and 72 for missing or out-of-range values. |
 | `SetOfficeHours(hours OfficeHours) error` | *(`app/settings.go`)* Saves the working hours used by "Only office hours" (`start` / `end` as `HH:MM`, start before end, and `days`, 0 for Sunday to 6, at least one) into `settings.json`. Invalid hours are rejected; `GetSettings` gives Mon–Fri 09:00–17:00 for missing or invalid ones. |
 | `SetTerminalCommand(command string) error` | *(`app/settings.go`)* Saves the command `OpenTerminal` runs into `settings.json`, trimmed; `{dir}` stands for the repository folder, and double or single quotes keep spaces in one argument (backslashes are literal, for Windows paths). Rejects an unclosed quote or an empty program name. An empty command goes back to the automatic choice. |
@@ -450,6 +451,7 @@ A modal with usage instructions, opened with the **?** button in the header (sho
 A modal with the user's preferences, opened with the **⚙** button in the header or `Ctrl+,` (store: `isSettingsOpen`). Like `HelpDialog`, it is an overlay because Wails v2 has one native window.
 
 - **Theme**: System / Light / Dark buttons calling the store's `setTheme`, the same setting the header's theme button cycles.
+- **Zoom**: the current level with − / + buttons and **Reset**, calling the store's `setZoom`, the same setting as `Ctrl+=` / `Ctrl+-` / `Ctrl+0`.
 - **Commit message guides**: number fields for the subject and body columns (0–200, 0 turns a guide off), and a button that restores 50 / 72. A valid value calls `setMessageGuides` at once, so `EditPanel` follows while the dialog is open; an invalid one is marked and not saved.
 - **Office hours**: From and to time inputs and a button per weekday. Valid hours (`officeHoursError` in `src/officeHours.ts`) call `setOfficeHours` at once; invalid ones are marked and not saved. A button restores Mon–Fri 09:00–17:00.
 - **Remote**: a number field (0–365, default 7, 0 turns the warning off) for how many days after the last fetch `StatusBar` and `CommitList` warn. A valid value calls `setStaleFetchDays` at once.
@@ -501,6 +503,7 @@ Registers the app-wide keyboard shortcuts on `window`; called once from `App.tsx
 | `Escape` | When a commit is selected: clears the selection (closing the edit panel and discarding unsaved form changes) and moves focus back to that row in `CommitList`. |
 | `F1` | Opens `HelpDialog` (`setHelpOpen(true)`), unless another `aria-modal` dialog is open, where `Escape` would close both. |
 | `Ctrl+,` / `Cmd+,` | Opens `SettingsDialog` (`setSettingsOpen(true)`), unless another `aria-modal` dialog is open. |
+| `Ctrl+=` (`Ctrl++`) / `Ctrl+-` / `Ctrl+0`, or `Cmd` | Calls `setZoom` with the next level up or down (`zoomIn` / `zoomOut` in `src/zoom.ts`) or 100%. Works in fields and dialogs too, as in a browser; the numpad keys give the same key values. |
 
 Row-level keys (`Enter`, `↑`, `↓`) are handled in `CommitList`, and `ConfirmDialog`, `HelpDialog` and `SettingsDialog` take over `Escape` while they are open. The file also exports `focusCommitRow(hash)`, used by both.
 
@@ -520,6 +523,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `commits` | `CommitSummary[]` | The current log. Empty array while no repo is open. |
 | `recentRepos` | `string[]` | Most-recent repository paths, saved in `settings.json` through `SetRecentRepos` and loaded by `loadSettings()` before the first render (moving a list from an earlier version's `localStorage` there once), deduplicated, and capped to 10 entries. |
 | `theme` | `ThemePreference` | `'system'`, `'light'` or `'dark'`, saved in `settings.json` through `SetTheme` and applied by `loadSettings()` before the first render. |
+| `zoom` | `number` | Size of the interface in percent (100 is normal), saved in `settings.json` through `SetZoom` and applied by `loadSettings()` before the first render. |
 | `messageGuides` | `MessageGuides` | Commit message guide columns, `{ subject, body }`: the subject ruler and length hint, and the body line length hint (0 turns a guide off), saved in `settings.json` through `SetMessageGuides` and loaded by `loadSettings()`. |
 | `officeHours` | `OfficeHours` | Working hours, `{ start, end, days }`, for spreading commits with "Only office hours", saved in `settings.json` through `SetOfficeHours` and loaded by `loadSettings()`. |
 | `terminalCommand` | `string` | Command the `>_` button runs, with `{dir}` for the repository folder; empty picks a terminal automatically. Saved in `settings.json` through `SetTerminalCommand`. |
@@ -540,6 +544,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `setRepo(info, commits)` | Sets `repoInfo` and `commits` together, clears `selectedHash` and `error`, sets `status` to `"Opened: <path>"`. |
 | `removeRecentRepo(path)` | Removes one path from the recent list and saves the updated list with `SetRecentRepos`. |
 | `setTheme(theme)` | Applies the theme at once (`applyTheme` in `theme.ts`) and saves it with `SetTheme`. |
+| `setZoom(zoom)` | Applies the zoom at once (`applyZoom` in `zoom.ts`, which sets the root font size so the rem-based layout scales while `vh` heights still fit the window) and saves it with `SetZoom`, one save after another so the last level wins. |
 | `selectCommit(hash)` | Sets `selectedHash` when a commit row is clicked or keyboard-selected. |
 | `setCanUndo(canUndo)` | Sets `canUndo`. `EditPanel` sets it to `true` after a rewrite. |
 | `reloadRepository()` | Async. Runs as `runGitOperation(reloadActivityLabel, …)`: calls `ReloadRepository` then `GetCommitLog` and writes both into the store directly (not via `setRepo`), keeping the selected commit if it still exists and keeping `canUndo` unless the branch changed. Sets `status` to `"Reloaded from disk"`, or explains the fallback when the branch was deleted. |

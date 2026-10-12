@@ -95,6 +95,19 @@ func (app *App) SetTheme(theme string) error {
 	return app.saveSettings(settings)
 }
 
+// SetZoom saves the size of the interface in percent, 100 being normal.
+func (app *App) SetZoom(zoom int) error {
+	if !validZoom(zoom) {
+		return fmt.Errorf("zoom must be between %d%% and %d%%", minZoom, maxZoom)
+	}
+	app.settingsMutex.Lock()
+	defer app.settingsMutex.Unlock()
+
+	settings := app.loadSettings()
+	settings.Zoom = zoom
+	return app.saveSettings(settings)
+}
+
 // SetMessageGuides saves the commit message guide columns: the subject ruler
 // and longest subject, and the longest body line. 0 turns a guide off.
 func (app *App) SetMessageGuides(subject, body int) error {
@@ -182,6 +195,18 @@ func validAutoBackupsKept(count int) bool {
 	return count >= 1 && count <= maxAutoBackupsKept
 }
 
+// The interface is shown at 100% by default, and can be zoomed from half to
+// twice that size.
+const (
+	defaultZoom = 100
+	minZoom     = 50
+	maxZoom     = 200
+)
+
+func validZoom(zoom int) bool {
+	return zoom >= minZoom && zoom <= maxZoom
+}
+
 // A week without a fetch counts as stale by default.
 const (
 	defaultStaleFetchDays = 7
@@ -235,6 +260,7 @@ func validGuide(column int) bool {
 func defaultSettings() Settings {
 	return Settings{
 		Theme:        ThemeSystem,
+		Zoom:         defaultZoom,
 		SubjectGuide: defaultSubjectGuide,
 		BodyGuide:    defaultBodyGuide,
 		OfficeHours:  defaultOfficeHours(),
@@ -260,6 +286,9 @@ func (app *App) loadSettings() Settings {
 	}
 	if !validTheme(settings.Theme) {
 		settings.Theme = ThemeSystem
+	}
+	if !validZoom(settings.Zoom) {
+		settings.Zoom = defaultZoom
 	}
 	if !validGuide(settings.SubjectGuide) {
 		settings.SubjectGuide = defaultSubjectGuide

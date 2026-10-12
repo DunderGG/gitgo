@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useRepoStore } from '../store/repoStore'
+import { DEFAULT_ZOOM, zoomIn, zoomOut } from '../zoom'
 
 // isTextEditingTarget reports whether the key event comes from a field where
 // the browser's own shortcuts (e.g. Ctrl+Z for text undo) must keep working.
@@ -24,6 +25,7 @@ export function focusCommitRow(hash: string) {
 //   - Escape: close the edit panel by clearing the selection
 //   - F1: open the help
 //   - Ctrl+, / Cmd+,: open the settings
+//   - Ctrl+= / Ctrl+- / Ctrl+0 (Cmd on macOS): zoom in, out, or back to 100%
 //
 // Row-level shortcuts (Enter, arrow keys) live in CommitList, and
 // ConfirmDialog, HelpDialog and SettingsDialog handle Escape themselves while
@@ -40,6 +42,8 @@ export function useKeyboardShortcuts() {
         reloadRepository,
         setHelpOpen,
         setSettingsOpen,
+        zoom,
+        setZoom,
       } = useRepoStore.getState()
 
       if (event.key === 'F1') {
@@ -55,6 +59,19 @@ export function useKeyboardShortcuts() {
         event.preventDefault()
         if (!document.querySelector('[aria-modal="true"]')) {
           setSettingsOpen(true)
+        }
+        return
+      }
+
+      // Zoom works everywhere, in fields and dialogs too, as in a browser.
+      // Ctrl+= is Ctrl+ on keyboards where + needs Shift, and the numpad
+      // keys give the same key values.
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && ['+', '=', '-', '0'].includes(event.key)) {
+        event.preventDefault()
+        if (event.key === '0') {
+          setZoom(DEFAULT_ZOOM)
+        } else {
+          setZoom(event.key === '-' ? zoomOut(zoom) : zoomIn(zoom))
         }
         return
       }

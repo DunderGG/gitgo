@@ -909,7 +909,7 @@ export default function BulkEditPanel() {
             {changedLabel}
           </div>
           <table className="mt-2 w-full text-left text-sm">
-            <thead className="text-[11px] uppercase tracking-wide text-gray-500">
+            <thead className="text-[0.6875rem] uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="pb-1 pr-3 font-normal">Commit</th>
                 <th className="pb-1 pr-3 font-normal">Current</th>

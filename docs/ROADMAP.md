@@ -363,7 +363,7 @@ Found in the follow-up review (2026-09-25):
   - [ ] Defaults for the **Move other branches along** checkbox in `ConfirmDialog` and **Also shift committer dates** in `BulkEditPanel` (both on today), if unticking them turns out to be common
 - [ ] **Command palette** (`Ctrl+Shift+P`) listing every action with its shortcut, as in Sublime Merge and GitKraken
 - [x] **Light theme** and following the system theme: header button cycling System / Light / Dark, saved in `settings.json`; the palettes are CSS variables swapped per theme in `tailwind.config.ts`, and the native title bar follows
-- [ ] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens (level remembered in `settings.json`, shown with a Reset button in `SettingsDialog`)
+- [x] **Zoom** with `Ctrl +` / `Ctrl −` / `Ctrl 0`, for small or high-DPI screens (level remembered in `settings.json`, shown with − / + and Reset buttons in `SettingsDialog`). Browser-like steps from 50% to 200%, applied as the root font size so the rem-based layout scales while `vh` heights still fit the window (`src/zoom.ts`, `SetZoom`; `TestSetZoom_*`)
 - [ ] **Update check** against GitHub Releases, once Phase 6 publishes binaries (with an off switch in `SettingsDialog`, since it contacts GitHub)
 - [x] In-app help (`HelpDialog`, `?` button in the header or `F1`): walkthrough of single and bulk edits, review and undo, keyboard shortcuts and safety notes
 - [x] The **Run** menu explained in the in-app help (`HelpDialog`, section 8): the history formats, patch export, the output window and the git requirement

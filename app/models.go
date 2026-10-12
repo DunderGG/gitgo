@@ -42,6 +42,8 @@ type Settings struct {
 	RecentRepos []string `json:"recentRepos"`
 	// Theme is the colour theme: ThemeSystem, ThemeLight or ThemeDark.
 	Theme string `json:"theme"`
+	// Zoom is the size of the interface in percent, 100 being normal.
+	Zoom int `json:"zoom"`
 	// SubjectGuide is the column of the subject ruler in the commit message
 	// field, and the longest subject before a hint. BodyGuide is the longest
 	// body line before a hint. 0 turns a guide off.

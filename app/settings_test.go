@@ -124,6 +124,49 @@ func TestSetTheme_RejectsUnknownTheme(test *testing.T) {
 	}
 }
 
+func TestSetZoom_SavedForNextRun(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	if got := app.GetSettings().Zoom; got != 100 {
+		test.Fatalf("Zoom without a file = %d, want 100", got)
+	}
+	if err := app.SetZoom(125); err != nil {
+		test.Fatalf("SetZoom: %v", err)
+	}
+
+	nextRun := &App{settingsPath: path}
+	if got := nextRun.GetSettings().Zoom; got != 125 {
+		test.Fatalf("Zoom = %d, want 125", got)
+	}
+}
+
+func TestSetZoom_RejectsOutOfRange(test *testing.T) {
+	app, path := appWithSettingsFile(test)
+
+	for _, zoom := range []int{0, 49, 201} {
+		if err := app.SetZoom(zoom); err == nil {
+			test.Fatalf("SetZoom(%d) accepted an out-of-range value", zoom)
+		}
+	}
+	if got := app.GetSettings().Zoom; got != 100 {
+		test.Fatalf("Zoom = %d, want the default", got)
+	}
+
+	// A file from before zoom existed, or an out-of-range value edited by
+	// hand, gives the default.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		test.Fatal(err)
+	}
+	for _, content := range []string{`{"theme": "dark"}`, `{"zoom": 1000}`} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			test.Fatal(err)
+		}
+		if got := app.GetSettings().Zoom; got != 100 {
+			test.Fatalf("Zoom from %s = %d, want 100", content, got)
+		}
+	}
+}
+
 func TestGetSettings_MessageGuideDefaults(test *testing.T) {
 	app, path := appWithSettingsFile(test)
 

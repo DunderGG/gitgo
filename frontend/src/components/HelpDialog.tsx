@@ -36,6 +36,7 @@ const SHORTCUTS: { keys: ReactNode; action: string }[] = [
   { keys: <><Kbd>F5</Kbd> / <Kbd>Ctrl</Kbd>+<Kbd>R</Kbd></>, action: 'Reload the repository from disk' },
   { keys: <Kbd>F1</Kbd>, action: 'Open or close this help' },
   { keys: <><Kbd>Ctrl</Kbd>+<Kbd>,</Kbd></>, action: 'Open or close the settings (theme, commit message guides)' },
+  { keys: <><Kbd>Ctrl</Kbd>+<Kbd>+</Kbd> <Kbd>Ctrl</Kbd>+<Kbd>−</Kbd> <Kbd>Ctrl</Kbd>+<Kbd>0</Kbd></>, action: 'Zoom in, out, or back to 100%' },
 ]
 
 // HelpDialog explains how to use the app: a walkthrough of editing one or
