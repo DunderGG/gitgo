@@ -193,13 +193,15 @@ func commitSummariesFromEntries(entries []gitpkg.CommitEntry) []CommitSummary {
 	summaries := make([]CommitSummary, len(entries))
 	for index, entry := range entries {
 		summaries[index] = CommitSummary{
-			Hash:       entry.Hash.String(),
-			ShortHash:  entry.ShortHash,
-			Message:    entry.Message,
-			Author:     entry.AuthorName,
-			Committer:  entry.CommitterName,
-			Date:       entry.Date.Format("2006-01-02T15:04:05Z07:00"),
-			IsUnpushed: entry.IsUnpushed,
+			Hash:        entry.Hash.String(),
+			ShortHash:   entry.ShortHash,
+			Message:     entry.Message,
+			Body:        entry.Body,
+			Author:      entry.AuthorName,
+			AuthorEmail: entry.AuthorEmail,
+			Committer:   entry.CommitterName,
+			Date:        entry.Date.Format("2006-01-02T15:04:05Z07:00"),
+			IsUnpushed:  entry.IsUnpushed,
 		}
 	}
 	return summaries

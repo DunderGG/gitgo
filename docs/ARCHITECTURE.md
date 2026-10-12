@@ -217,7 +217,7 @@ Data transfer types that cross the IPC boundary. All fields carry `json:` tags s
 | Type | Purpose |
 |---|---|
 | `RepoInfo` | Returned by `OpenRepository` and `SwitchBranch`. Carries the absolute repo path, the selected branch name, `IsCheckedOut` (whether that branch is the one HEAD points at), two boolean flags: `HasRemote` (at least one remote configured) and `HasUpstream` (current branch tracks a remote branch), and `LastFetch`: when `FETCH_HEAD` was last written (RFC 3339), or empty when no fetch is recorded. The frontend uses these to decide what to display in `StatusBar` and above `CommitList`. |
-| `CommitSummary` | One row in the commit list. Contains the full 40-character hash, a 7-character short hash for display, the first line of the commit message, the author and committer names, an RFC 3339 date string, and `IsUnpushed` — the flag the frontend uses for visual distinction and to gate editing. |
+| `CommitSummary` | One row in the commit list. Contains the full 40-character hash, a 7-character short hash for display, the first line of the commit message (`Message`) and the rest of it (`Body`), the author name and email, the committer name, an RFC 3339 date string, and `IsUnpushed` — the flag the frontend uses for visual distinction and to gate editing. |
 | `CommitDetail` | *(Phase 2)* Full commit metadata for the edit form. Extends `CommitSummary` with `AuthorEmail` so the user can edit it. |
 | `EditRequest` | *(Phase 2)* The payload the frontend sends when the user confirms an edit. Contains the target hash plus the editable fields: message, author name, author email, and date, whether to sync the committer date, and `Committer` (`"keep"`, `"author"` or `"set"` with `CommitterName` / `CommitterEmail`) for the committer name and email. |
 | `OperationResult` | *(Phase 2)* Returned by all mutating bound methods. `Success bool` lets the frontend distinguish a handled error from an unexpected one; `Message string` provides human-readable context to display. |
@@ -263,7 +263,7 @@ The commit-log layer. Exposes one public type and one public function:
 
 **`Log(state *RepoState, limit int) ([]CommitEntry, error)`** — walks the commit graph from the tip of `state.Branch` using go-git's `repo.Log`. If `limit` is 0 or negative, the default of 100 is used. For each commit:
 - Short hash is the first 7 characters of the 40-character hex string.
-- Message is the first line only (via `firstLine`) — multi-line commit messages show only the subject in the list.
+- Message is the first line only (via `firstLine`) — multi-line commit messages show only the subject in the list. `Body` holds the rest, trimmed (`messageBody`), and `AuthorEmail` the author's email; the list does not show them, but its search reads them.
 - `IsUnpushed` is a direct lookup into `state.UnpushedHashes` — O(1) per commit.
 - `Date` is `commit.Author.When`, which reflects the author timestamp (not the committer timestamp), consistent with what `git log` shows by default.
 
@@ -314,6 +314,18 @@ Turns raw error text into messages a user can act on. Wails rejects a bound meth
 - `errorText(error)` — converts any thrown value to its message text.
 
 When adding a new backend error whose raw text is not user-friendly, add a rule here.
+
+---
+
+#### `frontend/src/commitSearch.ts`
+
+Parses and applies the commit list search. `parseCommitSearch(query)` splits the query into words (quotes keep spaces; an unclosed quote runs to the end while typing) and returns `{ isActive, problems, matches }`; a commit must match every word.
+
+- A plain word matches, ignoring case, the subject (`message`), `body`, `author` or `authorEmail`; the start of the hash from four hex characters; and, when it reads as a year, month or day (`2026`, `2026-10`, `2026-10-12`), commits from that period.
+- `author:`, `message:` and `hash:` limit a word to those fields. `date:`, `since:` and `until:` take a year, month or day: within it, on or after its start, and before its end. Days are local calendar days, the same ones `CommitRow` shows. A date that does not exist (`2026-02-30`, `2026-13`) adds a sentence to `problems` and the word is left out.
+- A known qualifier with nothing after it (`author:`) is ignored while it is being typed; an unknown key (`fix:`, a URL) is part of the text.
+
+`filterCommits(commits, query)` returns the matching commits in list order (the same array when the search is empty); the store uses it for selection. `LOG_DEPTH` mirrors `DefaultLogDepth` in `git/log.go`, so the list can say when older commits are not searched.
 
 ---
 
@@ -368,17 +380,18 @@ Any error at any step calls `setError(String(err))`, which maps it to a friendly
 The main view after a repository is opened. Reads `commits` from the Zustand store (reactive — updates automatically if the store changes).
 
 Structure:
+- **Search bar** (internal `CommitSearchBar`) — a field bound to the store's `commitSearch` (`Ctrl+F` focuses it through its `data-commit-search` attribute), parsed with `parseCommitSearch` from `src/commitSearch.ts`. Only matching commits are rendered (`shownCommits`), the field shows "N of M" (M reads "the latest 100" when the list is full at `LOG_DEPTH`, since older commits are not searched), and the parser's `problems` (for example a date qualifier with an impossible date) are listed under it. In the field, `Enter` / `↓` focus the selected row if it is shown, or select and focus the first match; `Escape` clears a non-empty search and stops the event so the app-wide `Escape` keeps the selection; an empty field just loses focus. An **×** button also clears it.
 - **Column headers** — a fixed header row with labels for hash, message, author, and date.
-- **Legend** — a summary row showing the count of unpushed (indigo dot) vs pushed (grey dot) commits, the selected count during a multi-selection, and a **Select all unpushed** button (`selectAllUnpushed`, also `Ctrl+A`). The button is disabled when there are no unpushed commits or all of them are already selected, and moves focus to the primary row.
+- **Legend** — a summary row showing the count of shown unpushed (indigo dot) vs pushed (grey dot) commits, the selected count during a multi-selection (with how many of them the search hides), and a **Select all unpushed** button (`selectAllUnpushed`, also `Ctrl+A`), labelled **Select unpushed matches** while a search is active. The button is disabled when no shown commit is unpushed or all of them are already selected, and moves focus to the primary row.
 - **Notice banner** (optional, from `listNotice`) — explains a surprising pushed/unpushed split. At most one shows, in this priority order: no remote (info: every commit counts as unpushed), no upstream (warning: every commit counts as unpushed, avoid editing commits pushed under another name),, a fetch older than the "Remote" setting while there are unpushed commits (warning: commits pushed since may still show as unpushed; run `git fetch` and press F5), or no unpushed commits (muted: nothing to edit).
 - **Empty branch** — when `commits` is empty, the list is replaced by "This branch has no commits yet."
-- **Scrollable commit rows** — each rendered by the internal `CommitRow` component.
+- **Scrollable commit rows** — each rendered by the internal `CommitRow` component. When the search matches nothing, "No commits match the search." with a **Clear search** button (and, when the list is full, a note that only the latest commits are searched).
 
 `CommitRow` renders one commit. Visual treatment:
 - Unpushed commits render at full opacity with an indigo dot. Pushed commits render at 60% opacity with a grey dot, communicating they are read-only.
 - Rows are selectable by click. The selected row is highlighted with a darker indigo background and left border. Each row carries a `data-commit-hash` attribute so keyboard code can focus it.
-- Keyboard: `Enter` selects the focused row and calls `requestEditFocus()` so `EditPanel` focuses its message field once the commit has loaded (editable commits only). `↑` / `↓` move the selection and focus to the previous / next row.
-- Multi-selection: `Ctrl`/`Cmd`-click toggles a row (`toggleCommitSelection`), and `Shift`-click or `Shift+↑` / `↓` selects the range from the anchor row (`extendSelection`). Only unpushed commits join a multi-selection. All selected rows are highlighted, the one last clicked with a brighter border, and the legend shows the count. With more than one commit selected, `App` shows `BulkEditPanel` instead of `EditPanel`.
+- Keyboard: `Enter` selects the focused row and calls `requestEditFocus()` so `EditPanel` focuses its message field once the commit has loaded (editable commits only). `↑` / `↓` move the selection and focus to the previous / next shown row; `↑` on the first row moves focus to the search field.
+- Multi-selection: `Ctrl`/`Cmd`-click toggles a row (`toggleCommitSelection`), and `Shift`-click or `Shift+↑` / `↓` selects the range of shown rows from the anchor row (`extendSelection`). Only unpushed commits join a multi-selection. All selected rows are highlighted, the one last clicked with a brighter border, and the legend shows the count. With more than one commit selected, `App` shows `BulkEditPanel` instead of `EditPanel`.
 - The 7-character short hash is monospaced and `select-all` so users can copy it.
 - The commit message truncates with Tailwind `truncate` and the full message is in a `title` attribute on hover.
 - The date is localised via `toLocaleDateString` rather than shown as a raw ISO string.
@@ -483,6 +496,8 @@ Successful rewrite messages from `UpdateCommit` also surface here, including the
 
 When `canUndo` is true, an **Undo** button appears next to the status text. It calls the store's `undoLastOperation` action, the same one the `Ctrl+Z` shortcut uses, and is disabled while any git operation is running (`activity` is set).
 
+When `zoom` is not 100%, the zoom level (for example "125%") is shown at the far right; clicking it calls `setZoom(DEFAULT_ZOOM)`, like `Ctrl+0`.
+
 ---
 
 #### `frontend/src/components/Spinner.tsx`
@@ -499,13 +514,14 @@ Registers the app-wide keyboard shortcuts on `window`; called once from `App.tsx
 |---|---|
 | `F5` / `Ctrl+R` / `Cmd+R` | Calls `reloadRepository()` when a repo is open. Always intercepted, because in the Wails webview these keys would otherwise reload the page and lose all UI state. |
 | `Ctrl+Z` / `Cmd+Z` | Calls `undoLastOperation()`. Ignored when the key event comes from an `input`, `textarea`, `select` or editable element, so the browser's own text undo keeps working there. |
-| `Ctrl+A` / `Cmd+A` | Calls `selectAllUnpushed()` when a repo is open, keeping the current commit as the primary one if it is unpushed, and focuses that row. Ignored in text-editing elements (where it selects the field's text) and while an `aria-modal` dialog is open. |
+| `Ctrl+A` / `Cmd+A` | Calls `selectAllUnpushed()` when a repo is open (only the commits the search shows), keeping the current commit as the primary one if it is unpushed, and focuses that row. Ignored in text-editing elements (where it selects the field's text) and while an `aria-modal` dialog is open. |
+| `Ctrl+F` / `Cmd+F` | Calls `focusCommitSearch()` when a repo is open, focusing the search field above `CommitList` and selecting its text. Works from text fields too, but not while an `aria-modal` dialog is open. |
 | `Escape` | When a commit is selected: clears the selection (closing the edit panel and discarding unsaved form changes) and moves focus back to that row in `CommitList`. |
 | `F1` | Opens `HelpDialog` (`setHelpOpen(true)`), unless another `aria-modal` dialog is open, where `Escape` would close both. |
 | `Ctrl+,` / `Cmd+,` | Opens `SettingsDialog` (`setSettingsOpen(true)`), unless another `aria-modal` dialog is open. |
 | `Ctrl+=` (`Ctrl++`) / `Ctrl+-` / `Ctrl+0`, or `Cmd` | Calls `setZoom` with the next level up or down (`zoomIn` / `zoomOut` in `src/zoom.ts`) or 100%. Works in fields and dialogs too, as in a browser; the numpad keys give the same key values. |
 
-Row-level keys (`Enter`, `↑`, `↓`) are handled in `CommitList`, and `ConfirmDialog`, `HelpDialog` and `SettingsDialog` take over `Escape` while they are open. The file also exports `focusCommitRow(hash)`, used by both.
+Row-level keys (`Enter`, `↑`, `↓`) are handled in `CommitList`, and `ConfirmDialog`, `HelpDialog` and `SettingsDialog` take over `Escape` while they are open. The file also exports `focusCommitRow(hash)`, used by both, and `focusCommitSearch()`.
 
 The component subscribes to three separate store selectors rather than the whole store, so it only re-renders when one of those three values changes.
 
@@ -529,6 +545,7 @@ The single source of truth for all application state. Built with Zustand (no Pro
 | `terminalCommand` | `string` | Command the `>_` button runs, with `{dir}` for the repository folder; empty picks a terminal automatically. Saved in `settings.json` through `SetTerminalCommand`. |
 | `staleFetchDays` | `number` | Days after the last fetch before `StatusBar` and `CommitList` warn that the pushed / unpushed split may be out of date; 0 never warns. Saved in `settings.json` through `SetStaleFetchDays`. |
 | `selectedHash` | `string | null` | Currently selected `string \| null` | Currently selected commit hash in `CommitList`. `null` means no row is selected yet. |
+| `commitSearch` | `string` | Text in the search field above `CommitList` (see `commitSearch.ts`). `extendSelection` and `selectAllUnpushed` only take the commits it shows (`filterCommits`); selected commits stay selected when it hides them. `setRepo` keeps it for the same repository (after edits, undo, branch switches) and clears it for another one; `closeRepository` clears it. Set with `setCommitSearch`. |
 | `canUndo` | `boolean` | `true` after a successful rewrite; shows the Undo button in `StatusBar`. Reset by every `setRepo` call and by `closeRepository`. |
 | `activity` | `string \| null` | Label of the git operation currently running (e.g. `"Switching to main…"`), or `null` when idle. Drives the status-bar spinner and disables controls that would start another git operation. |
 | `pendingEditFocus` | `boolean` | Set by `Enter` on a commit row; consumed by `EditPanel` after the commit loads. |
@@ -603,7 +620,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `RepoSwitcher` | Header dropdown showing the open repository; lists the recent repositories and an "Open another folder…" entry (`SelectDirectory`), and opens the one picked via the store's `openRepository` |
 | `BranchSelector` | *(Phase 3)* Header dropdown of local branches; switches the viewed/edited branch via `SwitchBranch` without checking it out |
 | `RunMenu` | Header dropdown of ready-made, read-only git commands (`RunHistory`, `ExportPatches`), disabled with an explanation when `GetGitStatus` finds no git; shows the output in `RunOutputDialog` (Copy, Save… via `SaveRunOutput`) |
-| `CommitList` | Scrollable commit log; indigo/grey dot for unpushed/pushed; column headers and legend; row selection state; `Enter` / arrow-key navigation |
+| `CommitList` | Scrollable commit log; search field (`commitSearch.ts`); indigo/grey dot for unpushed/pushed; column headers and legend; row selection state; `Enter` / arrow-key navigation |
 | `useKeyboardShortcuts` | *(Phase 3)* App-wide `Ctrl+Z` (undo) and `Escape` (close edit panel) shortcuts |
 | `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite messages, Undo button after a rewrite |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |

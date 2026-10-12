@@ -113,13 +113,17 @@ type RepoInfo struct {
 // CommitSummary is a lightweight representation of a commit for the commit list.
 // IsUnpushed indicates whether the commit is safe to edit.
 type CommitSummary struct {
-	Hash       string `json:"hash"`
-	ShortHash  string `json:"shortHash"`
-	Message    string `json:"message"`
-	Author     string `json:"author"`
-	Committer  string `json:"committer"`
-	Date       string `json:"date"`
-	IsUnpushed bool   `json:"isUnpushed"`
+	Hash      string `json:"hash"`
+	ShortHash string `json:"shortHash"`
+	Message   string `json:"message"`
+	// Body is the message after the subject line, which the commit list's
+	// search reads along with the author email.
+	Body        string `json:"body"`
+	Author      string `json:"author"`
+	AuthorEmail string `json:"authorEmail"`
+	Committer   string `json:"committer"`
+	Date        string `json:"date"`
+	IsUnpushed  bool   `json:"isUnpushed"`
 }
 
 // CommitDetail carries the full metadata needed to populate the edit panel.

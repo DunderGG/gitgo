@@ -29,7 +29,8 @@ const SHORTCUTS: { keys: ReactNode; action: string }[] = [
   { keys: <><Kbd>Shift</Kbd>+<Kbd>↑</Kbd> <Kbd>Shift</Kbd>+<Kbd>↓</Kbd></>, action: 'Extend the selection over several unpushed commits' },
   { keys: <><Kbd>Ctrl</Kbd>+click</>, action: 'Add or remove an unpushed commit from the selection' },
   { keys: <><Kbd>Shift</Kbd>+click</>, action: 'Select every unpushed commit between the last selected one and the clicked one' },
-  { keys: <><Kbd>Ctrl</Kbd>+<Kbd>A</Kbd></>, action: 'Select every unpushed commit (outside text fields)' },
+  { keys: <><Kbd>Ctrl</Kbd>+<Kbd>A</Kbd></>, action: 'Select every unpushed commit, or every match of a search (outside text fields)' },
+  { keys: <><Kbd>Ctrl</Kbd>+<Kbd>F</Kbd></>, action: 'Search the commit list; Escape clears the search' },
   { keys: <Kbd>Enter</Kbd>, action: 'Open the selected commit and jump to its first field' },
   { keys: <Kbd>Escape</Kbd>, action: 'Close the edit panel, confirmation dialog or this help' },
   { keys: <><Kbd>Ctrl</Kbd>+<Kbd>Z</Kbd></>, action: 'Undo the last rewrite (outside text fields)' },
@@ -147,6 +148,13 @@ export default function HelpDialog() {
               bar shows when that was and turns yellow when it is older than the limit in Settings: fetch, then press{' '}
               <Kbd>F5</Kbd>.
             </p>
+            <p className="text-gray-400">
+              To find a commit, type in the search field above the list (<Kbd>Ctrl</Kbd>+<Kbd>F</Kbd>). Words are
+              looked for in the message, author, hash and date, and every word must match. Limit a word with{' '}
+              <Ui>author:</Ui>, <Ui>message:</Ui>, <Ui>hash:</Ui> or <Ui>date:</Ui>, or pick a period with{' '}
+              <Ui>since:2026-10-01</Ui> and <Ui>until:2026-10-12</Ui>. Only the commits in the list (the latest 100)
+              are searched.
+            </p>
           </Section>
 
           <Section title="3. Edit a single commit">
@@ -185,7 +193,8 @@ export default function HelpDialog() {
               <li>
                 Select several unpushed commits: <Kbd>Ctrl</Kbd>+click to add or remove one at a time,{' '}
                 <Kbd>Shift</Kbd>+click to select a range, or hold <Kbd>Shift</Kbd> and use <Kbd>↑</Kbd> <Kbd>↓</Kbd>.
-                To take them all, click <Ui>Select all unpushed</Ui> above the list or press <Kbd>Ctrl</Kbd>+<Kbd>A</Kbd>.
+                To take them all, click <Ui>Select all unpushed</Ui> above the list or press <Kbd>Ctrl</Kbd>+<Kbd>A</Kbd>;
+                with a search, such as <Ui>author:old@example.com</Ui>, that selects only the matching commits.
                 The <Ui>Edit Several Commits</Ui> panel replaces the edit panel.
               </li>
               <li>

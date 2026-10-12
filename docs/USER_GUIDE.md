@@ -29,6 +29,31 @@ Whether a commit is pushed is checked again right before every edit and undo, so
 
 The remote-tracking branches are only as up to date as your last `git fetch` (or `git pull`), and GitGo never fetches by itself. The status bar shows when you last fetched, for example **Fetched 3 days ago**, or **No fetch recorded** for a fresh clone. When the last fetch is older than the limit in [Settings](#settings) (7 days by default), it turns yellow and a notice above the list warns that commits pushed since then, for example from another clone, may still show as unpushed. Run `git fetch` and press `F5` before editing.
 
+## Finding commits
+
+Type in the search field above the commit list, or press `Ctrl+F` to jump to it. The list shows only the commits that match, and the number of matches appears next to the field.
+
+A commit must match every word you type. A plain word is looked for in the whole message (subject and body, so trailers such as `Co-authored-by` too), the author's name and email, and the start of the hash (from four characters). A word that looks like a date, such as `2026-10`, also matches commits from then. Case doesn't matter, and quotes keep words together: `"fix login"`.
+
+To look in one place only, put a qualifier before the word:
+
+| Qualifier | Matches |
+|---|---|
+| `author:jane` | the author's name or email contains "jane" |
+| `message:fix` | the subject or body contains "fix" |
+| `hash:a1b2c3` | the hash starts with `a1b2c3` |
+| `date:2026-10` | commits from that year, month or day: `2026`, `2026-10` or `2026-10-12` |
+| `since:2026-10-01` | commits on or after that day (or the start of that month or year) |
+| `until:2026-10-12` | commits on or before that day (or the end of that month or year) |
+
+For example, `author:"Jane Doe" since:2026-10` finds Jane's commits since the start of October. Dates are the author dates, as the list shows them: calendar days in this computer's time zone. A qualifier with a date that doesn't exist, such as `until:2026-02-30`, is explained under the field and left out of the search.
+
+In the field, `Enter` or `↓` moves to the list (selecting the first match unless the selected commit is shown), `↑` on the first row goes back to the field, and `Escape` clears the search. The search stays while you edit, undo and switch branches, and is cleared when you open another repository.
+
+The search only sees the commits in the list, which is the latest 100. When the list is full, the count says so, for example **3 of the latest 100**.
+
+With a search, **Select all unpushed** becomes **Select unpushed matches** (also `Ctrl+A`), and `Shift` ranges skip the commits the search hides. This is a quick way to pick commits to fix together: search `author:old@example.com`, select the matches, and [set a new author](#author-and-committer). Commits you selected before searching stay selected even when the search hides them; the list says how many are hidden, and they are still edited.
+
 ## Editing one commit
 
 Click an unpushed commit, or move to it with `↑` / `↓` and press `Enter`. The **Edit Commit** panel shows its details.
@@ -78,7 +103,7 @@ Select several unpushed commits:
 - `Ctrl`+click adds or removes one commit.
 - `Shift`+click selects the range from the last selected commit.
 - `Shift`+`↑` / `↓` extends the selection.
-- **Select all unpushed**, or `Ctrl+A`, selects every unpushed commit.
+- **Select all unpushed**, or `Ctrl+A`, selects every unpushed commit. With a [search](#finding-commits), it selects the unpushed commits that match.
 
 The **Edit Several Commits** panel replaces the edit panel. All of its changes are applied as one rewrite, which one undo reverts. Messages can't be changed for several commits at once, apart from their [trailers](#co-authors-and-sign-offs).
 
@@ -215,7 +240,7 @@ The menu needs git installed, unlike the rest of GitGo. Without it, the menu is 
 Open the settings with the **⚙** button in the header or `Ctrl+,`. Changes apply at once and are saved for next time.
 
 - **Theme:** System (follows your operating system's setting), Light or Dark. The **◐** button in the header switches between them too.
-- **Zoom:** makes text and controls larger or smaller, from 50% to 200%, for small or high-resolution screens. `Ctrl++` (or `Ctrl+=`), `Ctrl+-` and `Ctrl+0` zoom in, out and back to 100% anywhere in the app; **Reset** does the same as `Ctrl+0`.
+- **Zoom:** makes text and controls larger or smaller, from 50% to 200%, for small or high-resolution screens. `Ctrl++` (or `Ctrl+=`), `Ctrl+-` and `Ctrl+0` zoom in, out and back to 100% anywhere in the app; **Reset** does the same as `Ctrl+0`. While zoomed, the level is shown at the right end of the status bar; click it to go back to 100%.
 - **Commit message guides:** the subject line length (default 50) draws a ruler in the message field and warns about longer subjects. The body line length (default 72) warns about longer body lines. 0 turns either one off.
 - **Office hours:** your working hours, From and to, and the working days (default Mon–Fri, 09:00–17:00). They are used by **Only office hours** when [spreading dates](#only-office-hours). The start must be before the end, on the same day, so hours that run past midnight aren't supported, and at least one day must be picked.
 - **Backups:** whether **Back up first** starts ticked when you review an edit (default on), and how many automatic backups to keep per branch (default 20). Older automatic backups beyond that number are deleted when a new one is made; backups you make with **Back up** are kept until you delete them. See [Backups](#backups).

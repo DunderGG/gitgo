@@ -286,7 +286,12 @@ Found in the follow-up review (2026-09-25):
 > Finding, selecting and inspecting commits in `CommitList`.
 
 - [x] **Select all unpushed** (button above `CommitList` and `Ctrl+A`), as the starting point for a bulk shift or author fix
-- [ ] Commit search and filtering by message, author, date, or hash
+- [x] **Commit search** by message, author, date, or hash: a search field above `CommitList` (`Ctrl+F`) that shows only the matching commits. Described in [USER_GUIDE.md](USER_GUIDE.md#finding-commits)
+  - [x] `CommitEntry.Body` / `AuthorEmail` and `CommitSummary.body` / `authorEmail`, so the whole message and the author's email can be searched (`TestLog_MessageIsFirstLine`, `TestLog_SearchFields`)
+  - [x] `src/commitSearch.ts`: every word must match; a plain word looks in the message, author name and email, hash start (from 4 characters) and date; `author:`, `message:`, `hash:`, `date:`, `since:` and `until:` qualifiers; quotes for phrases; dates as a year, month or day in local time, as the list shows them; impossible dates are explained under the field
+  - [x] The store's `commitSearch`: kept across edits, undo and branch switches, cleared for another repository. Shift ranges and **Select all unpushed** (then **Select unpushed matches**, also `Ctrl+A`) only take the shown commits, so a search such as `author:old@example.com` picks the commits for a bulk author fix; selected commits the search hides stay selected and are counted in the legend
+  - [x] Keyboard: `Enter` / `↓` in the field move to the list, `↑` on the first row goes back, `Escape` clears the search
+  - Not done: searching past the 100 loaded commits (waits for **Load more commits**), highlighting the matched text in the rows, negated words (`-word`), and a committer qualifier
 - [ ] Copy actions for commit metadata (full hash, short hash, author name, author email)
 - [ ] **Load more commits**: the list stops at 100 commits (`DefaultLogDepth` in `git/log.go`); load the next page when scrolling to the end, or show a "Load more" row
 - [ ] **Branch and tag labels** on the rows they point to, as every Git GUI does, so it is clear which other refs an edit will affect before opening `ConfirmDialog`

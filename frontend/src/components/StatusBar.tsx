@@ -1,5 +1,6 @@
 import { fetchStatus, useNow } from '../lastFetch'
 import { useRepoStore } from '../store/repoStore'
+import { DEFAULT_ZOOM } from '../zoom'
 import Spinner from './Spinner'
 
 export default function StatusBar() {
@@ -12,6 +13,8 @@ export default function StatusBar() {
   const activity = useRepoStore((s) => s.activity)
   const undoLastOperation = useRepoStore((s) => s.undoLastOperation)
   const staleFetchDays = useRepoStore((s) => s.staleFetchDays)
+  const zoom = useRepoStore((s) => s.zoom)
+  const setZoom = useRepoStore((s) => s.setZoom)
   const now = useNow()
   const fetch = repoInfo ? fetchStatus(repoInfo, staleFetchDays, now) : null
 
@@ -81,6 +84,18 @@ export default function StatusBar() {
             className="rounded border border-gray-600 px-2 py-0.5 text-gray-200 transition hover:border-gray-500 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Undo
+          </button>
+        )}
+        {/* Only shown away from 100%, so a zoomed interface is never a mystery. */}
+        {zoom !== DEFAULT_ZOOM && (
+          <button
+            type="button"
+            onClick={() => setZoom(DEFAULT_ZOOM)}
+            title={`Zoom ${zoom}%. Click to reset to 100% (Ctrl+0)`}
+            aria-label={`Zoom ${zoom}%, reset to 100%`}
+            className="shrink-0 rounded px-1 font-mono text-gray-400 transition hover:bg-gray-700 hover:text-gray-200"
+          >
+            {zoom}%
           </button>
         )}
       </div>

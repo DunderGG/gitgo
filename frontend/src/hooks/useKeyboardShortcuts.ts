@@ -18,10 +18,19 @@ export function focusCommitRow(hash: string) {
   document.querySelector<HTMLElement>(`[data-commit-hash="${hash}"]`)?.focus()
 }
 
+// focusCommitSearch moves keyboard focus to the search field above
+// CommitList and selects its text, so typing replaces the last search.
+export function focusCommitSearch() {
+  const field = document.querySelector<HTMLInputElement>('[data-commit-search]')
+  field?.focus()
+  field?.select()
+}
+
 // useKeyboardShortcuts registers the app-wide shortcuts:
 //   - F5 / Ctrl+R / Cmd+R: reload the repository from disk (instead of the page)
 //   - Ctrl+Z / Cmd+Z: undo the last rewrite (not while typing in a field)
 //   - Ctrl+A / Cmd+A: select every unpushed commit (not while typing in a field)
+//   - Ctrl+F / Cmd+F: search the commit list
 //   - Escape: close the edit panel by clearing the selection
 //   - F1: open the help
 //   - Ctrl+, / Cmd+,: open the settings
@@ -112,6 +121,18 @@ export function useKeyboardShortcuts() {
         const primary = selectAllUnpushed()
         if (primary) {
           focusCommitRow(primary)
+        }
+        return
+      }
+
+      const isSearchShortcut =
+        (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f'
+
+      // Works from text fields too, but not behind a dialog.
+      if (isSearchShortcut) {
+        event.preventDefault()
+        if (repoInfo && !document.querySelector('[aria-modal="true"]')) {
+          focusCommitSearch()
         }
         return
       }

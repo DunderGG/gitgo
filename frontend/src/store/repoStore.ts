@@ -24,6 +24,7 @@ import { DEFAULT_MESSAGE_GUIDES, type MessageGuides } from '../messageGuides'
 import { DEFAULT_OFFICE_HOURS, type OfficeHours } from '../officeHours'
 import { DEFAULT_STALE_FETCH_DAYS } from '../lastFetch'
 import { applyZoom, DEFAULT_ZOOM } from '../zoom'
+import { filterCommits, parseCommitSearch } from '../commitSearch'
 
 // Where earlier versions kept the recent repositories, in the WebView's
 // localStorage. loadSettings moves the list to the backend's settings file.
@@ -141,8 +142,11 @@ export interface RepoInfo {
 export interface CommitSummary {
   hash: string
   shortHash: string
+  // The subject line; body holds the rest of the message.
   message: string
+  body: string
   author: string
+  authorEmail: string
   committer: string
   date: string
   isUnpushed: boolean
@@ -192,6 +196,11 @@ interface RepoStore {
   selectedHashes: string[]
   // Commit a Shift-click or Shift+arrow range starts from.
   selectionAnchor: string | null
+  // Text in the search field above CommitList (see commitSearch.ts). Only
+  // matching commits are shown, and Shift ranges and Select all only take
+  // shown commits; selected commits stay selected when the search hides them.
+  // Kept across edits and branch switches, cleared for another repository.
+  commitSearch: string
   // True after a successful rewrite that the backend can still undo. Any
   // setRepo call (open, refresh, undo) resets it; EditPanel sets it again
   // after a rewrite.
@@ -232,13 +241,16 @@ interface RepoStore {
   // Saves the terminal command. Resolves to an error message when the backend
   // rejects it (for example an unclosed quote), or null.
   setTerminalCommand: (command: string) => Promise<string | null>
+  setCommitSearch: (commitSearch: string) => void
   selectCommit: (hash: string | null) => void
   // Ctrl/Cmd-click: add or remove an unpushed commit from the selection.
   toggleCommitSelection: (hash: string) => void
-  // Shift-click / Shift+arrow: select the unpushed commits from the anchor to hash.
+  // Shift-click / Shift+arrow: select the shown unpushed commits from the
+  // anchor to hash.
   extendSelection: (hash: string) => void
-  // Button above CommitList / Ctrl+A: select every unpushed commit. Returns
-  // the commit that ends up primary, or null when there is nothing to select.
+  // Button above CommitList / Ctrl+A: select every shown unpushed commit.
+  // Returns the commit that ends up primary, or null when there is nothing to
+  // select.
   selectAllUnpushed: () => string | null
   requestEditFocus: () => void
   consumeEditFocus: () => void
@@ -273,6 +285,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   selectedHash: null,
   selectedHashes: [],
   selectionAnchor: null,
+  commitSearch: '',
   canUndo: false,
   activity: null,
   hasExternalChanges: false,
@@ -295,6 +308,9 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
         commits,
         recentRepos,
         ...NO_SELECTION,
+        // setRepo also runs after edits, undo and branch switches, which keep
+        // the search; another repository starts without one.
+        commitSearch: state.repoInfo?.path === info.path ? state.commitSearch : '',
         canUndo: false,
         hasExternalChanges: false,
         error: null,
@@ -402,6 +418,8 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     )
   },
 
+  setCommitSearch: (commitSearch) => set({ commitSearch }),
+
   selectCommit: (hash) =>
     set(hash ? { selectedHash: hash, selectedHashes: [hash], selectionAnchor: hash } : NO_SELECTION),
 
@@ -433,7 +451,9 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   },
 
   extendSelection: (hash) => {
-    const { commits, selectedHash, selectionAnchor, selectCommit } = get()
+    const { commitSearch, selectedHash, selectionAnchor, selectCommit } = get()
+    // A range over search results skips the commits the search hides.
+    const commits = filterCommits(get().commits, commitSearch)
     const anchor = selectionAnchor ?? selectedHash ?? hash
     const from = commits.findIndex((commit) => commit.hash === anchor)
     const to = commits.findIndex((commit) => commit.hash === hash)
@@ -458,10 +478,15 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
   },
 
   selectAllUnpushed: () => {
-    const { commits, selectedHash } = get()
-    const unpushed = commits.filter((commit) => commit.isUnpushed).map((commit) => commit.hash)
+    const { commits, commitSearch, selectedHash } = get()
+    // With a search, "all" means the matching commits, so a search such as
+    // author:old@example.com picks out the commits to fix.
+    const unpushed = filterCommits(commits, commitSearch)
+      .filter((commit) => commit.isUnpushed)
+      .map((commit) => commit.hash)
     if (unpushed.length === 0) {
-      set({ status: 'There are no unpushed commits to select' })
+      const isSearching = parseCommitSearch(commitSearch).isActive
+      set({ status: isSearching ? 'No unpushed commits match the search' : 'There are no unpushed commits to select' })
       return null
     }
     // Keep the commit the user was on as the primary one when it is included.
@@ -604,6 +629,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       repoInfo: null,
       commits: [],
       ...NO_SELECTION,
+      commitSearch: '',
       canUndo: false,
       hasExternalChanges: false,
       pendingEditFocus: false,

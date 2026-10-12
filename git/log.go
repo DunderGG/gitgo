@@ -48,7 +48,9 @@ func Log(state *RepoState, limit int) ([]CommitEntry, error) {
 			Hash:          hash,
 			ShortHash:     hash.String()[:7],         // first 7 hex chars, same as git's default short hash
 			Message:       firstLine(commit.Message), // only the subject line; body is available via GetCommitDetail
+			Body:          messageBody(commit.Message),
 			AuthorName:    commit.Author.Name,
+			AuthorEmail:   commit.Author.Email,
 			CommitterName: commit.Committer.Name,
 			Date:          commit.Author.When,
 			// Look up in the precomputed set built by Open() — O(1) per entry.
@@ -65,4 +67,13 @@ func firstLine(s string) string {
 		return s[:i]
 	}
 	return s
+}
+
+// messageBody returns s without its first line, with surrounding whitespace
+// (usually the blank line after the subject and the final newline) trimmed.
+func messageBody(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return strings.TrimSpace(s[i+1:])
+	}
+	return ""
 }

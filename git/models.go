@@ -84,10 +84,14 @@ type Identity struct {
 // CommitEntry is the git-layer representation of a single commit.
 // The app layer converts this to app.CommitSummary.
 type CommitEntry struct {
-	Hash          plumbing.Hash
-	ShortHash     string
-	Message       string
+	Hash      plumbing.Hash
+	ShortHash string
+	Message   string
+	// Body is the message after the subject line, trimmed, so the commit
+	// list can search it.
+	Body          string
 	AuthorName    string
+	AuthorEmail   string
 	CommitterName string
 	Date          time.Time
 	IsUnpushed    bool

@@ -376,6 +376,26 @@ func TestLog_MessageIsFirstLine(test *testing.T) {
 	if entries[0].Message != "subject line" {
 		test.Errorf("Message = %q, want %q", entries[0].Message, "subject line")
 	}
+	if entries[0].Body != "This is the body paragraph." {
+		test.Errorf("Body = %q, want %q", entries[0].Body, "This is the body paragraph.")
+	}
+}
+
+// TestLog_SearchFields verifies the author email, and that a one-line message
+// has an empty body; the commit list's search reads both.
+func TestLog_SearchFields(test *testing.T) {
+	dir := test.TempDir()
+	gitCmd := initRepo(test, dir)
+	addCommit(test, dir, "one line", gitCmd)
+
+	entries := mustLog(test, mustOpen(test, dir), noLogLimit)
+
+	if entries[0].AuthorEmail != "test@example.com" {
+		test.Errorf("AuthorEmail = %q, want %q", entries[0].AuthorEmail, "test@example.com")
+	}
+	if entries[0].Body != "" {
+		test.Errorf("Body = %q, want empty", entries[0].Body)
+	}
 }
 
 // TestLog_CommitOrder verifies that the log is returned newest-first.
