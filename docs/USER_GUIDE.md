@@ -1,6 +1,33 @@
 # GitGo User Guide
 
-How each feature works and what exactly it changes. For a quick overview, press `F1` or click **?** in the app. Keyboard shortcuts are listed in the [README](../README.md#keyboard-shortcuts).
+How each feature works and what exactly it changes. For a quick overview, press `F1` or click **?** in the app.
+
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `↑` / `↓` | Move the selection between commits |
+| `Shift+↑` / `Shift+↓`, `Ctrl`/`Shift`+click | Select several unpushed commits |
+| `Ctrl+A` | Select every unpushed commit (also the button above the list); with a search, the matching ones |
+| `Ctrl+F` | Search the commit list by message, author, hash or date |
+| `Enter` | Open the edit panel for the selected commit |
+| `Shift+F10` | Open the commit menu, as a right-click on the row does |
+| `Escape` | Close the edit panel or dialog |
+| `Ctrl+Z` | Undo the last rewrite |
+| `F5` / `Ctrl+R` | Reload the repository from disk |
+| `F1` | Open the in-app help (also the `?` button in the header) |
+| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom in, out, or back to 100% (also in the settings) |
+
+On macOS, `Cmd` works in place of `Ctrl`.
+
+## Safety
+
+- Unpushed commits are computed like `git rev-list HEAD ^@{u}`, and commits on any remote-tracking branch are excluded too
+- Pushed state is re-checked right before every edit and undo
+- Every rewrite and undo is written to the reflog (entries start with `gitgo:`), so you can also recover with `git reset --hard <branch>@{1}`
+- The committer is kept unless you choose to change it, and extra commit headers (`encoding`, `mergetag`, …) are preserved
+- Other local branches pointing at an edited commit are moved along with it; tags are never moved, only flagged
+- You are warned before an edit that would drop GPG/SSH signatures
 
 ---
 

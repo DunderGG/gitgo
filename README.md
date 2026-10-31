@@ -17,51 +17,17 @@ GitGo gives you a clean GUI for the history-editing tasks that are tedious on th
 
 ## Features
 
-- **Edit commit metadata:** message, author name and email, committer name and email, and author date (to the second, in the commit's own time zone), with quick −1d / −1h / +1h / +1d / Now buttons
-- **Edit several commits at once:** select multiple unpushed commits and shift their dates or spread them over a range, or set their author and committer, in one rewrite
+- **Edit commit metadata:** message, author name and email, committer name and email, and author date
+- **Edit several commits at once:** select multiple unpushed commits and edit them in one rewrite
 - **Search the commit list:** by message, author, hash or date, with `author:`, `since:` and other qualifiers; select the matches to fix them together
 - **Commit menu:** right-click a commit to edit it or copy its hash, subject or author, for one commit or the whole selection
 - **Preview before applying:** every change is shown old-vs-new in a confirmation dialog
-- **One-step undo:** revert the last rewrite with `Ctrl+Z`
 - **Work on any branch:** view and edit other local branches without checking them out
-- **Terminal shortcut:** open a terminal in the repository folder from the header when you need to run a git command by hand
 - **Run menu:** ready-made, read-only git commands from the header: the history as text or CSV, or the selected commits as patch files, with Copy and Save
-- **Light and dark themes:** follows your system's setting, or pick one with the theme button in the header
 - **In-app help:** a walkthrough of editing and applying changes, every keyboard shortcut and the safety rules, behind the `?` button or `F1`
 - **Leaves your work alone:** uncommitted changes (staged or not) and the stash are never touched
 
-The [user guide](docs/USER_GUIDE.md) explains each feature and exactly what it changes.
-
-### Safety
-
-- Unpushed commits are computed like `git rev-list HEAD ^@{u}`, and commits on any remote-tracking branch are excluded too
-- Pushed state is re-checked right before every edit and undo
-- Every rewrite and undo is written to the reflog (entries start with `gitgo:`), so you can also recover with `git reset --hard <branch>@{1}`
-- The committer is kept unless you choose to change it, and extra commit headers (`encoding`, `mergetag`, …) are preserved
-- Other local branches pointing at an edited commit are moved along with it; tags are never moved, only flagged
-- You are warned before an edit that would drop GPG/SSH signatures
-
-Squash, reorder and drop are planned next, followed by CI and installable binaries. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full roadmap.
-
----
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| `↑` / `↓` | Move the selection between commits |
-| `Shift+↑` / `Shift+↓`, `Ctrl`/`Shift`+click | Select several unpushed commits |
-| `Ctrl+A` | Select every unpushed commit (also the button above the list); with a search, the matching ones |
-| `Ctrl+F` | Search the commit list by message, author, hash or date |
-| `Enter` | Open the edit panel for the selected commit |
-| `Shift+F10` | Open the commit menu, as a right-click on the row does |
-| `Escape` | Close the edit panel or dialog |
-| `Ctrl+Z` | Undo the last rewrite |
-| `F5` / `Ctrl+R` | Reload the repository from disk |
-| `F1` | Open the in-app help (also the `?` button in the header) |
-| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom in, out, or back to 100% (also in the settings) |
-
-On macOS, `Cmd` works in place of `Ctrl`.
+The [user guide](docs/USER_GUIDE.md) explains each feature and exactly what it changes, including the [keyboard shortcuts](docs/USER_GUIDE.md#keyboard-shortcuts) and [safety rules](docs/USER_GUIDE.md#safety).
 
 ---
 
