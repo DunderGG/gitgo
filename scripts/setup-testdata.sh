@@ -14,7 +14,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TESTDATA_DIR="$SCRIPT_DIR/testdata"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TESTDATA_DIR="$REPO_ROOT/testdata"
 TEST_REPO_DIR="$TESTDATA_DIR/test-repo"
 TEST_REMOTE_DIR="$TESTDATA_DIR/test-remote"
 SIGNING_KEY="$TESTDATA_DIR/test-signing-key"

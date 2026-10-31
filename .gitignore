@@ -9,7 +9,7 @@ frontend/dist/
 frontend/wailsjs/
 frontend/package.json.md5
 
-# Generated test repositories (created by setup-testdata.ps1 / setup-testdata.sh)
+# Generated test repositories (created by scripts/setup-testdata.ps1 / scripts/setup-testdata.sh)
 testdata/
 
 # OS noise

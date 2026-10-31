@@ -16,9 +16,12 @@ $ErrorActionPreference = "Stop"
 # which corrupts multi-byte characters like • and ♥ in Wails' output.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $repoRoot
+
 function Show-Help {
     Write-Host @"
-Usage: .\build.ps1 [options] [wails build args...]
+Usage: .\scripts\build.ps1 [options] [wails build args...]
 
 Checks prerequisites (Go 1.25+, Node.js 20+, npm, Wails), then runs 'wails build'.
 
@@ -37,9 +40,9 @@ Any other arguments are passed through to 'wails build'.
 -Test cannot be combined with -Run or -NewRun.
 
 Examples:
-  .\build.ps1 -Run
-  .\build.ps1 -Test
-  .\build.ps1 -clean -Run
+  .\scripts\build.ps1 -Run
+  .\scripts\build.ps1 -Test
+  .\scripts\build.ps1 -clean -Run
 "@
 }
 
@@ -196,7 +199,7 @@ if ($Test) {
 }
 
 if ($Run -or $NewRun) {
-    $binaryPath = Join-Path $PSScriptRoot "build\bin\gitgo.exe"
+    $binaryPath = Join-Path $repoRoot "build\bin\gitgo.exe"
     if (-not (Test-Path $binaryPath)) {
         throw "Build output not found at: $binaryPath"
     }

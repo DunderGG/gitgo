@@ -52,8 +52,8 @@ This starts the Go backend and the Vite dev server together, with hot reload on 
 ### Build a production binary
 
 ```bash
-./build.ps1   # Windows
-./build.sh    # Linux/macOS
+.\scripts\build.ps1   # Windows
+./scripts/build.sh    # Linux/macOS
 ```
 
 Both scripts check prerequisites (`go`, `node`, `npm`, `wails`) and their versions before running `wails build`. The binary ends up in `build/bin/`.
@@ -69,8 +69,8 @@ Both scripts check prerequisites (`go`, `node`, `npm`, `wails`) and their versio
 ### Try it on a test repository
 
 ```bash
-./setup-testdata.ps1   # Windows
-./setup-testdata.sh    # Linux/macOS
+.\scripts\setup-testdata.ps1   # Windows
+./scripts/setup-testdata.sh    # Linux/macOS
 ```
 
 This creates `testdata/test-repo` with three pushed and three unpushed commits (one of them SSH-signed) and a bare `testdata/test-remote`. Open `testdata/test-repo` in GitGo to experiment safely. Re-run the script to reset it.
@@ -110,8 +110,7 @@ gitgo/
 │       ├── hooks/        # useKeyboardShortcuts
 │       └── store/        # Zustand store (repoStore.ts)
 ├── docs/                 # Architecture, roadmap and PlantUML diagrams
-├── build.ps1, build.sh   # Prerequisite checks + production build
-└── setup-testdata.*      # Create a sample repository under testdata/
+└── scripts/              # Build and test-data setup scripts
 ```
 
 ### Documentation
@@ -121,6 +120,7 @@ gitgo/
 - [docs/ROADMAP.md](docs/ROADMAP.md): completed phases, planned work and future ideas
 - [docs/BACKUPS.md](docs/BACKUPS.md): design proposal for saving and restoring backups of a branch's history
 - [frontend/FRONTEND_GUIDE.md](frontend/FRONTEND_GUIDE.md): a beginner-friendly walkthrough of the TypeScript/React code
+- [scripts/](scripts/): build and test-data setup scripts
 
 ---
 

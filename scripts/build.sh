@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
 SKIP_BUILD=0
 RUN_AFTER_BUILD=0
 NEW_RUN=0
@@ -11,7 +15,7 @@ WAILS_ARGS=()
 
 show_help() {
     cat <<'EOF'
-Usage: ./build.sh [options] [wails build args...]
+Usage: ./scripts/build.sh [options] [wails build args...]
 
 Checks prerequisites (Go 1.25+, Node.js 20+, npm, Wails), then runs 'wails build'.
 
@@ -30,9 +34,9 @@ Any other arguments are passed through to 'wails build'.
 --test cannot be combined with --run or --new-run.
 
 Examples:
-  ./build.sh --run
-  ./build.sh --test
-  ./build.sh -clean --run
+  ./scripts/build.sh --run
+  ./scripts/build.sh --test
+  ./scripts/build.sh -clean --run
 EOF
 }
 
@@ -193,7 +197,7 @@ if [[ "$RUN_TESTS" -eq 1 ]]; then
 fi
 
 if [[ "$RUN_AFTER_BUILD" -eq 1 ]]; then
-    binary_path="$(dirname "$0")/build/bin/gitgo"
+    binary_path="$REPO_ROOT/build/bin/gitgo"
     if [[ ! -f "$binary_path" ]]; then
         # Check for .exe suffix on Windows (Cygwin/MSYS2)
         if [[ -f "${binary_path}.exe" ]]; then

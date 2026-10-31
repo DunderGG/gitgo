@@ -16,7 +16,8 @@
 
 $ErrorActionPreference = "Stop"
 
-$testDataDir   = Join-Path $PSScriptRoot "testdata"
+$repoRoot      = Split-Path -Parent $PSScriptRoot
+$testDataDir   = Join-Path $repoRoot "testdata"
 $testRepoDir   = Join-Path $testDataDir  "test-repo"
 $testRemoteDir = Join-Path $testDataDir  "test-remote"
 $signingKey    = Join-Path $testDataDir  "test-signing-key"
