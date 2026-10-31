@@ -97,17 +97,6 @@ go test ./...
 
 The tests build real repositories on disk in temporary directories.
 
-### Publish a release
-
-Add a section for the version to [CHANGELOG.md](CHANGELOG.md), such as `## [1.2.0] - 2026-11-15`, and commit it. Then tag that commit and push the tag:
-
-```bash
-git tag -a v1.2.0 -m "GitGo 1.2.0"
-git push origin v1.2.0
-```
-
-Pushing a version tag runs the [release workflow](.github/workflows/release.yml): it builds the packages above on Windows, macOS and Linux runners, stamps the tag's version into them, and attaches them with a `SHA256SUMS` file to a GitHub Release for the tag. The release notes are the version's CHANGELOG.md section, then a guide to the downloads ([.github/release-downloads.md](.github/release-downloads.md)) and a link to the commits since the previous release. A tag with a suffix, such as `v1.2.0-beta.1`, makes a pre-release. To try the packaging without publishing, run the workflow by hand from the Actions tab; the packages are kept as artifacts of the run.
-
 ---
 
 ## Tech Stack
@@ -144,6 +133,7 @@ gitgo/
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design overview and a breakdown of every file
 - [docs/ROADMAP.md](docs/ROADMAP.md): completed phases, planned work and future ideas
 - [CHANGELOG.md](CHANGELOG.md): what changed in each release
+- [docs/RELEASING.md](docs/RELEASING.md): how to publish a release, and fix one
 - [docs/BACKUPS.md](docs/BACKUPS.md): design proposal for saving and restoring backups of a branch's history
 - [frontend/FRONTEND_GUIDE.md](frontend/FRONTEND_GUIDE.md): a beginner-friendly walkthrough of the TypeScript/React code
 - [scripts/](scripts/): build and test-data setup scripts
