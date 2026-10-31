@@ -138,7 +138,9 @@ jobs:
           cp build/appicon.png "$tarball/gitgo.png"
           tar -czf "dist/$tarball.tar.gz" "$tarball"
 
-          # Debian sorts '~' before the release, so 1.2.0~beta.1 < 1.2.0.
+          # Debian sorts '~' before the release, so 1.2.0~beta.1 < 1.2.0. Only
+          # the package version gets it: GitHub renames uploaded files with a
+          # '~' in the name, which would no longer match SHA256SUMS.
           deb_version="$(sed 's/-/~/g' <<<"$VERSION")"
           root=deb
           install -Dm755 build/bin/gitgo "$root/usr/bin/gitgo"
@@ -160,7 +162,7 @@ jobs:
            GitGo is a desktop app for fixing the message, date and author of
            commits you have not pushed yet, without memorising git commands.
           EOF
-          dpkg-deb --build --root-owner-group "$root" "dist/gitgo_${deb_version}_amd64.deb"
+          dpkg-deb --build --root-owner-group "$root" "dist/gitgo_${VERSION}_amd64.deb"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -175,7 +177,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: ${{ github.ref_name }}
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           pattern: packages-*
@@ -186,15 +192,29 @@ jobs:
         working-directory: dist
         run: sha256sum -- * > SHA256SUMS
 
+      # This version's section of CHANGELOG.md, without its heading, then the
+      # guide to the downloads.
+      - name: Write release notes
+        run: |
+          version="${TAG#v}"
+          awk -v heading="## [$version]" '
+            /^## / { if (found) exit; found = index($0, heading) == 1; next }
+            found
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::warning::CHANGELOG.md has no section for $version, so the release notes only describe the downloads."
+          fi
+          sed "s/{version}/$version/g" .github/release-downloads.md >> notes.md
+
       # Upload to the release if it already exists (made by hand on GitHub,
-      # which also pushes the tag, or by an earlier attempt of this job);
-      # otherwise create it, with notes listing the changes since the last
-      # release. A tag with a suffix, such as v1.2.0-beta.1, is a pre-release.
+      # which also pushes the tag, or by an earlier attempt of this job), and
+      # leave its notes alone. Otherwise create it with the notes above, to
+      # which GitHub adds a link to the commits since the previous release.
+      # A tag with a suffix, such as v1.2.0-beta.1, is a pre-release.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber
@@ -203,5 +223,5 @@ jobs:
             if [[ "$TAG" == *-* ]]; then
               flags+=(--prerelease)
             fi
-            gh release create "$TAG" dist/* --title "GitGo ${TAG#v}" --generate-notes --verify-tag "${flags[@]}"
+            gh release create "$TAG" dist/* --title "GitGo ${TAG#v}" --notes "$(cat notes.md)" --generate-notes --verify-tag "${flags[@]}"
           fi

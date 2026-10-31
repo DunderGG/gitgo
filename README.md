@@ -41,7 +41,7 @@ Each [release](https://github.com/DunderGG/gitgo/releases) has packages for ever
 | macOS (Intel and Apple Silicon) | `GitGo-<version>-macos-universal.dmg` |
 | Linux (x64) | `gitgo_<version>_amd64.deb` for Debian 12+ and Ubuntu 22.04+, or `GitGo-<version>-linux-amd64.tar.gz` |
 
-The macOS app is not notarised yet, so macOS blocks the first launch: open it from **System Settings → Privacy & Security → Open Anyway**. On Linux, GitGo needs GTK 3 and WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`); the `.deb` installs them, and the tarball expects them to be installed.
+GitGo is not code-signed yet, so Windows and macOS ask you to confirm the first launch: on Windows, click **More info → Run anyway** when SmartScreen appears; on macOS, open **System Settings → Privacy & Security** and click **Open Anyway**. On Linux, GitGo needs GTK 3 and WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`); the `.deb` installs them, and the tarball expects them to be installed.
 
 ---
 
@@ -99,12 +99,14 @@ The tests build real repositories on disk in temporary directories.
 
 ### Publish a release
 
+Add a section for the version to [CHANGELOG.md](CHANGELOG.md), such as `## [1.2.0] - 2026-11-15`, and commit it. Then tag that commit and push the tag:
+
 ```bash
-git tag v1.2.0
+git tag -a v1.2.0 -m "GitGo 1.2.0"
 git push origin v1.2.0
 ```
 
-Pushing a version tag runs the [release workflow](.github/workflows/release.yml): it builds the packages above on Windows, macOS and Linux runners, stamps the tag's version into them, and attaches them with a `SHA256SUMS` file to a GitHub Release for the tag. A tag with a suffix, such as `v1.2.0-beta.1`, makes a pre-release. To try the packaging without publishing, run the workflow by hand from the Actions tab; the packages are kept as artifacts of the run.
+Pushing a version tag runs the [release workflow](.github/workflows/release.yml): it builds the packages above on Windows, macOS and Linux runners, stamps the tag's version into them, and attaches them with a `SHA256SUMS` file to a GitHub Release for the tag. The release notes are the version's CHANGELOG.md section, then a guide to the downloads ([.github/release-downloads.md](.github/release-downloads.md)) and a link to the commits since the previous release. A tag with a suffix, such as `v1.2.0-beta.1`, makes a pre-release. To try the packaging without publishing, run the workflow by hand from the Actions tab; the packages are kept as artifacts of the run.
 
 ---
 
@@ -141,6 +143,7 @@ gitgo/
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md): how each feature works and exactly what it changes
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design overview and a breakdown of every file
 - [docs/ROADMAP.md](docs/ROADMAP.md): completed phases, planned work and future ideas
+- [CHANGELOG.md](CHANGELOG.md): what changed in each release
 - [docs/BACKUPS.md](docs/BACKUPS.md): design proposal for saving and restoring backups of a branch's history
 - [frontend/FRONTEND_GUIDE.md](frontend/FRONTEND_GUIDE.md): a beginner-friendly walkthrough of the TypeScript/React code
 - [scripts/](scripts/): build and test-data setup scripts

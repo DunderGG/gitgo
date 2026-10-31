@@ -232,6 +232,7 @@ Found in the follow-up review (2026-09-25):
 - [ ] Version number injected at build time via `ldflags`
   - [x] The release workflow stamps the tag's version into `wails.json`, which sets the `.exe` version info, the `Info.plist` and the installer; the app does not show it yet
 - [x] GitHub Releases with attached platform binaries and a `SHA256SUMS` file; tags with a suffix (`v1.2.0-beta.1`) make pre-releases
+  - [x] Release notes from the version's `CHANGELOG.md` section, followed by a guide to the downloads (`.github/release-downloads.md`) and the first-launch steps for the unsigned builds
 - [ ] Include prerequisites with the app
 
 ---
