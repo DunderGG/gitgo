@@ -9,6 +9,7 @@ import (
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 )
@@ -210,6 +211,26 @@ func resolveUpstream(repo *gogit.Repository, branchName string) (hasRemote bool,
 	}
 
 	return hasRemote, true, trackingRef.Hash(), nil
+}
+
+// trackedRemote returns the remote the branch tracks, or else "origin", or
+// else the first remote by name. It is empty when there are no remotes.
+func trackedRemote(cfg *config.Config, branchName string) string {
+	if branchCfg, ok := cfg.Branches[branchName]; ok && cfg.Remotes[branchCfg.Remote] != nil {
+		return branchCfg.Remote
+	}
+	if cfg.Remotes["origin"] != nil {
+		return "origin"
+	}
+	names := make([]string, 0, len(cfg.Remotes))
+	for name := range cfg.Remotes {
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	return names[0]
 }
 
 // lastFetchTime returns when FETCH_HEAD was last written, which git does on

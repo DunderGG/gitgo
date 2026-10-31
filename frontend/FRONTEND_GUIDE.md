@@ -219,6 +219,7 @@ Current behavior:
 - a banner above the rows explains when the repo has no remote, the branch has no upstream (every commit counts as unpushed), or every commit is already pushed
 - shows "This branch has no commits yet." when the log is empty
 - a right-click (or Shift+F10 / the menu key) on a row opens CommitContextMenu: inside the selection it acts on the whole selection, on any other row it selects that row first. The menu closes when the commit list reloads
+- shows PushCommandDialog for the menu's Push up to here…, until it is closed or the commit list reloads
 
 ### src/components/ContextMenu.tsx
 
@@ -229,7 +230,17 @@ A reusable right-click menu, rendered into document.body at a window position an
 The CommitList rows' menu, built on ContextMenu:
 
 - Edit: opens the commit and focuses its message (like Enter); disabled for a pushed commit; with several commits selected, "Edit N commits" focuses BulkEditPanel
+- Push up to here… ("Push N commits…" with several selected): asks the backend for a git push command (PlanPush, through runGitOperation) and hands it to CommitList, which shows PushCommandDialog; disabled for a pushed commit and without a remote
 - Copy: full hash, short hash, subject, author name or author email, each showing the value it copies; with several commits selected, one line per commit in list order. Reports the result in StatusBar
+
+### src/components/PushCommandDialog.tsx
+
+Shows the command from PlanPush that pushes some unpushed commits and leaves the newer ones unpushed. GitGo never pushes; the user runs the command.
+
+- the command, with Copy command and Copy and open terminal (OpenTerminal, like the header's >_ button)
+- the commits the command pushes; git pushes a commit together with every commit below it, so with several selected, the ones not selected are marked and a warning counts them
+- notes when the remote has no such branch yet (the push creates it) or the branch tracks an upstream with another name, and how many unpushed commits stay editable
+- closes on Escape, the × button or a click outside, and when the commit list reloads; Ctrl+Z and Ctrl+A are blocked while it is open
 
 ### src/clipboard.ts
 
@@ -375,6 +386,7 @@ Methods currently exposed include:
 - CanUndo
 - OpenTerminal
 - OpenFolder
+- PlanPush
 - GetGitStatus
 - RunHistory
 - ExportPatches

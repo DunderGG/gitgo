@@ -2,8 +2,10 @@ import { useCallback, useMemo, useState, type KeyboardEvent, type MouseEvent } f
 import { LOG_DEPTH, parseCommitSearch } from '../commitSearch'
 import { focusCommitRow, focusCommitSearch } from '../hooks/useKeyboardShortcuts'
 import { fetchStatus, useNow, type FetchStatus } from '../lastFetch'
+import type { app } from '../../wailsjs/go/models'
 import { useRepoStore, CommitSummary, RepoInfo } from '../store/repoStore'
 import CommitContextMenu from './CommitContextMenu'
+import PushCommandDialog from './PushCommandDialog'
 
 interface CommitRowProps {
   commit: CommitSummary
@@ -234,6 +236,15 @@ export default function CommitList() {
   } | null>(null)
   const closeMenu = useCallback(() => setMenu(null), [])
 
+  // The push command opened from the menu, with the list it was worked out
+  // for: once a reload shows the push, the plan is out of date and goes away.
+  const [push, setPush] = useState<{ plan: app.PushPlan; selected: string[]; commits: CommitSummary[] } | null>(null)
+  const closePush = useCallback(() => setPush(null), [])
+  const showPushPlan = useCallback(
+    (plan: app.PushPlan, selected: string[]) => setPush({ plan, selected, commits: useRepoStore.getState().commits }),
+    [],
+  )
+
   // A plain click selects one commit; Ctrl/Cmd-click and Shift-click build a
   // selection of unpushed commits for BulkEditPanel.
   function handleRowClick(event: MouseEvent<HTMLDivElement>, hash: string) {
@@ -433,8 +444,15 @@ export default function CommitList() {
       </div>
 
       {menu?.commits === commits && (
-        <CommitContextMenu x={menu.x} y={menu.y} targets={menu.targets} onClose={closeMenu} />
+        <CommitContextMenu
+          x={menu.x}
+          y={menu.y}
+          targets={menu.targets}
+          onClose={closeMenu}
+          onPushPlan={showPushPlan}
+        />
       )}
+      {push?.commits === commits && <PushCommandDialog plan={push.plan} selected={push.selected} onClose={closePush} />}
     </div>
   )
 }

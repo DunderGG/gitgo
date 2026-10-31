@@ -2,7 +2,6 @@ package git
 
 import (
 	"net/url"
-	"sort"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -109,22 +108,12 @@ func ParseWebHost(remoteURL string) WebHost {
 // WebHost is returned when that remote is not on a supported service.
 func resolveWebHost(repo *gogit.Repository, branchName string) WebHost {
 	cfg, err := repo.Config()
-	if err != nil || len(cfg.Remotes) == 0 {
+	if err != nil {
 		return WebHost{}
 	}
-
-	name := ""
-	if branchCfg, ok := cfg.Branches[branchName]; ok && cfg.Remotes[branchCfg.Remote] != nil {
-		name = branchCfg.Remote
-	} else if cfg.Remotes["origin"] != nil {
-		name = "origin"
-	} else {
-		names := make([]string, 0, len(cfg.Remotes))
-		for remoteName := range cfg.Remotes {
-			names = append(names, remoteName)
-		}
-		sort.Strings(names)
-		name = names[0]
+	name := trackedRemote(cfg, branchName)
+	if name == "" {
+		return WebHost{}
 	}
 
 	urls := cfg.Remotes[name].URLs

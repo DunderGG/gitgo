@@ -1,3 +1,5 @@
+import { PlanPush } from '../../wailsjs/go/app/App'
+import type { app } from '../../wailsjs/go/models'
 import { copyText } from '../clipboard'
 import { focusEditPanel } from '../hooks/useKeyboardShortcuts'
 import { useRepoStore, type CommitSummary } from '../store/repoStore'
@@ -24,14 +26,19 @@ interface CommitContextMenuProps {
   // or the whole selection when it was right-clicked inside it.
   targets: CommitSummary[]
   onClose: () => void
+  // Push up to here: called with the plan from PlanPush and the hashes it
+  // was asked for, after the menu has closed.
+  onPushPlan: (plan: app.PushPlan, selected: string[]) => void
 }
 
-// CommitContextMenu is the right-click menu of the CommitList rows: Edit, and
-// Copy for the hash, subject or author, one line per commit when several are
-// selected.
-export default function CommitContextMenu({ x, y, targets, onClose }: CommitContextMenuProps) {
+// CommitContextMenu is the right-click menu of the CommitList rows: Edit,
+// Push up to here (a git push command for the user to run), and Copy for the
+// hash, subject or author, one line per commit when several are selected.
+export default function CommitContextMenu({ x, y, targets, onClose, onPushPlan }: CommitContextMenuProps) {
+  const hasRemote = useRepoStore((s) => s.repoInfo?.hasRemote ?? false)
   const selectCommit = useRepoStore((s) => s.selectCommit)
   const requestEditFocus = useRepoStore((s) => s.requestEditFocus)
+  const runGitOperation = useRepoStore((s) => s.runGitOperation)
   const setStatus = useRepoStore((s) => s.setStatus)
   const setError = useRepoStore((s) => s.setError)
 
@@ -68,6 +75,36 @@ export default function CommitContextMenu({ x, y, targets, onClose }: CommitCont
       }
     : { label: `Edit ${targets.length} commits`, onSelect: focusEditPanel }
 
+  async function planPush() {
+    const selected = targets.map((commit) => commit.hash)
+    try {
+      const plan = await runGitOperation('Working out the push command…', () => PlanPush(selected))
+      if (plan) {
+        setError(null)
+        onPushPlan(plan, selected)
+      }
+    } catch (error) {
+      setError(String(error))
+    }
+  }
+
+  // Only a single commit can be a pushed one: several selected are always
+  // unpushed.
+  const isPushed = !first.isUnpushed
+  const push: MenuEntry = {
+    label: isSingle ? 'Push up to here…' : `Push ${targets.length} commits…`,
+    hint: isPushed ? 'Pushed' : undefined,
+    disabled: isPushed || !hasRemote,
+    title: isPushed
+      ? 'This commit has already been pushed'
+      : !hasRemote
+        ? 'This repository has no remote to push to'
+        : isSingle
+          ? 'Get the git command that pushes this commit and the ones below it, and no newer ones'
+          : 'Get the git command that pushes the selected commits, and no newer ones',
+    onSelect: () => void planPush(),
+  }
+
   const copyItems: MenuEntry[] = COPY_FIELDS.map((field) => ({
     label: capitalize(isSingle ? field.name : field.plural),
     hint: isSingle ? field.value(first) : undefined,
@@ -79,7 +116,7 @@ export default function CommitContextMenu({ x, y, targets, onClose }: CommitCont
       x={x}
       y={y}
       label={isSingle ? `Commit ${first.shortHash}` : `${targets.length} selected commits`}
-      entries={[edit, 'separator', { label: 'Copy', submenu: copyItems }]}
+      entries={[edit, push, 'separator', { label: 'Copy', submenu: copyItems }]}
       onClose={onClose}
     />
   )

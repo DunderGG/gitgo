@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 // DefaultLogDepth is how many commits the commit list shows.
@@ -43,22 +44,27 @@ func Log(state *RepoState, limit int) ([]CommitEntry, error) {
 			return nil, fmt.Errorf("iterating log: %w", iterErr)
 		}
 
-		hash := commit.Hash
-		entries = append(entries, CommitEntry{
-			Hash:          hash,
-			ShortHash:     hash.String()[:7],         // first 7 hex chars, same as git's default short hash
-			Message:       firstLine(commit.Message), // only the subject line; body is available via GetCommitDetail
-			Body:          messageBody(commit.Message),
-			AuthorName:    commit.Author.Name,
-			AuthorEmail:   commit.Author.Email,
-			CommitterName: commit.Committer.Name,
-			Date:          commit.Author.When,
-			// Look up in the precomputed set built by Open() — O(1) per entry.
-			IsUnpushed: state.UnpushedHashes[hash],
-		})
+		entries = append(entries, entryFromCommit(state, commit))
 	}
 
 	return entries, nil
+}
+
+// entryFromCommit returns the CommitEntry for a commit of the branch in state.
+func entryFromCommit(state *RepoState, commit *object.Commit) CommitEntry {
+	hash := commit.Hash
+	return CommitEntry{
+		Hash:          hash,
+		ShortHash:     hash.String()[:7],         // first 7 hex chars, same as git's default short hash
+		Message:       firstLine(commit.Message), // only the subject line; body is available via GetCommitDetail
+		Body:          messageBody(commit.Message),
+		AuthorName:    commit.Author.Name,
+		AuthorEmail:   commit.Author.Email,
+		CommitterName: commit.Committer.Name,
+		Date:          commit.Author.When,
+		// Look up in the precomputed set built by Open() — O(1) per entry.
+		IsUnpushed: state.UnpushedHashes[hash],
+	}
 }
 
 // firstLine returns the first line of s, trimming any trailing whitespace.

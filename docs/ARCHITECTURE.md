@@ -193,6 +193,7 @@ The IPC controller. It holds a single `*App` struct with three fields:
 | `CanUndo() bool` | Reports whether `lastRewrite` is set. Used by the frontend to re-sync the Undo button after a failed undo. |
 | `OpenTerminal() error` | *(`app/terminal.go`)* Opens a terminal window in the repository root for running git by hand. Windows: Windows Terminal (`wt.exe -d`), else `cmd.exe` in a new console; macOS: `open -a Terminal`; Linux: `$TERMINAL`, then common emulators. A terminal command set in `SettingsDialog` replaces this choice, with no fallback, and on Windows gets a console of its own. The terminal is detached and outlives GitGo. |
 | `OpenFolder() error` | *(`app/folder.go`)* Shows the repository root in the file manager: `explorer.exe` on Windows, `open` (Finder) on macOS, `xdg-open` elsewhere. Detached like `OpenTerminal`; the exit code is ignored, since `explorer.exe` exits with 1 even on success. |
+| `PlanPush(hashes []string) (PushPlan, error)` | *(`app/push.go`)* The `git push` command that pushes the given unpushed commits (full hashes) and leaves the newer ones unpushed, for the user to run; GitGo never pushes. `git.PlanPush` (`git/push.go`) picks the given commit that has all the others below it and lists every unpushed commit the push takes with it (`Commits`), and how many stay unpushed (`LeftOut`). The command is `git push <remote> <hash>:<branch>`: the local branch's own name (`refs/heads/<branch>` when the remote has no such branch yet), on the remote a plain `git push` uses (`branch.<name>.pushRemote`, `remote.pushDefault`, the tracked remote, `origin`, the first). Refuses pushed commits, a repository without a remote, commits on both sides of a merge without the merge, and remote or branch names a shell would act on. Runs on a fresh `OpenBranch` that is not stored, so `HasExternalChanges` still reports changes the list has not reloaded. |
 | `GetGitStatus() GitStatus` | *(`app/run.go`)* Whether the native `git` program the Run menu needs is on `PATH` (`exec.LookPath`), with its `git --version`, or a `Problem` explaining why not. Called by `RunMenu` when a repository is opened. |
 | `RunHistory(format string, hashes []string) (RunResult, error)` | *(`app/run.go`)* Runs `git log` in the repository and returns its output: `oneline` (`%h %ad %an: %s`, short dates), `full` (`--format=fuller`) or `csv` (hash, author, email, date, committer, email, date and subject, read from US/RS-separated output and written with `encoding/csv`). With hashes (full SHA-1 or SHA-256 only), only those commits in the given order (`--no-walk=unsorted --stdin`); without, the commits the list shows (`--max-count=100 refs/heads/<branch>`). Output is capped at 10 MB (`Truncated`). |
 | `ExportPatches(hashes []string) (RunResult, error)` | *(`app/run.go`)* Asks for a folder (native dialog) and writes one patch per commit, oldest first, with `git format-patch -o <dir> --start-number=<n> -1 --no-walk <hash>`; merge commits get no patch and are listed as skipped. An empty result means the dialog was cancelled. |
@@ -621,6 +622,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `BranchSelector` | *(Phase 3)* Header dropdown of local branches; switches the viewed/edited branch via `SwitchBranch` without checking it out |
 | `RunMenu` | Header dropdown of ready-made, read-only git commands (`RunHistory`, `ExportPatches`), disabled with an explanation when `GetGitStatus` finds no git; shows the output in `RunOutputDialog` (Copy, Save… via `SaveRunOutput`) |
 | `CommitList` | Scrollable commit log; search field (`commitSearch.ts`); indigo/grey dot for unpushed/pushed; column headers and legend; row selection state; `Enter` / arrow-key navigation |
+| `PushCommandDialog` | The `git push` command from `PlanPush` for **Push up to here…** in the commit menu, with Copy and Copy and open terminal, the commits it pushes and how many stay unpushed |
 | `useKeyboardShortcuts` | *(Phase 3)* App-wide `Ctrl+Z` (undo) and `Escape` (close edit panel) shortcuts |
 | `StatusBar` | Persistent footer; branch name, remote notices, status/error display including rewrite messages, Undo button after a rewrite |
 | `EditPanel` | *(Phase 2)* Edit form for message, date, author; loads commit detail; opens confirm dialog; applies rewrites |
@@ -636,7 +638,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | File | Responsibility |
 |---|---|
 | `main.go` | Wails entry point; embeds frontend, configures window, registers bindings |
-| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `ChangeTrailers` / `PreviewTrailers` / `ListAuthors` in `app/trailers.go`, `OpenTerminal` in `app/terminal.go`, `OpenFolder` in `app/folder.go`, `GetGitStatus` / `RunHistory` / `ExportPatches` / `SaveRunOutput` in `app/run.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetStaleFetchDays` / `SetTerminalCommand` in `app/settings.go`) |
+| `app/app.go` | IPC controller; bound methods: `SelectDirectory`, `OpenRepository`, `GetCommitLog`, `GetCommitDetail`, `RefreshLog`, `UpdateCommit`, `EditCommits`, `SpreadDates`, `GetGitIdentity`, `GetAffectedRefs`, `GetSignedCommits`, `ReloadRepository`, `CloseRepository`, `SwitchBranch`, `ListBranches`, `UndoLastOperation`, `CanUndo` (plus `ChangeTrailers` / `PreviewTrailers` / `ListAuthors` in `app/trailers.go`, `OpenTerminal` in `app/terminal.go`, `OpenFolder` in `app/folder.go`, `PlanPush` in `app/push.go`, `GetGitStatus` / `RunHistory` / `ExportPatches` / `SaveRunOutput` in `app/run.go`, and `GetSettings` / `SetRecentRepos` / `SetTheme` / `SetMessageGuides` / `SetOfficeHours` / `SetStaleFetchDays` / `SetTerminalCommand` in `app/settings.go`) |
 | `app/models.go` | JSON-serialisable DTOs shared between Go and TypeScript |
 | `git/repo.go` | `Open` / `OpenBranch`: validate path, detect edge cases, build `RepoState` for a branch with its unpushed set; `ListBranches` |
 | `git/log.go` | `Log`: walk commit graph, populate `[]CommitEntry`, respect depth limit |
@@ -648,6 +650,7 @@ Windows-specific resource metadata (version info, UAC manifest). Embedded into t
 | `git/trailers.go` | `TrailerChange` (`Validate`, `Apply`) and `ParseTrailers`: finds the trailer block the way `git interpret-trailers` does (the last paragraph, never the subject, all trailer or continuation lines, or a quarter with a `Signed-off-by`), removes matching trailers (co-authors by email) and appends new ones unless present; `ParseIdentity` reads `Name <email>` |
 | `git/authors.go` | `ListAuthors`: the authors and co-authors in a branch's recent history, for the co-author picker |
 | `git/signed.go` | `FindSignedCommits`: the signed commits in the chain a rewrite rebuilds; checks the raw headers for `gpgsig-sha256`, which go-git drops |
+| `git/push.go` | `PlanPush`: the `git push` command that pushes some unpushed commits (and the ones below them) but not the newer ones, with where it goes and every commit it takes |
 | `git/undo.go` | *(Phase 3)* `ResetBranch`: compare-and-swap the branch ref back to its pre-rewrite tip |
 | `git/branch_test.go` | *(Phase 3)* Tests for `ListBranches`, `OpenBranch`, and rewriting/undoing on a branch that is not checked out |
 
@@ -666,6 +669,7 @@ GitGo/
 │   ├── app.go               # App struct — bound methods exposed to frontend
 │   ├── terminal.go          # OpenTerminal (+ terminal_windows.go / terminal_other.go)
 │   ├── folder.go            # OpenFolder: the repository in the file manager
+│   ├── push.go              # PlanPush: a git push command for some unpushed commits
 │   ├── run.go               # Run menu: GetGitStatus, RunHistory, ExportPatches, SaveRunOutput (native git)
 │   ├── settings.go          # GetSettings and the Set* methods: settings.json in the config directory
 │   ├── theme.go             # Theme names; PrefersDark for the startup window colour (+ theme_windows.go / theme_other.go)
@@ -675,6 +679,7 @@ GitGo/
 ├── git/
 │   ├── repo.go              # Open, branch info, in-progress detection, unpushed set
 │   ├── log.go               # Commit log walking
+│   ├── push.go              # The push command for some unpushed commits
 │   ├── git_test.go          # Unit tests (real on-disk repos via t.TempDir)
 │   ├── rewrite.go           # (Phase 2) Amend + rebase-based rewriting
 │   ├── spread.go            # New dates that fit commits between a first and last date
@@ -704,6 +709,7 @@ GitGo/
 │       │   ├── RepoSwitcher.tsx    # Header dropdown: open and recent repositories
 │       │   ├── RunMenu.tsx         # Header Run dropdown: git log presets, format-patch
 │       │   ├── RunOutputDialog.tsx # Read-only output of a Run menu command, with Copy and Save
+│       │   ├── PushCommandDialog.tsx # The git push command for some commits (commit menu)
 │       │   ├── Spinner.tsx         # (Phase 3)
 │       │   ├── CommitList.tsx
 │       │   ├── EditPanel.tsx       # (Phase 2)

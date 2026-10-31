@@ -59,9 +59,26 @@ With a search, **Select all unpushed** becomes **Select unpushed matches** (also
 Right-click a commit for its menu. With the keyboard, press `Shift+F10` (or the menu key) on the selected row; `↑` / `↓` move through the menu, `→` opens **Copy**, `Enter` runs an item, and `Escape` closes the menu without changing the selection.
 
 - **Edit** opens the commit in the edit panel with the cursor in its message, as `Enter` does. It is greyed out for a pushed commit.
+- **Push up to here…** gives you the `git push` command that pushes this commit and the unpushed commits below it, and none of the newer ones. See [Pushing only some commits](#pushing-only-some-commits).
 - **Copy** puts the commit's **Full hash**, **Short hash**, **Subject**, **Author name** or **Author email** on the clipboard. Each item shows what it copies.
 
-Right-clicking a commit that isn't selected selects it first. Right-clicking inside a selection of several commits keeps the selection: **Edit 3 commits** (for example) moves to the **Edit Several Commits** panel, and **Copy** copies one line per selected commit, in list order, including selected commits the search hides.
+Right-clicking a commit that isn't selected selects it first. Right-clicking inside a selection of several commits keeps the selection: **Edit 3 commits** (for example) moves to the **Edit Several Commits** panel, **Push 3 commits…** gives the push command for the selected commits, and **Copy** copies one line per selected commit, in list order, including selected commits the search hides.
+
+## Pushing only some commits
+
+A plain `git push` (or GitHub Desktop's **Push**) pushes every unpushed commit. To push the older ones and keep working on the newer ones, right-click the newest commit you want to push and choose **Push up to here…**, or select the commits and choose **Push N commits…**.
+
+GitGo never pushes by itself. It shows a command such as `git push origin 1a2b3c4…:main` to run in a terminal: **Copy command** puts it on the clipboard, and **Copy and open terminal** also opens a terminal in the repository folder, as **>_** does. The window lists the commits the command pushes and says how many stay unpushed. When the push has run, GitGo notices it and offers to reload. The pushed commits are then read-only, and the newer ones can still be edited.
+
+Git pushes a commit together with every commit below it, so:
+
+- A selection with gaps pushes the commits in the gaps too. They are marked **not selected**, so you can check before you run the command.
+- The command can't skip an older unpushed commit. To push a newer one without it, reorder or drop it first (not in GitGo yet).
+- Commits on both sides of a merge need the merge commit that joins them, so select that too.
+
+The command pushes to a branch with the same name as yours, on the remote `git push` would use (the branch's `pushRemote`, `remote.pushDefault`, the remote it tracks, then `origin`). If your branch tracks a branch with another name, for example a `feature` branch started from `origin/main`, the command still pushes to `feature` and the window points this out, so the commits can't end up on `main` by accident. If the remote has no branch of that name yet (as of your last fetch), the push creates it.
+
+GitGo won't build the command when the branch or remote name contains characters that a shell treats specially, such as `$`, `&` or quotes. Type the command yourself in that case.
 
 ## Editing one commit
 

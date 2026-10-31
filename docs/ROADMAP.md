@@ -192,6 +192,12 @@ Found in the follow-up review (2026-09-25):
 
 > Goal: cover more complex history editing workflows safely.
 
+- [x] **Push only some commits**: GitHub Desktop only pushes all commits at once. GitGo still never pushes, so it builds the `git push` command for the user to run in a terminal. Described in [USER_GUIDE.md](USER_GUIDE.md#pushing-only-some-commits)
+  - [x] `git.PlanPush` (`git/push.go`): git pushes a commit together with every commit below it, so the plan pushes the selected commit that has all the others below it, plus every unpushed commit under it, and lists them; gaps in the selection are pushed too, commits on both sides of a merge need the merge (`ErrNoPushTip`), pushed commits are refused (`ErrAlreadyPushed`), and so is a repository without a remote (`ErrNoRemote`)
+  - [x] The command is `git push <remote> <full hash>:<branch>`: the branch of the local branch's own name (never a differently named upstream, so a feature branch started from `origin/main` cannot land on `main`), on the remote `git push` picks (`branch.<name>.pushRemote`, `remote.pushDefault`, the tracked remote, `origin`, the first). A branch the remote does not have yet gets `refs/heads/<branch>`, which git needs after a bare hash. Names a shell would act on (such as `$(…)` or `&`) are refused (`ErrUnsafePushName`) rather than quoted, since the shell is unknown
+  - [x] `PlanPush` bound method (`app/push.go`) on a fresh read of the repository, which is not kept, so the external change notice still shows
+  - [x] **Push up to here…** / **Push N commits…** in the commit menu opens `PushCommandDialog`: the command with **Copy command** and **Copy and open terminal**, the commits it pushes (those not selected marked), how many stay unpushed and editable, and notes for a new remote branch or an upstream with another name
+  - [x] Tests: `TestPlanPush_*` in `git` (two of them run the command and check that the newer commits stay unpushed) and `app`
 - [ ] **Squash commits**
   - [ ] Select multiple contiguous unpushed commits
   - [ ] Combine into one with a merged or custom message

@@ -58,3 +58,22 @@ var ErrBranchNotFound = errors.New("branch not found")
 // ErrNoCommits is returned when the repository has no commits yet (e.g. right
 // after `git init`), so there is no branch history to show.
 var ErrNoCommits = errors.New("this repository has no commits yet; make a first commit before using GitGo")
+
+// ErrNoRemote is returned by PlanPush when the repository has no remote to
+// push to.
+var ErrNoRemote = errors.New("this repository has no remote to push to")
+
+// ErrAlreadyPushed is returned by PlanPush when a commit to push has been
+// pushed already, e.g. from a terminal since the list was loaded. The
+// wrapping error names the commit.
+var ErrAlreadyPushed = errors.New("a selected commit has already been pushed")
+
+// ErrNoPushTip is returned by PlanPush when none of the commits to push has
+// all the others below it, as with commits on both sides of a merge, so no
+// single push takes exactly them.
+var ErrNoPushTip = errors.New("the selected commits are on separate lines of history, so one push cannot take them all; select the merge commit that joins them too")
+
+// ErrUnsafePushName is returned by PlanPush when the remote or branch name
+// has characters a shell would act on, so the command could not be pasted
+// into a terminal safely. The wrapping error names it.
+var ErrUnsafePushName = errors.New("the name has characters a shell would act on, so GitGo does not build a push command with it; push from a terminal by hand")

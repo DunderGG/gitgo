@@ -344,6 +344,30 @@ type RestoreCommitInfo struct {
 	Subject   string `json:"subject"`
 }
 
+// PushPlan is the git command that pushes some unpushed commits and leaves
+// the newer ones unpushed, from PlanPush.
+type PushPlan struct {
+	// Command is for the user to run in a terminal; GitGo never pushes.
+	Command string `json:"command"`
+	// Remote and Branch are where the command pushes to: a branch of the
+	// local branch's own name.
+	Remote string `json:"remote"`
+	Branch string `json:"branch"`
+	// IsNewBranch is true when, as of the last fetch, the remote has no
+	// such branch, so the push creates it.
+	IsNewBranch bool `json:"isNewBranch"`
+	// UpstreamRemote and UpstreamBranch are the branch the local branch
+	// tracks, or empty without one. It can have another name than Branch.
+	UpstreamRemote string `json:"upstreamRemote"`
+	UpstreamBranch string `json:"upstreamBranch"`
+	// Commits are the commits the command pushes, newest first: the newest
+	// selected commit and every unpushed commit below it.
+	Commits []CommitSummary `json:"commits"`
+	// LeftOut is how many unpushed commits the command does not push. They
+	// stay unpushed and editable.
+	LeftOut int `json:"leftOut"`
+}
+
 // OperationResult is returned by all mutating bound methods to convey
 // success or failure to the frontend.
 // Note that even if Success is true, the Message may contain warnings or other
