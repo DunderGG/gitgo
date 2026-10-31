@@ -608,6 +608,10 @@ The application icon. `appicon.png` is the source image: square (1224×1224) wit
 
 Windows-specific resource metadata (version info, UAC manifest). Embedded into the `.exe` by Wails at build time. These are source files and must be committed — only `build/bin/` (the compiled output) is gitignored.
 
+#### `build/linux/gitgo.desktop`
+
+The Linux desktop entry: the name, icon and menu category application launchers show. Wails does not use it; the release workflow (`.github/workflows/release.yml`) installs it in the `.deb` and the `.tar.gz` next to the binary, with `appicon.png` as the `gitgo` icon. `StartupWMClass` matches the program name `main.go` gives the window, so desktops group the window under this entry.
+
 ---
 
 ## Component Breakdown (Summary)

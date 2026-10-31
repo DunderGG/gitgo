@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=GitGo
+GenericName=Git History Editor
+Comment=Edit the message, date, and author of commits you have not pushed yet
+Exec=gitgo
+Icon=gitgo
+Terminal=false
+Categories=Development;RevisionControl;
+Keywords=git;commit;history;author;rebase;
+StartupWMClass=gitgo

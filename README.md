@@ -31,6 +31,20 @@ The [user guide](docs/USER_GUIDE.md) explains each feature and exactly what it c
 
 ---
 
+## Download
+
+Each [release](https://github.com/DunderGG/gitgo/releases) has packages for every platform:
+
+| Platform | Package |
+|---|---|
+| Windows (x64) | `GitGo-<version>-windows-amd64-setup.exe` (installer) or `GitGo-<version>-windows-amd64.exe` (portable) |
+| macOS (Intel and Apple Silicon) | `GitGo-<version>-macos-universal.dmg` |
+| Linux (x64) | `gitgo_<version>_amd64.deb` for Debian 12+ and Ubuntu 22.04+, or `GitGo-<version>-linux-amd64.tar.gz` |
+
+The macOS app is not notarised yet, so macOS blocks the first launch: open it from **System Settings → Privacy & Security → Open Anyway**. On Linux, GitGo needs GTK 3 and WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`); the `.deb` installs them, and the tarball expects them to be installed.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -82,6 +96,15 @@ go test ./...
 ```
 
 The tests build real repositories on disk in temporary directories.
+
+### Publish a release
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+Pushing a version tag runs the [release workflow](.github/workflows/release.yml): it builds the packages above on Windows, macOS and Linux runners, stamps the tag's version into them, and attaches them with a `SHA256SUMS` file to a GitHub Release for the tag. A tag with a suffix, such as `v1.2.0-beta.1`, makes a pre-release. To try the packaging without publishing, run the workflow by hand from the Actions tab; the packages are kept as artifacts of the run.
 
 ---
 

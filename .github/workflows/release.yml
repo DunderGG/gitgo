@@ -1,0 +1,207 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  # A manual run on a branch builds the packages as run artifacts without
+  # publishing a release, to try the packaging before tagging.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel a run that may be uploading to a release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            platform: windows/amd64
+            flags: -nsis
+          - name: macOS
+            os: macos-latest
+            platform: darwin/universal
+          # The oldest supported Ubuntu, so the binary links against an old
+          # glibc (2.35) and runs on Ubuntu 22.04+ and Debian 12+. Move to
+          # ubuntu-24.04 when GitHub retires this image.
+          # WebKitGTK 4.1 is the only version newer distributions ship.
+          - name: Linux
+            os: ubuntu-22.04
+            platform: linux/amd64
+            flags: -tags webkit2_41
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      # wails build only warns and skips the installer when makensis is
+      # missing, so install it explicitly; packaging fails if it is absent.
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        run: |
+          choco install nsis --no-progress -y
+          echo 'C:\Program Files (x86)\NSIS' >> "$GITHUB_PATH"
+
+      - name: Install Wails CLI
+        run: go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+
+      # Tag v1.2.0-beta.1 names the packages 1.2.0-beta.1 and stamps 1.2.0
+      # into the app (exe version info, Info.plist, installer), because the
+      # Windows version resource and NSIS only accept numbers. Manual runs use
+      # the version in wails.json, marked as a development build.
+      - name: Set version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(node -p 'require("./wails.json").info.productVersion')-dev.${GITHUB_SHA::7}"
+          fi
+          product_version="${version%%[-+]*}"
+          if [[ ! "$product_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version '$version' does not start with X.Y.Z."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          node -e '
+            const fs = require("fs");
+            const config = JSON.parse(fs.readFileSync("wails.json", "utf8"));
+            config.info.productVersion = process.argv[1];
+            fs.writeFileSync("wails.json", JSON.stringify(config, null, 2) + "\n");
+          ' "$product_version"
+
+      # -m builds the committed go.mod as is, without running go mod tidy.
+      - name: Build
+        run: wails build -m -trimpath -platform ${{ matrix.platform }} ${{ matrix.flags }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p dist
+          cp build/bin/gitgo.exe "dist/GitGo-$VERSION-windows-amd64.exe"
+          cp build/bin/GitGo-amd64-installer.exe "dist/GitGo-$VERSION-windows-amd64-setup.exe"
+
+      # Without a Developer ID the bundle is signed ad hoc, so its signature
+      # is at least consistent: Gatekeeper then lets users open it from
+      # Privacy & Security instead of reporting it as damaged.
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --sign - build/bin/GitGo.app
+          mkdir -p dist dmg
+          ditto build/bin/GitGo.app dmg/GitGo.app
+          ln -s /Applications dmg/Applications
+          # hdiutil sometimes fails with "Resource busy" on hosted runners.
+          for attempt in 1 2 3; do
+            hdiutil create -volname GitGo -srcfolder dmg -format UDZO -ov "dist/GitGo-$VERSION-macos-universal.dmg" && break
+            if [[ "$attempt" -eq 3 ]]; then exit 1; fi
+            sleep 10
+          done
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+
+          # Tarball for any distribution: the binary, desktop entry and icon.
+          tarball="GitGo-$VERSION-linux-amd64"
+          mkdir -p "$tarball"
+          cp build/bin/gitgo build/linux/gitgo.desktop LICENSE "$tarball/"
+          cp build/appicon.png "$tarball/gitgo.png"
+          tar -czf "dist/$tarball.tar.gz" "$tarball"
+
+          # Debian sorts '~' before the release, so 1.2.0~beta.1 < 1.2.0.
+          deb_version="$(sed 's/-/~/g' <<<"$VERSION")"
+          root=deb
+          install -Dm755 build/bin/gitgo "$root/usr/bin/gitgo"
+          install -Dm644 build/linux/gitgo.desktop "$root/usr/share/applications/gitgo.desktop"
+          install -Dm644 build/appicon.png "$root/usr/share/pixmaps/gitgo.png"
+          install -Dm644 LICENSE "$root/usr/share/doc/gitgo/copyright"
+          mkdir -p "$root/DEBIAN"
+          cat > "$root/DEBIAN/control" <<EOF
+          Package: gitgo
+          Version: $deb_version
+          Architecture: amd64
+          Maintainer: David Bennehag <david.bennehag@gmail.com>
+          Installed-Size: $(du -sk "$root/usr" | cut -f1)
+          Depends: libgtk-3-0, libwebkit2gtk-4.1-0
+          Section: devel
+          Priority: optional
+          Homepage: https://github.com/DunderGG/gitgo
+          Description: Edit the metadata of unpushed Git commits
+           GitGo is a desktop app for fixing the message, date and author of
+           commits you have not pushed yet, without memorising git commands.
+          EOF
+          dpkg-deb --build --root-owner-group "$root" "dist/gitgo_${deb_version}_amd64.deb"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: dist
+          merge-multiple: true
+
+      - name: Write checksums
+        working-directory: dist
+        run: sha256sum -- * > SHA256SUMS
+
+      # Upload to the release if it already exists (made by hand on GitHub,
+      # which also pushes the tag, or by an earlier attempt of this job);
+      # otherwise create it, with notes listing the changes since the last
+      # release. A tag with a suffix, such as v1.2.0-beta.1, is a pre-release.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            flags=()
+            if [[ "$TAG" == *-* ]]; then
+              flags+=(--prerelease)
+            fi
+            gh release create "$TAG" dist/* --title "GitGo ${TAG#v}" --generate-notes --verify-tag "${flags[@]}"
+          fi

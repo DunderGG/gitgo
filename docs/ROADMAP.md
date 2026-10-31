@@ -223,13 +223,15 @@ Found in the follow-up review (2026-09-25):
   - [x] Run frontend type-check and production build on push and pull requests
   - [x] Run frontend lint (ESLint, zero warnings allowed) on push and pull requests
   - [x] Fail build if `go vet ./...` reports issues
-- [ ] Build pipeline for all three platforms
-  - [ ] Windows (`.exe` / NSIS installer via Wails)
-  - [ ] macOS (`.app` bundle / `.dmg`)
-  - [ ] Linux (`.AppImage`)
+- [x] Build pipeline for all three platforms (`.github/workflows/release.yml`, on `v*` tags, each platform on its own runner)
+  - [x] Windows (`.exe` / NSIS installer via Wails)
+  - [x] macOS (`.app` bundle / `.dmg`): one universal build for Intel and Apple Silicon, signed ad hoc
+  - [x] Linux (`.deb` and `.tar.gz`), built on Ubuntu 22.04 so it runs on Ubuntu 22.04+ and Debian 12+
+  - [ ] Linux `.AppImage`: needs WebKitGTK bundled with its helper processes, which Wails v2 does not do
 - [ ] Code-sign macOS binary
 - [ ] Version number injected at build time via `ldflags`
-- [ ] GitHub Releases with attached platform binaries
+  - [x] The release workflow stamps the tag's version into `wails.json`, which sets the `.exe` version info, the `Info.plist` and the installer; the app does not show it yet
+- [x] GitHub Releases with attached platform binaries and a `SHA256SUMS` file; tags with a suffix (`v1.2.0-beta.1`) make pre-releases
 - [ ] Include prerequisites with the app
 
 ---
